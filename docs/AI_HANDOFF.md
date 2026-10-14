@@ -53,6 +53,7 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
   - public 함수: `StartGame`, `SelectTargetAndStart(int)` + 개별 5종, `RollYut`, `ResetRound`
   - 플로우: Start → TargetSelection → Playing → RoundEnd, `GameState.Start` 추가
 - `GameManager` 오브젝트 정리, 씬 직렬화 필드명 갱신, stray 스크립트 삭제, 세션 헤더 문서 규칙 추가
+- 패널 전환 버그 리포트 대응: `StartGame()`에서 패널 미연결·부모 비활성(startPanel 자식 중첩) 상황을 `Debug.LogWarning`으로 명시, `Awake()`에 `WarnIfPanelNested()` 중첩 경고 추가
 
 ### [2026-10-14 - 초기 작업분]
 
