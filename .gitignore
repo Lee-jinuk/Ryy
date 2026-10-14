@@ -55,3 +55,6 @@ crashlytics-build.properties
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Unity crash recovery backups
+Assets/_Recovery*

@@ -18,17 +18,21 @@ public class YutGameManager : MonoBehaviour
 {
     [Header("UI Texts")]
     public Text mainResultText;    // 중앙 결과 화면: 윷 결과 / 피버 / 클리어·게임오버 메시지
-    public Text basicScoreText;    // 베이직 점수 풀
-    public Text multScoreText;     // 멀티플 배수
+    public Text basicScoreText;    // 베이직 점수 (숫자만 출력)
+    public Text multScoreText;     // 멀티플 배수 (숫자만 출력)
     public Text totalScoreText;    // 총 점수 / 목표 점수
-    public Text throwCountText;    // 현재 투척 수 / 총 투척 수
-    public Text targetYutText;     // 선택된 타겟 윷 + 피버 콤보
+    public Text remainText;        // 남은 투척 기회 (숫자만 출력)
+    public Text throwDataText;     // 전체 투척 기회 (숫자만 출력)
+    public Text targetYutText;     // 선택된 타겟 윷 이름 (선택 전 빈 문자열)
 
     [Header("Panels")]
     public GameObject startPanel;            // '게임 시작' 버튼이 있는 첫 화면
     public GameObject gamePanel;             // 메인 게임 화면 (타겟 선택 모달 뒤에 표시)
     public GameObject targetSelectOverlay;   // 딤 배경 + 뒤쪽 입력 차단 오버레이 (TargetSelectPanel의 부모 권장)
     public GameObject targetSelectPanel;     // 중앙 타겟 선택 팝업 (overlay 자식 — 미연결도 동작)
+
+    [Header("Buttons")]
+    public GameObject rollButton;    // 윷 던지기 버튼 오브젝트 — Playing 상태에서만 표시
 
     [Header("Slots")]
     public GameObject[] bellSlots = new GameObject[3];      // 방울 슬롯 3칸 (방울 선택 결과 표시용)
@@ -448,24 +452,31 @@ public class YutGameManager : MonoBehaviour
         }
         if (basicScoreText != null)
         {
-            basicScoreText.text = $"베이직: {baseScorePool}";
+            basicScoreText.text = baseScorePool.ToString();
         }
         if (multScoreText != null)
         {
-            multScoreText.text = $"배수: x{currentMultiplier}";
+            multScoreText.text = currentMultiplier.ToString();
         }
         if (totalScoreText != null)
         {
             totalScoreText.text = $"점수: {turnTotal} / 목표 {roundTargetScore}";
         }
-        if (throwCountText != null)
+        if (remainText != null)
         {
-            throwCountText.text = $"투척: {currentThrows} / {maxThrows}";
+            remainText.text = (maxThrows - currentThrows).ToString();
+        }
+        if (throwDataText != null)
+        {
+            throwDataText.text = maxThrows.ToString();
         }
         if (targetYutText != null)
         {
-            targetYutText.text = $"타겟: {ToKorean(selectedTarget)}  |  피버: {feverCombo}콤보";
+            bool targetConfirmed = currentState == GameState.Playing || currentState == GameState.RoundEnd;
+            targetYutText.text = targetConfirmed ? ToKorean(selectedTarget) : "";
         }
+        // 던지기 버튼은 본 게임(Playing) 상태에서만 표시 — 타겟 선택 모달 뒤에서도 숨김
+        SetPanel(rollButton, currentState == GameState.Playing);
     }
 
     private void Start()
