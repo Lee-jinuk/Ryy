@@ -91,11 +91,9 @@ public class YutGameManager : MonoBehaviour
 
     [Header("Boss UI")]
     public Text bossNameText;        // 보스 이름
-    public Text bossHpText;          // 보스 현재 HP (잔여 목표 점수, 숫자만)
-    public Text bossMaxHpText;       // 보스 최대 HP (숫자만)
     public Text bossAbilityText;     // 보스 특수능력 설명
-    public Image bossHpBar;          // 체력바 — Image(Filled 타입) 연결 시 fillAmount 갱신
-    public Slider bossHpSlider;      // 체력바 대안 — Slider 연결 시 value 갱신 (둘 중 연결된 것만 사용)
+    // 보스는 HP를 깎는 적이 아니라 목표 점수 관문 — 체력바/HP 텍스트는 사용하지 않음
+    // (잔여 수치는 goalScoreText(목표)와 totalScoreText(누적)로 확인)
 
     [Header("Panels")]
     public GameObject startPanel;            // '게임 시작' + 보스 선택이 있는 첫 화면
@@ -451,6 +449,7 @@ public class YutGameManager : MonoBehaviour
         selectedBellOption = -1;
         ownedBells.Clear();
         SetupBoard();                      // 18칸 점수·방울 칸 무작위 배치 + 말 위치 초기화
+        MovePieceVisual(board.pieceIndex); // 말을 시작점(BoardTile_01) 위치에 배치
         BuildWeights();                    // 기본 확률로 재구축 → 보스 효과 중복 누적 방지
         if (boss != null)
         {
@@ -660,7 +659,7 @@ public class YutGameManager : MonoBehaviour
         {
             board.tiles.Add(new BoardTile { index = i, baseScore = scorePool[i] });
         }
-        board.pieceIndex = -1;
+        board.pieceIndex = 0;   // 시작점 = BoardTile_01 (인덱스 0)
         board.totalMoved = 0;
         board.lapCount = 0;
 
@@ -1179,37 +1178,17 @@ public class YutGameManager : MonoBehaviour
             }
         }
 
-        // 보스 정보 — 선택 화면에서는 미리보기(만피), 전투 중에는 displayTotal과 동기화된 잔여 HP
+        // 보스 정보 — 이름·특수능력만 표시 (HP 바 없음: 보스는 목표 점수 관문)
         BossData boss = CurrentBoss;
         if (boss != null)
         {
-            int remainingHp = currentState == GameState.Start
-                ? boss.maxHP
-                : Mathf.Max(0, goalScore - displayTotal);
             if (bossNameText != null)
             {
                 bossNameText.text = boss.bossName;
             }
-            if (bossHpText != null)
-            {
-                bossHpText.text = remainingHp.ToString();
-            }
-            if (bossMaxHpText != null)
-            {
-                bossMaxHpText.text = boss.maxHP.ToString();
-            }
             if (bossAbilityText != null)
             {
                 bossAbilityText.text = boss.abilityDescription;
-            }
-            float hpFill = boss.maxHP > 0 ? (float)remainingHp / boss.maxHP : 0f;
-            if (bossHpBar != null)
-            {
-                bossHpBar.fillAmount = hpFill;
-            }
-            if (bossHpSlider != null)
-            {
-                bossHpSlider.value = hpFill;
             }
 
             // 클리어·게임오버 결과 텍스트 (패널이 꺼져 있어도 값은 항상 최신)

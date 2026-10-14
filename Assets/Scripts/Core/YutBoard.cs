@@ -29,9 +29,9 @@ public class YutBoard
     public const int TileCount = 18;
 
     public List<BoardTile> tiles = new List<BoardTile>();
-    public int totalMoved = 0;    // 시작점 기준 누적 이동 칸 수
-    public int pieceIndex = -1;   // 현재 말 위치 (칸 인덱스, -1 = 시작점)
-    public int lapCount = 0;      // 완주 횟수 — 마지막 칸(인덱스 17) 도달·통과 시 증가
+    public int totalMoved = 0;    // 시작점(BoardTile_01) 기준 누적 이동 칸 수
+    public int pieceIndex = 0;    // 현재 말 위치 (칸 인덱스, 시작 = 0 = BoardTile_01)
+    public int lapCount = 0;      // 완주 횟수 — BoardTile_18을 지나 BoardTile_01로 넘어갈 때 증가
 
     // steps칸 시계방향 이동. 경유 칸 인덱스를 path에 기록하고 도착 칸 인덱스를 반환
     public int MovePiece(int steps, List<int> path)
@@ -47,8 +47,8 @@ public class YutBoard
             path?.Add(p);
         }
         totalMoved += steps;
-        // 마지막 칸(인덱스 17) 도달 또는 통과 = 완주. 이후 바퀴마다 18칸 간격으로 판정
-        while (totalMoved >= (TileCount - 1) + TileCount * lapCount)
+        // 18칸을 넘어 순환할 때마다 완주 (BoardTile_18 → BoardTile_01 경계 통과)
+        while (totalMoved >= TileCount * (lapCount + 1))
         {
             lapCount++;
         }

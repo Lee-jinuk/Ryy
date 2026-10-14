@@ -8,7 +8,16 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ```
 [2026-10-14 오후 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — GPT 요청(18칸 원형 말판 + 방울 이벤트) — Devin 구현:
+★ 최신 — GPT 요청(말판 시작점 규칙 + 보스 UI 단순화) — Devin 구현:
+- 시작점: 별도 시작점 폐기 → BoardTile_01(인덱스 0)이 시작점 겸 일반 점수 칸.
+  첫 도 → BoardTile_02. BeginBossFight에서 MovePieceVisual(0)로 말을 시작 칸에 배치.
+  완주 판정: BoardTile_18→BoardTile_01 경계 통과마다 +1 (totalMoved 기반)
+- 보스 UI 단순화: 보스는 목표 점수 관문 — bossHpText/bossMaxHpText/bossHpBar/
+  bossHpSlider 필드와 HP 갱신 로직 제거. bossNameText/bossAbilityText만 유지.
+  goalScore(=보스 HP)·클리어/게임오버 판정·낙 +2%p 특수능력 변경 없음.
+  ⚠ 씬에 남은 구형 직렬화 키는 무시됨 — Inspector의 해당 참조만 정리하면 됨
+
+GPT 요청(직전 — 이어서 기록): 18칸 원형 말판 + 방울 이벤트.
 - 신규 파일 Assets/Scripts/Core/YutBoard.cs: BoardTile/BellData/YutBoard —
   말판 로직을 GameManager와 분리 (UI 참조 없는 순수 데이터+이동)
 - 말판: 10~180점 중복 없는 무작위 배치 (보스전 시작 시 SetupBoard → 3판 고정,
@@ -211,7 +220,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 다음 작업 목표 (제안)
 
-1. 사용자가 에디터에서 신규 UI 제작·연결: `boardTiles[18]`(칸 오브젝트 — 자식 Text=점수, 자식 `BellIcon`=방울 표시), `playerPiece`, `bellChoicePanel` + 옵션 텍스트·버튼, 보스 선택 버튼(→`SelectBoss1~5`), 체력바, 클리어·게임오버 패널 → Play 테스트
+1. 사용자가 에디터에서 신규 UI 제작·연결: `boardTiles[18]`(칸 오브젝트 — 자식 Text=점수, 자식 `BellIcon`=방울 표시), `playerPiece`, `bellChoicePanel` + 옵션 텍스트·버튼, 보스 선택 버튼(→`SelectBoss1~5`), 클리어·게임오버 패널 → Play 테스트
 2. 피버 적용 수식 확정 (×콤보 vs +증가 등) → 확정 시 `SettleThrow` 피버 단계 한 곳만 수정
 3. 백도·낙 말 이동 규칙 확정 → 확정 시 `SettleThrow` 저주 분기에 추가
 4. 방울 실제 효과 기획 확정 → `BellData`에 효과 필드 추가 + 사용 버튼/`ScoreEffectStep` 연동

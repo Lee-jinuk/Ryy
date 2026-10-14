@@ -125,6 +125,13 @@
 - 신규 Inspector 필드: `boardPanel`/`boardTiles[18]`/`playerPiece`/`lapCountText`/`moveStepDelay`/`bellEventTileCount`/`bellPool`/`bellChoicePanel`/`bellOptionNameTexts[3]`/`bellOptionDescTexts[3]`/`ownedBells`. 칸 점수 표시는 타일 자식 Text, 방울 아이콘은 타일의 `BellIcon` 이름 자식으로 자동 인식
 - 검증 (코드 시뮬레이션): 완주 판정 `totalMoved >= 17 + 18*lapCount` — 마지막 칸 도달=완주, 도착 후 재출발은 미카운트 확인. Devin 에디터 미실행 — Play 테스트는 사용자 확인 필요
 
+**추가 수정 — 말판 시작점 규칙 + 보스 UI 단순화** (GPT 기획 / Devin 구현):
+
+- 시작점 변경: 별도 시작점(pieceIndex −1) 폐기 → `pieceIndex = 0`(BoardTile_01)에서 시작, 시작 칸도 일반 점수 칸. 첫 도 → BoardTile_02 도착. `BeginBossFight`에서 `MovePieceVisual(0)`로 말을 시작 칸에 배치
+- 완주 판정 단순화: `totalMoved >= 18 × (lapCount + 1)` — BoardTile_18→BoardTile_01 경계 통과마다 +1 (기존 '마지막 칸 도달' 판정과 결과 동일, 시작점 온칸 구조에 맞게 정리)
+- 보스 UI 단순화: 보스는 HP를 깎는 적이 아닌 목표 점수 관문 — `bossHpText`/`bossMaxHpText`/`bossHpBar`/`bossHpSlider` 필드·HP 갱신 로직 제거. `bossNameText`/`bossAbilityText`만 유지. 목표 점수(`goalScore`)·클리어/게임오버 판정·보스 데이터·낙 +2%p는 변경 없음
+- 씬에 남은 구형 직렬화 키(bossHpText 등)는 Unity가 무시 — 해당 필드에 연결돼 있던 참조만 Inspector에서 제거하면 됨
+
 **테스트/남은 문제**: Devin은 에디터 미실행 — 사용자 연결 후 Play 테스트 필요. 블러 효과는 추후 작업. 부적·방울 이미지 진동 등 실제 애니메이션은 아이템 UI 연결 단계에서 확장 (현재는 Text 갱신 + 단계 재생 구조만). 방울 실제 효과·사용 버튼 미구현 — 현재 획득·표시만.
 
 ## 구현된 기능 (코드 확인 완료)
@@ -178,3 +185,4 @@
 | 2026-10-14 오후 | 투척별 점수 정산 구조 도입 (`ThrowScore`→`TotalScore`), 윷 스탯 테이블 + 영구 강화 API, `ScoreEffectStep`/`ThrowSettlement` 효과 기록·코루틴 재생 구조, MainResult 결과명 전용 + 신규 `throwScoreText`/`feverText` | GPT 기획 / Devin 구현. 피버 ×콤보 이식식·effectStepDelay·백도 차감량은 테스트값/검토 필요 |
 | 2026-10-14 오후 | 보스전 5종(임시 저승지기 1~5, HP 1000~5000) + 보스 선택(`SelectBoss`), 낙 +2%p 공통 특수능력, 관문당 3판 구조, 클리어·게임오버 패널 + `RetryBoss`/`BackToBossSelect`, 보스 HP UI(Image/Slider), 정산 연출 단계 완성(`displayTotal` 토탈·HP 동기화) | GPT 기획 / Devin 구현. 보스 이름·HP·능력 수치 전부 테스트값 |
 | 2026-10-14 오후 | 18칸 원형 말판(`YutBoard.cs` 분리) — 점수 무작위 배치, 윷별 이동·완주 보너스, 방울 이벤트 칸 + 3택1 임시 방울, 말 이동 연출 | GPT 기획 / Devin 구현. 방울 효과·백도/낙 이동 규칙 미확정, `bellEventTileCount` 2개는 프로토타입값 |
+| 2026-10-14 오후 | 말판 시작점을 BoardTile_01로 변경(별도 시작점 폐기), 완주 판정을 순환 통과로 단순화, 보스 HP UI 필드 제거(보스=목표 점수 관문) | GPT 기획 / Devin 구현. 클리어/게임오버·보스 데이터 유지 |
