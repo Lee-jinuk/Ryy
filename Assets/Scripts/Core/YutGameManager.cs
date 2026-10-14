@@ -20,7 +20,8 @@ public class YutGameManager : MonoBehaviour
     public Text mainResultText;    // 중앙 결과 화면: 윷 결과 / 피버 / 클리어·게임오버 메시지
     public Text basicScoreText;    // 베이직 점수 (숫자만 출력)
     public Text multScoreText;     // 멀티플 배수 (숫자만 출력)
-    public Text totalScoreText;    // 총 점수 / 목표 점수
+    public Text totalScoreText;    // 총 점수 (숫자만 출력)
+    public Text goalScoreText;     // 목표 점수 (숫자만 출력)
     public Text remainText;        // 남은 투척 기회 (숫자만 출력)
     public Text throwDataText;     // 전체 투척 기회 (숫자만 출력)
     public Text targetYutText;     // 선택된 타겟 윷 이름 (선택 전 빈 문자열)
@@ -460,7 +461,11 @@ public class YutGameManager : MonoBehaviour
         }
         if (totalScoreText != null)
         {
-            totalScoreText.text = $"점수: {turnTotal} / 목표 {roundTargetScore}";
+            totalScoreText.text = turnTotal.ToString();
+        }
+        if (goalScoreText != null)
+        {
+            goalScoreText.text = roundTargetScore.ToString();
         }
         if (remainText != null)
         {

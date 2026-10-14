@@ -43,9 +43,12 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - public GameObject rollButton 추가 — Playing 상태에서만 표시 (타겟 선택 모달/시작/종료 화면에서는 숨김)
 - 피버 콤보의 텍스트 표시는 제거됨 (feverCombo 필드·로그는 유지)
 
+- 추가 수정(사용자 요청): totalScoreText도 숫자만 출력으로 변경 + goalScoreText(목표 점수 숫자) 필드 추가 — 총점/목표점수 완전 분리
+
 ⚠ Inspector 재연결 필요 항목:
 - Throw Count Text 필드가 제거됨 → 기존 텍스트를 Remain Text에, 전체 횟수용 텍스트를 Throw Data Text에 연결
 - Roll Button 필드에 던지기 버튼 GameObject 연결 (미연결 시 버튼이 항상 보임)
+- Goal Score Text 필드에 목표 점수 표시용 텍스트 연결 (기존 Total Score Text 연결은 그대로 유지됨)
 
 추가 GPT 기획 원칙 (UI 확장성 — 구현 없이 기록만):
 - 기준 해상도 1920×1080 (16:9), Canvas Scaler = Scale With Screen Size / Match 0.5
