@@ -17,8 +17,10 @@ public class YutGameManager : MonoBehaviour
     public Text targetYutText;     // 선택된 타겟 윷 + 피버 콤보
 
     [Header("Panels")]
-    public GameObject startPanel;         // '게임 시작' 버튼이 있는 첫 화면
-    public GameObject targetSelectPanel;  // '타겟 윷 선택' 화면
+    public GameObject startPanel;            // '게임 시작' 버튼이 있는 첫 화면
+    public GameObject gamePanel;             // 메인 게임 화면 (타겟 선택 모달 뒤에 표시)
+    public GameObject targetSelectOverlay;   // 딤 배경 + 뒤쪽 입력 차단 오버레이 (TargetSelectPanel의 부모 권장)
+    public GameObject targetSelectPanel;     // 중앙 타겟 선택 팝업 (overlay 자식 — 미연결도 동작)
 
     [Header("Slots")]
     public GameObject[] bellSlots = new GameObject[3];      // 방울 슬롯 3칸 (방울 선택 결과 표시용)
@@ -99,20 +101,10 @@ public class YutGameManager : MonoBehaviour
         }
         currentState = GameState.TargetSelection;
 
-        // 타겟 선택 패널을 먼저 켠 뒤 시작 패널을 끈다
-        if (targetSelectPanel != null)
-        {
-            targetSelectPanel.SetActive(true);
-            if (!targetSelectPanel.activeInHierarchy)
-            {
-                Debug.LogWarning("[YutGameManager] targetSelectPanel은 켜졌지만 부모가 비활성 상태라 화면에 보이지 않습니다. startPanel의 자식으로 들어가 있는지 확인하세요.", targetSelectPanel);
-            }
-        }
-        else
-        {
-            Debug.LogWarning("[YutGameManager] targetSelectPanel이 Inspector에 연결되지 않았습니다.", this);
-        }
-
+        // 메인 화면을 먼저 켠 뒤 모달 오버레이를 올리고 시작 화면을 끈다
+        SetPanel(gamePanel, true);
+        ActivatePanel(targetSelectOverlay, nameof(targetSelectOverlay));
+        SetPanel(targetSelectPanel, true);
         if (startPanel != null)
         {
             startPanel.SetActive(false);
@@ -124,6 +116,21 @@ public class YutGameManager : MonoBehaviour
 
         Debug.Log("--- 게임 시작: 타겟 윷을 선택하세요 ---");
         UpdateUI();
+    }
+
+    // 켜야 할 패널 전용: 미연결이면 경고, 켰는데도 안 보이면 부모 비활성 경고
+    private static void ActivatePanel(GameObject panel, string fieldName)
+    {
+        if (panel == null)
+        {
+            Debug.LogWarning($"[YutGameManager] {fieldName}이(가) Inspector에 연결되지 않았습니다.");
+            return;
+        }
+        panel.SetActive(true);
+        if (!panel.activeInHierarchy)
+        {
+            Debug.LogWarning($"[YutGameManager] {fieldName}은(는) 켜졌지만 부모가 비활성 상태라 화면에 보이지 않습니다. Hierarchy를 확인하세요.", panel);
+        }
     }
 
     // 타겟 선택 버튼(int): yutIndex 0=도 1=개 2=걸 3=윷 4=모
@@ -152,6 +159,7 @@ public class YutGameManager : MonoBehaviour
         {
             return;
         }
+        SetPanel(targetSelectOverlay, false);
         SetPanel(targetSelectPanel, false);
         hasRolled = false;
         currentState = GameState.Playing;
@@ -243,6 +251,7 @@ public class YutGameManager : MonoBehaviour
         hasRolled = false;
         roundCleared = false;
         SetPanel(startPanel, false);
+        SetPanel(targetSelectOverlay, true);
         SetPanel(targetSelectPanel, true);
         currentState = GameState.TargetSelection;
         UpdateUI();
@@ -255,14 +264,23 @@ public class YutGameManager : MonoBehaviour
         currentState = GameState.Start;
         WarnIfPanelNested();
         SetPanel(startPanel, true);
+        SetPanel(gamePanel, false);
+        SetPanel(targetSelectOverlay, false);
         SetPanel(targetSelectPanel, false);
     }
 
-    // targetSelectPanel이 startPanel 자식이면 부모가 꺼질 때 같이 숨겨지므로 미리 경고한다
+    // 타겟 선택 UI가 startPanel 자식이면 부모가 꺼질 때 같이 숨겨지므로 미리 경고한다
     private void WarnIfPanelNested()
     {
-        if (startPanel != null && targetSelectPanel != null
-            && targetSelectPanel.transform.IsChildOf(startPanel.transform))
+        if (startPanel == null)
+        {
+            return;
+        }
+        if (targetSelectOverlay != null && targetSelectOverlay.transform.IsChildOf(startPanel.transform))
+        {
+            Debug.LogWarning("[YutGameManager] targetSelectOverlay가 startPanel의 자식(또는 같은 오브젝트)입니다. startPanel이 꺼지면 함께 숨겨지니 Canvas 바로 아래로 분리하세요.", targetSelectOverlay);
+        }
+        if (targetSelectPanel != null && targetSelectPanel.transform.IsChildOf(startPanel.transform))
         {
             Debug.LogWarning("[YutGameManager] targetSelectPanel이 startPanel의 자식(또는 같은 오브젝트)입니다. startPanel이 꺼지면 함께 숨겨지니 Canvas 바로 아래로 분리하세요.", targetSelectPanel);
         }
