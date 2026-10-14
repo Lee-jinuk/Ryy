@@ -9,6 +9,18 @@
 - `Assets/Prefabs/`, `Assets/ScriptableObjects/` — `.gitkeep`만 존재
 - `Assets/Scenes/SampleScene.unity` — Canvas, CalcText, TargetText, result, Text (Legacy), Button (Legacy), EventSystem 오브젝트 존재 확인
 
+### [2026-10-14 오전 - Gemini & Devin 작업분]
+
+- `ProjectSettings/ProjectSettings.asset`: `activeInputHandler` 1→2 (Both) 변경 — `Input.GetKeyDown` 런타임 예외 해결
+- `Assets/Scripts/Core/YutGameManager.cs`:
+  - `maxThrows` 7→5 (확정 규칙 반영)
+  - `feverCap = 8` 필드 추가, 2콤보 이상 곱연산에 `Mathf.Min(feverCombo, feverCap)` 적용 (피버 보상 상한)
+  - `Awake()`에서 EventSystem/Canvas 존재 확인 후 UI 자동 구성: 도·개·걸·윷·모 타겟 버튼 5개, 윷 던지기, 라운드 리셋 버튼 + 텍스트 5종 자동 생성·배치·`onClick.AddListener` 바인딩. 인스펙터 수동 연결 없이 Play 즉시 마우스 플레이 가능
+  - 상태별 UI 제어: TargetSelection에서만 타겟 버튼 표시, Playing에서만 던지기 버튼 활성화
+- `SampleScene.unity`: `YutGameManager`가 붙은 오브젝트명 `GameObject`→`GameManager` 정리, 직렬화된 `maxThrows` 7→5, 위치 (1199.9, 347.7)→(0,0) 리셋, 구형 `Button (Legacy)` 오브젝트 비활성화 (자동 생성 버튼으로 대체)
+- `Assets/Scripts/YutGameManager.cs` 0바이트 stray 파일 + .meta 삭제 (실제 스크립트는 `Scripts/Core/`에 존재)
+- 협업 규칙 추가: 문서 갱신 시 `### [날짜 오전/오후 - 담당 AI]` 세션 헤더 사용 (`AGENTS.md`)
+
 ## 구현된 기능 (코드 확인 완료)
 
 - `YutResult` enum 6종 (BackDo 포함)
@@ -25,10 +37,10 @@
 
 `GAME_RULES.md` 기준으로 코드와 충돌하는 항목. 규칙상 임의로 수정하지 않고 보고한다.
 
-- **투척 횟수**: 코드 `maxThrows = 7` ↔ 확정 규칙 5회. 코드 수정 보류 (사용자 승인 필요).
-- **타겟/피버 시스템**: 기획상 "검토 중"이나 코드에 이미 구현됨 (이전 작업 지시로 구현). 채택/폐기/조정 결정 필요.
+- **투척 횟수**: ~~코드 `maxThrows = 7` ↔ 확정 규칙 5회~~ → 해결 (2026-10-14 오전, 코드·씬 모두 5로 수정)
+- **타겟/피버 시스템**: 사용자 승인으로 채택 확정 + 피버 배수 상한 8 적용 (2026-10-14 오전). 밸런스 수치는 계속 검토 대상.
 - **점수·배율·목표 점수**: 전부 미확정 규칙이나 코드에 임의값으로 구현됨 (도10~모50, 배수+1~+5, 목표 1000).
-- **`Update()` 입력**: 프로젝트는 `activeInputHandler: 1`(New Input System 전용)인데 `Input.GetKeyDown` 사용 → Play 시 `InvalidOperationException` 발생함. Player Settings를 `Both`로 변경하거나 Input System API로 교체 필요.
+- **`Update()` 입력**: ~~`activeInputHandler: 1` 환경에서 `Input.GetKeyDown` 런타임 예외~~ → 해결 (2026-10-14 오전, `activeInputHandler: 2` Both로 변경)
 
 ## 미구현 기능
 
@@ -36,7 +48,7 @@
 - 부적 시스템 — 미구현
 - 판(여러 라운드) 진행 구조 — 미구현
 - 중단/점수 확정 시스템 — 미구현
-- 씬 연동: `SampleScene.unity`에 UI 오브젝트는 있으나 `YutGameManager` 컴포넌트가 씬에 배치되어 있지 않음 (스크립트 GUID 미발견). Inspector 연결 및 버튼 이벤트 바인딩 필요.
+- ~~씬 연동: `YutGameManager` 미배치~~ → 해결 (2026-10-14 오전). `GameManager` 오브젝트에 컴포넌트 존재 확인, 텍스트 5종 연결 상태였고 UI 자동 생성 코드로 버튼/레이아웃 완비.
 
 ## 로그
 
@@ -44,3 +56,4 @@
 |---|---|---|
 | 2026-10-14 | 로컬 Git 세팅, Unity .gitignore, 폴더 구조화, 단일 타겟 피버 시스템 구현, GitHub 연결 및 main/develop push | 피버 시스템은 이후 기획상 '검토 중'으로 재분류됨 |
 | 2026-10-14 | docs/ 문서 체계 구축, AI_CONTEXT.md 이관 | 코드 변경 없음 |
+| 2026-10-14 오전 | 입력 핸들러 Both 전환, maxThrows 5, 피버 상한 8, UI 자동 생성·바인딩, 씬 정리 | Play 즉시 마우스 플레이 가능 상태 |
