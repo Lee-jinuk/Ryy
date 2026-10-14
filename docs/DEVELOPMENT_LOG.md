@@ -112,15 +112,30 @@
 - `ResetRound()` = `RetryBoss()`(같은 보스 1판부터 재시작)으로 재정의 — 기존 '현재 라운드 리셋' 의미를 보스전 재시작으로 확장
 - 검증 (코드 시뮬레이션): 낙 +2%p 적용 시 일반 5종 합계 88.75→86.75 비례 차감 + 백도 6.25 불변 + 낙 5→7 = 합계 100 유지. 재시작 시 BuildWeights 재구축으로 중복 없음. 연출 중 isPresenting으로 연타 차단. Devin 에디터 미실행 — Play 테스트는 사용자 확인 필요
 
-**테스트/남은 문제**: Devin은 에디터 미실행 — 사용자 연결 후 Play 테스트 필요. 블러 효과는 추후 작업. 부적·방울 이미지 진동 등 실제 애니메이션은 아이템 UI 연결 단계에서 확장 (현재는 Text 갱신 + 단계 재생 구조만).
+**추가 구현 — 18칸 원형 말판 + 방울 이벤트** (GPT 기획 / Devin 구현):
+
+- GPT 요청: 점수 획득을 말판 기반으로 변경 (윷 투척→말 이동→칸 점수=베이직→멀티플→효과→정산), 방울 이벤트 칸 + 3개 중 1개 선택, 기존 보스/정산 연출 유지, 말판 로직을 별도 파일로 분리
+- 신규 파일 `Assets/Scripts/Core/YutBoard.cs`: `BoardTile`(인덱스/baseScore/bonusScore/hasBellEvent/bellUsedThisRound), `BellData`(이름/설명 — 효과 미구현 테스트용), `YutBoard`(tiles/pieceIndex/totalMoved/lapCount + `MovePiece(steps, path)` — 경유 칸 기록, 마지막 칸 도달·통과 시 완주 판정)
+- 말판 배치: `SetupBoard()` — 10~180 중복 없이 Fisher-Yates 셔플, `bellEventTileCount`(기본 2)개 방울 칸 무작위 지정, 말 위치·완주 초기화. `BeginBossFight()`에서만 호출 → 3판 고정, 재도전 시 재배치
+- 베이직 변경: `도착 칸 점수 + lapCount×10 + yutStats.basicBonus` — `YutStatEntry.basic`을 `basicBonus`(기본 0)로 개칭해 구형 기본 베이직 10~50 폐기 (씬 구형 직렬화 키는 무시됨)
+- 이동 연출: `PresentSettlement`에 말 이동 단계 삽입 — 정산의 `movePath` 경유 칸을 `moveStepDelay`(기본 0.15초) 간격으로 한 칸씩 이동 (`playerPiece.position = tile.position`). 저주는 이동 없음. 판정은 도착 칸만
+- 연출 순서: 결과명 → 말 이동 → 도착 칸 베이직 → 윷 멀티플 → 효과 단계 → 투척 점수 → 토탈+보스 HP
+- 방울 이벤트: 착지·미사용 칸이면 정산 연출 완료 후 `OpenBellChoice()` — 풀에서 무작위 3개 제시 → `SelectBellOption(n)`+`ConfirmBellChoice()` 또는 원클릭 `SelectBellAndConfirm(n)` → `ownedBells`에 추가 + `bellSlots`에 표시. `isChoosingBell` 중 투척 차단 + rollButton 숨김. 판당 칸별 1회(`bellUsedThisRound`), `AdvanceToNextRound`에서 소멸·리셋. 판이 끝나는 투척에선 이벤트 생략(임시 방울이 소멸하므로)
+- 백도·낙 이동 규칙 미확정 — 현재 이동 없음으로 구현, 임의 규칙 적용 안 함 (보고)
+- 신규 Inspector 필드: `boardPanel`/`boardTiles[18]`/`playerPiece`/`lapCountText`/`moveStepDelay`/`bellEventTileCount`/`bellPool`/`bellChoicePanel`/`bellOptionNameTexts[3]`/`bellOptionDescTexts[3]`/`ownedBells`. 칸 점수 표시는 타일 자식 Text, 방울 아이콘은 타일의 `BellIcon` 이름 자식으로 자동 인식
+- 검증 (코드 시뮬레이션): 완주 판정 `totalMoved >= 17 + 18*lapCount` — 마지막 칸 도달=완주, 도착 후 재출발은 미카운트 확인. Devin 에디터 미실행 — Play 테스트는 사용자 확인 필요
+
+**테스트/남은 문제**: Devin은 에디터 미실행 — 사용자 연결 후 Play 테스트 필요. 블러 효과는 추후 작업. 부적·방울 이미지 진동 등 실제 애니메이션은 아이템 UI 연결 단계에서 확장 (현재는 Text 갱신 + 단계 재생 구조만). 방울 실제 효과·사용 버튼 미구현 — 현재 획득·표시만.
 
 ## 구현된 기능 (코드 확인 완료)
 
 - `YutResult` enum 7종 (BackDo + Nak 포함, 2026-10-14 오후 확장)
 - 인스펙터 편집 확률 리스트 `baseProbabilities` → 런타임 `runtimeWeights` 분리 구조 (테스트값: 백도 6.25 / 도 18.75 / 개 32.5 / 걸 25 / 윷 6.25 / 모 6.25 / 낙 5 %)
 - 단일 타겟 선택: `selectedTarget`, `GameState { TargetSelection, Playing, RoundEnd }`
+- 18칸 원형 말판(`YutBoard`/`BoardTile` — `YutBoard.cs` 분리): 10~180 무작위 배치(보스전 시작 시), 윷별 1~5칸 이동, 도착 칸 점수=베이직, 완주 ×10 보너스, 말 이동 연출(`moveStepDelay`)
+- 방울 이벤트: 방울 칸 착지 → 3개 제시 → 1개 선택 → 판 한정 `ownedBells` + `bellSlots` 표시 (실제 효과 미구현)
 - 투척별 독립 정산: `ThrowScore = BasicScore × Multiplier` → `TotalScore` 1회 합산 (투척 임시값 매 투척 초기화)
-- 윷 스탯: 도 10×2 / 개 20×3 / 걸 30×4 / 윷 40×5 / 모 50×6 — `baseYutStats` → 런타임 `yutStats` + `UpgradeYutStat()` 영구 강화 API
+- 윷 스탯: 멀티플 도×2~모×6 + `basicBonus`(칸 점수에 가산되는 윷별 강화치, 기본 0) — `baseYutStats` → 런타임 `yutStats` + `UpgradeYutStat()` 영구 강화 API
 - 효과 단계 기록·재생: `ScoreEffectStep`/`ThrowSettlement` — 부적·방울·주술·피버 순차 발동 연출 구조 (정산 확정 후 코루틴 재생, 스킵 가능)
 - 피버 콤보: 타겟 적중 시 `feverCombo++`, 2연속부터 이번 투척 멀티플 ×Min(콤보, 8) — 피버 단계로 기록 (이식 수식, 확정 검토 필요)
 - 보스전 구조: `BossData` 5명(임시)/보스 선택(`SelectBoss1~5`)/목표=보스 HP/낙 +2%p 특수능력(비례 차감·백도 불변·중복 없음)/관문당 3판(`roundsPerBoss`)×판당 5회/`roundScore` 판별 누적(백도 범위)/`Cleared`·`GameOver` 상태 + 클리어·게임오버 패널 + `RetryBoss`/`BackToBossSelect`
@@ -162,3 +177,4 @@
 | 2026-10-14 오후 | 윷 결과 7종 확장(낙 추가), 저주 계열 구조(`IsCurse`/`HandleCurseResult`), 확률 시스템 재설계(인스펙터 편집 + 런타임 가중치 분리), 백도 보스 분기 | GPT 기획 / Devin 구현. 확률·차감량·bossIndex는 테스트값 |
 | 2026-10-14 오후 | 투척별 점수 정산 구조 도입 (`ThrowScore`→`TotalScore`), 윷 스탯 테이블 + 영구 강화 API, `ScoreEffectStep`/`ThrowSettlement` 효과 기록·코루틴 재생 구조, MainResult 결과명 전용 + 신규 `throwScoreText`/`feverText` | GPT 기획 / Devin 구현. 피버 ×콤보 이식식·effectStepDelay·백도 차감량은 테스트값/검토 필요 |
 | 2026-10-14 오후 | 보스전 5종(임시 저승지기 1~5, HP 1000~5000) + 보스 선택(`SelectBoss`), 낙 +2%p 공통 특수능력, 관문당 3판 구조, 클리어·게임오버 패널 + `RetryBoss`/`BackToBossSelect`, 보스 HP UI(Image/Slider), 정산 연출 단계 완성(`displayTotal` 토탈·HP 동기화) | GPT 기획 / Devin 구현. 보스 이름·HP·능력 수치 전부 테스트값 |
+| 2026-10-14 오후 | 18칸 원형 말판(`YutBoard.cs` 분리) — 점수 무작위 배치, 윷별 이동·완주 보너스, 방울 이벤트 칸 + 3택1 임시 방울, 말 이동 연출 | GPT 기획 / Devin 구현. 방울 효과·백도/낙 이동 규칙 미확정, `bellEventTileCount` 2개는 프로토타입값 |

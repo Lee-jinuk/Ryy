@@ -8,7 +8,29 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ```
 [2026-10-14 오후 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — GPT 요청(보스전 5종 + 클리어/게임오버 + 정산 연출 완성) — Devin 구현:
+★ 최신 — GPT 요청(18칸 원형 말판 + 방울 이벤트) — Devin 구현:
+- 신규 파일 Assets/Scripts/Core/YutBoard.cs: BoardTile/BellData/YutBoard —
+  말판 로직을 GameManager와 분리 (UI 참조 없는 순수 데이터+이동)
+- 말판: 10~180점 중복 없는 무작위 배치 (보스전 시작 시 SetupBoard → 3판 고정,
+  재도전 시 재배치). bellEventTileCount(기본 2)개 방울 칸 무작위 지정
+- 베이직 변경: 도착 칸 점수 + 완주×10 + 윷별 강화치(basicBonus, 기본 0).
+  구형 윷 기본 베이직 10~50 폐기 — YutStatEntry.basic → basicBonus 개칭,
+  멀티플 2~6 유지. UpgradeYutStat(result, bonus, mult) 그대로 사용
+- 이동: MovePiece(steps, path) — 도1/개2/걸3/윷4/모5, 마지막 칸 도달·통과=완주,
+  이후 18칸마다 추가 완주. 경유 칸을 movePath에 기록 → 연출에서 한 칸씩 이동
+  (moveStepDelay 0.15초, Inspector 조절). 말 위치·완주는 3판 유지
+- 백도·낙: 말 이동 없음(규칙 미확정 — 임의 적용 안 함, 보고)
+- 방울 이벤트: 방울 칸 착지 → 정산 연출 후 BellChoicePanel — 무작위 3개 제시 →
+  SelectBellOption1~3 + ConfirmBellChoice() 또는 원클릭 SelectBellAndConfirm1~3.
+  획득 → ownedBells + bellSlots 표시. 판당 칸 1회 발동, 판 종료 시 소멸.
+  방울 실제 효과·사용 버튼 미구현 (bellPool은 테스트용 더미 6개)
+- 연출 순서: 결과명 → 말 이동 → 칸 베이직 → 윷 멀티플 → 효과 단계 → 투척 점수 → 토탈+HP
+- ⚠ 신규 Inspector 연결: boardTiles[18] (칸 오브젝트 — 자식 Text=점수, 'BellIcon'
+  이름 자식=방울 표시), Player Piece (RectTransform), Lap Count Text,
+  Bell Choice Panel + Bell Option Name/Desc Texts[3]씩, Move Step Delay,
+  Bell Event Tile Count. 전부 미연결도 null-safe
+
+GPT 요청(직전 — 이어서 기록): 보스전 5종 + 클리어/게임오버 + 정산 연출 완성.
 - BossData(이름/maxHP/abilityDescription/nakBonusPercent) + bosses 리스트 5명:
   첫~다섯 번째 저승지기, HP 1000/2000/3000/4000/5000 — 이름·수치 전부 임시 테스트값
 - 보스 선택: SelectBoss(int)/SelectBoss1()~SelectBoss5() — Start 상태에서만 동작.
@@ -143,6 +165,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
   - 참고: 현재 씬 Canvas Scaler = Constant Pixel Size(800×600) — 원칙 적용 시 에디터에서 수동 변경 필요 (자동 변경하면 기존 배치가 재조정되므로 코드/YAML로 임의 적용하지 않음)
 - 투척별 점수 정산 + 효과 단계 구조 (GPT 기획 / Devin 구현): `ThrowScore = Basic × Mult` → `TotalScore` 1회 합산. `ScoreEffectStep`/`ThrowSettlement`로 부적·방울·주술·피버 발동 기록 → 코루틴 순차 재생 (`PresentSettlement`, `SkipPresentation`). 윷 스탯 `baseYutStats` (도10×2~모50×6) + `UpgradeYutStat()` 영구 강화 API. MainResult 결과명 전용 + `throwScoreText`/`feverText` 신규 필드. `baseScorePool`/`currentMultiplier` 폐기. 백도 차감 기준 `totalScore`로 변경. 피버 ×Min(콤보,8) 투척 멀티플 적용은 이식식 — 확정 필요
 - 보스전 + 클리어/게임오버 (GPT 기획 / Devin 구현): `BossData` 5명 임시(HP 1000~5000), `SelectBoss1~5`, 낙 +2%p 공통 능력(비례 차감·백도 불변·중복 없음), 관문당 3판(`roundsPerBoss`), `roundScore` 판별 누적으로 백도 범위 실체화, `Cleared`/`GameOver` 상태 + 패널, 보스 HP UI(Image/Slider), `displayTotal` 토탈·HP 동기화 연출, `RetryBoss`/`BackToBossSelect`. ResetRound = 보스전 재시작으로 재정의
+- 18칸 원형 말판 + 방울 이벤트 (GPT 기획 / Devin 구현): `YutBoard.cs` 분리, 점수 무작위 배치(보스전당), 도착 칸=베이직 + 완주×10 + 강화치, 윷별 1~5칸 이동·경유 연출(`movePath`/`moveStepDelay`), 방울 칸 이벤트(3택1, 판 한정 임시 방울, 판당 1회), 백도·낙 이동 없음(미확정 보고)
 
 ### [2026-10-14 오전 - Gemini & Devin 작업분]
 
@@ -177,8 +200,10 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 ## 미확정 결정 사항 (사용자 승인 필요)
 
 - **피버 적용 수식**: 투척 정산 구조로 "이번 투척 멀티플 ×Min(콤보, 8)"로 이식됨 — 구 기준(전체 누적 배율)과 산출 차이 있음. 확정 또는 대안 수치 필요 (GPT 예시의 '+증가' 방식도 구조는 지원됨)
-- 보스 이름·HP(1000~5000)·특수능력 수치(낙 +2%p) — 전부 임시 테스트값, 밸런스 검토 필요
-- `effectStepDelay` 연출 간격 (테스트값 0.35초)
+- 보스 이름·HP(1000~5000)·특수능력 수치(낙 +2%p) — 전부 임시 테스트값, 밸런스 검토 필요. 말판 도입으로 판당 점수 상승 → 목표 점수 밸런스 조정 대상 (임의 변경 안 함)
+- **백도·낙 말 이동 규칙** — 현재 이동 없음으로 구현, 규칙 확정 필요 (역방향 이동·고정 등 기획 대기)
+- **방울 실제 효과·사용 방식** — 현재 획득·표시만 (bellPool은 테스트 더미). 12장 덱 구상과의 통합 규칙 미확정
+- `effectStepDelay` 연출 간격 (테스트값 0.35초), `moveStepDelay` 말 이동 간격 (0.15초), `bellEventTileCount` (프로토타입 2)
 - 비타겟/백도 페널티 수치 감각 (`GAME_RULES.md` 7절 '검토 중')
 - 윷 확률 테스트값 확정 여부: 개 32.5%/낙 5% (낙 추가 조정분), `backDoPenalty` 차감량, `bossIndex` 분기 기준 — 전부 테스트값
 - 저주 발생 시 피버 콤보 리셋 여부 (구현은 리셋 — 기획 미명시라 확인 필요)
@@ -186,12 +211,13 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 다음 작업 목표 (제안)
 
-1. 사용자가 에디터에서 신규 UI 제작·연결: 보스 선택 버튼 5개(→`SelectBoss1~5`), 보스 정보 6종, 체력바(Image Filled 또는 Slider), `ClearPanel`/`GameOverPanel` + 결과 텍스트 5종, 다시 도전→`RetryBoss`, 돌아가기→`BackToBossSelect` → Play 테스트
+1. 사용자가 에디터에서 신규 UI 제작·연결: `boardTiles[18]`(칸 오브젝트 — 자식 Text=점수, 자식 `BellIcon`=방울 표시), `playerPiece`, `bellChoicePanel` + 옵션 텍스트·버튼, 보스 선택 버튼(→`SelectBoss1~5`), 체력바, 클리어·게임오버 패널 → Play 테스트
 2. 피버 적용 수식 확정 (×콤보 vs +증가 등) → 확정 시 `SettleThrow` 피버 단계 한 곳만 수정
-3. 타겟 선택 오버레이 블러 효과 적용 여부 검토 (현재 반투명 딤)
-4. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기획 확정 후 착수. `bellSlots`/`talismanSlots` 배열과 `ScoreEffectStep` 기록 구조는 이미 준비됨
-5. 부적·방울 실제 아이템 구현 시 `SettleThrow()`의 "3) 향후 효과" 지점에 단계 추가 + 연출에서 아이템 이미지 강조/진동 확장
-6. 보스 잠금/해금·클리어 보상·다음 보스 자동 이동·판 결과 화면 — 기획 확정 후 착수
+3. 백도·낙 말 이동 규칙 확정 → 확정 시 `SettleThrow` 저주 분기에 추가
+4. 방울 실제 효과 기획 확정 → `BellData`에 효과 필드 추가 + 사용 버튼/`ScoreEffectStep` 연동
+5. 타겟 선택 오버레이 블러 효과 적용 여부 검토 (현재 반투명 딤)
+6. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기존 12장 덱 구상과 이벤트 방울 통합 규칙 확정 후 착수
+7. 보스 잠금/해금·클리어 보상·다음 보스 자동 이동·판 결과 화면 — 기획 확정 후 착수
 
 ## 관련 파일
 

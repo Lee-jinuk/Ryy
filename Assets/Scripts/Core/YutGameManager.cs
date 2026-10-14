@@ -16,11 +16,12 @@ public class YutProbabilityEntry
 }
 
 // 윷 결과별 영구 스탯 — 주술 등으로 런타임에 강화하면 다음 투척부터 적용
+// basicBonus: 말판 도착 칸 점수에 더해지는 윷별 베이직 강화치 (기본 0 — 칸 점수가 베이직의 기준)
 [System.Serializable]
 public class YutStatEntry
 {
     public YutResult result;
-    public int basic;
+    public int basicBonus;
     public int mult;
 }
 
@@ -66,6 +67,11 @@ public class ThrowSettlement
     public int finalMult;            // 모든 효과 적용 후 멀티플
     public int throwScore;           // finalBasic × finalMult — TotalScore에 1회만 합산
     public int feverComboAtRoll;     // 이 투척 시점의 콤보 횟수
+    public int landingTileIndex = -1;    // 말판 도착 칸 (-1 = 이동 없음 — 저주)
+    public int tileScore;                // 도착 칸의 점수 (칸 강화 포함)
+    public int lapBonus;                 // 이 투척에 적용된 완주 보너스
+    public bool landedOnBellTile;        // 방울 이벤트 칸에 정확히 착지했는지
+    public List<int> movePath = new List<int>();  // 경유 칸 인덱스 — 이동 연출 재생용
     public List<ScoreEffectStep> steps = new List<ScoreEffectStep>();
 }
 
@@ -106,8 +112,31 @@ public class YutGameManager : MonoBehaviour
     public Text gameOverScoreText;       // 최종 획득 점수
     public Text gameOverGoalText;        // 목표 점수
 
+    [Header("Board UI — 말판")]
+    public GameObject boardPanel;                    // 원형 말판 부모 (있으면 상태에 맞춰 표시)
+    public GameObject[] boardTiles = new GameObject[18];  // 칸 오브젝트 18개 — 자식의 Text가 점수 표시, 'BellIcon' 이름의 자식은 방울 칸 표시
+    public RectTransform playerPiece;                // 플레이어 말 — 도착 칸 위치로 이동
+    public Text lapCountText;                        // 완주 횟수 (숫자만 출력, 미연결 시 무시)
+    public float moveStepDelay = 0.15f;              // 말 이동 1칸당 딜레이(초) — Inspector 조절
+
+    [Header("Bell Event — 방울 이벤트 (프로토타입)")]
+    public int bellEventTileCount = 2;   // 보스전당 방울 칸 수 — Inspector 조정 가능
+    public List<BellData> bellPool = new List<BellData>  // 방울 후보 풀 (테스트용 더미 — 실제 효과 미구현)
+    {
+        new BellData { bellName = "테스트 방울 1", description = "효과 미구현 (테스트용)" },
+        new BellData { bellName = "테스트 방울 2", description = "효과 미구현 (테스트용)" },
+        new BellData { bellName = "테스트 방울 3", description = "효과 미구현 (테스트용)" },
+        new BellData { bellName = "테스트 방울 4", description = "효과 미구현 (테스트용)" },
+        new BellData { bellName = "테스트 방울 5", description = "효과 미구현 (테스트용)" },
+        new BellData { bellName = "테스트 방울 6", description = "효과 미구현 (테스트용)" },
+    };
+    public GameObject bellChoicePanel;                // 방울 3개 선택창 — 사용자 생성
+    public Text[] bellOptionNameTexts = new Text[3];  // 후보 3개 이름 표시
+    public Text[] bellOptionDescTexts = new Text[3];  // 후보 3개 설명 표시
+    public List<BellData> ownedBells = new List<BellData>();  // 이번 판 획득한 임시 방울 (판 종료 시 소멸)
+
     [Header("Buttons")]
-    public GameObject rollButton;    // 윷 던지기 버튼 오브젝트 — Playing 상태 + 연출 중이 아닐 때만 표시
+    public GameObject rollButton;    // 윷 던지기 버튼 오브젝트 — Playing 상태 + 연출/선택 중이 아닐 때만 표시
 
     [Header("Slots")]
     public GameObject[] bellSlots = new GameObject[3];      // 방울 슬롯 3칸 (방울 선택 결과 표시용)
@@ -156,14 +185,15 @@ public class YutGameManager : MonoBehaviour
         new YutProbabilityEntry { result = YutResult.Nak,    percent = 5f },
     };
 
-    [Header("Yut Stats — 윷별 베이직/멀티플 기준값 (테스트값)")]
+    [Header("Yut Stats — 윷별 베이직 강화치/멀티플 (테스트값)")]
+    // basicBonus는 도착 칸 점수에 더해지는 윷별 강화치 (기본 0 — 칸 점수가 베이직 기준)
     public List<YutStatEntry> baseYutStats = new List<YutStatEntry>
     {
-        new YutStatEntry { result = YutResult.Do,   basic = 10, mult = 2 },
-        new YutStatEntry { result = YutResult.Gae,  basic = 20, mult = 3 },
-        new YutStatEntry { result = YutResult.Geol, basic = 30, mult = 4 },
-        new YutStatEntry { result = YutResult.Yut,  basic = 40, mult = 5 },
-        new YutStatEntry { result = YutResult.Mo,   basic = 50, mult = 6 },
+        new YutStatEntry { result = YutResult.Do,   basicBonus = 0, mult = 2 },
+        new YutStatEntry { result = YutResult.Gae,  basicBonus = 0, mult = 3 },
+        new YutStatEntry { result = YutResult.Geol, basicBonus = 0, mult = 4 },
+        new YutStatEntry { result = YutResult.Yut,  basicBonus = 0, mult = 5 },
+        new YutStatEntry { result = YutResult.Mo,   basicBonus = 0, mult = 6 },
     };
 
     [Header("Presentation (임시 테스트값)")]
@@ -174,6 +204,9 @@ public class YutGameManager : MonoBehaviour
 
     // 런타임 윷 스탯 — 주술 등의 영구 강화는 여기만 적용해 기본 데이터 오염 방지
     private readonly Dictionary<YutResult, YutStatEntry> yutStats = new Dictionary<YutResult, YutStatEntry>();
+
+    // 원형 말판 — 보스전 시작 시 재구축, 같은 보스전 3판 동안 유지
+    public YutBoard board = new YutBoard();
 
     [Header("Target")]
     public YutResult selectedTarget = YutResult.Gae;
@@ -193,6 +226,9 @@ public class YutGameManager : MonoBehaviour
     private int lastBackDoLoss;
     private int displayTotal;          // 화면에 보이는 총점 — 정산 연출의 '토탈 합산' 단계에서만 갱신
     private bool isPresenting;
+    private bool isChoosingBell;       // 방울 선택창 표시 중 — 투척 입력 차단
+    private int selectedBellOption = -1;
+    private readonly List<BellData> currentBellOptions = new List<BellData>();
     private Coroutine activePresentation;
 
     // 저주(Curse) 계열 판별 — 부적/방울/주술이 이 함수로 저주 결과를 구분한다
@@ -266,8 +302,10 @@ public class YutGameManager : MonoBehaviour
     public void BackToBossSelect()
     {
         StopPresentation();
+        isChoosingBell = false;
         SetPanel(clearPanel, false);
         SetPanel(gameOverPanel, false);
+        SetPanel(bellChoicePanel, false);
         SetPanel(targetSelectOverlay, false);
         SetPanel(targetSelectPanel, false);
         SetPanel(gamePanel, false);
@@ -341,9 +379,9 @@ public class YutGameManager : MonoBehaviour
             Debug.Log("윷을 던질 수 있는 상태가 아닙니다. (GameState.Playing 아님)");
             return;
         }
-        if (isPresenting)
+        if (isPresenting || isChoosingBell)
         {
-            return;   // 정산 연출 재생 중 연타 방지 — 중복 투척/중복 득점 불가
+            return;   // 정산 연출 재생 중 또는 방울 선택 중 연타 방지 — 중복 투척/득점 불가
         }
         if (currentThrows >= maxThrows)
         {
@@ -409,6 +447,10 @@ public class YutGameManager : MonoBehaviour
         feverCombo = 0;
         hasRolled = false;
         currentSettlement = null;
+        isChoosingBell = false;
+        selectedBellOption = -1;
+        ownedBells.Clear();
+        SetupBoard();                      // 18칸 점수·방울 칸 무작위 배치 + 말 위치 초기화
         BuildWeights();                    // 기본 확률로 재구축 → 보스 효과 중복 누적 방지
         if (boss != null)
         {
@@ -426,6 +468,8 @@ public class YutGameManager : MonoBehaviour
         SetPanel(startPanel, false);
         SetPanel(clearPanel, false);
         SetPanel(gameOverPanel, false);
+        SetPanel(bellChoicePanel, false);
+        isChoosingBell = false;
         currentState = GameState.TargetSelection;
         UpdateUI();
     }
@@ -441,6 +485,12 @@ public class YutGameManager : MonoBehaviour
         basicScore = 0;
         multiplier = 0;
         throwScore = 0;
+        // 임시 방울 소멸 + 방울 칸 판당 발동 제한 리셋 (말판 배치·말 위치·완주는 유지)
+        ownedBells.Clear();
+        foreach (BoardTile tile in board.tiles)
+        {
+            tile.bellUsedThisRound = false;
+        }
         Debug.Log($"--- {roundIndex}판 시작 | 누적 총점 {totalScore} / 목표 {goalScore} ---");
         EnterTargetSelection();
     }
@@ -449,9 +499,11 @@ public class YutGameManager : MonoBehaviour
     private void EnterClear()
     {
         currentState = GameState.Cleared;
+        isChoosingBell = false;
         SetPanel(gameOverPanel, false);            // 클리어/게임오버 동시 표시 방지
         SetPanel(targetSelectOverlay, false);
         SetPanel(targetSelectPanel, false);
+        SetPanel(bellChoicePanel, false);
         ActivatePanel(clearPanel, nameof(clearPanel));
         UpdateUI();
         BossData boss = CurrentBoss;
@@ -462,9 +514,11 @@ public class YutGameManager : MonoBehaviour
     private void EnterGameOver()
     {
         currentState = GameState.GameOver;
+        isChoosingBell = false;
         SetPanel(clearPanel, false);
         SetPanel(targetSelectOverlay, false);
         SetPanel(targetSelectPanel, false);
+        SetPanel(bellChoicePanel, false);
         ActivatePanel(gameOverPanel, nameof(gameOverPanel));
         UpdateUI();
         BossData boss = CurrentBoss;
@@ -567,11 +621,183 @@ public class YutGameManager : MonoBehaviour
     }
 
     // 주술 등 영구 강화용 API — 다음 투척부터 적용. baseYutStats는 오염되지 않음
-    public void UpgradeYutStat(YutResult result, int newBasic, int newMult)
+    // basicBonus는 도착 칸 점수에 더해지는 강화치, mult는 해당 윷의 멀티플
+    public void UpgradeYutStat(YutResult result, int newBasicBonus, int newMult)
     {
-        yutStats[result].basic = Mathf.Max(0, newBasic);
+        yutStats[result].basicBonus = Mathf.Max(0, newBasicBonus);
         yutStats[result].mult = Mathf.Max(0, newMult);
     }
+
+    // 윷 결과 → 이동 칸 수 (도1 개2 걸3 윷4 모5)
+    private static int MoveSteps(YutResult result) => result switch
+    {
+        YutResult.Do => 1,
+        YutResult.Gae => 2,
+        YutResult.Geol => 3,
+        YutResult.Yut => 4,
+        YutResult.Mo => 5,
+        _ => 0,
+    };
+
+    // ============ 말판 / 방울 이벤트 ============
+
+    // 보스전 시작 시 말판 재구축: 10~180 중복 없는 무작위 배치 + 방울 칸 무작위 지정 + 말 위치·완주 초기화
+    private void SetupBoard()
+    {
+        List<int> scorePool = new List<int>();
+        for (int s = 10; s <= 180; s += 10)
+        {
+            scorePool.Add(s);
+        }
+        for (int i = scorePool.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (scorePool[i], scorePool[j]) = (scorePool[j], scorePool[i]);
+        }
+
+        board.tiles.Clear();
+        for (int i = 0; i < YutBoard.TileCount; i++)
+        {
+            board.tiles.Add(new BoardTile { index = i, baseScore = scorePool[i] });
+        }
+        board.pieceIndex = -1;
+        board.totalMoved = 0;
+        board.lapCount = 0;
+
+        // 방울 이벤트 칸 무작위 지정 (개수는 Inspector 설정값)
+        List<int> indices = new List<int>();
+        for (int i = 0; i < YutBoard.TileCount; i++)
+        {
+            indices.Add(i);
+        }
+        for (int i = indices.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (indices[i], indices[j]) = (indices[j], indices[i]);
+        }
+        int bellCount = Mathf.Clamp(bellEventTileCount, 0, YutBoard.TileCount);
+        for (int i = 0; i < bellCount; i++)
+        {
+            board.tiles[indices[i]].hasBellEvent = true;
+        }
+
+        UpdateBoardUI();
+        Debug.Log($"--- 말판 배치 완료 | 방울 칸: {bellCount}개 ---");
+    }
+
+    // 말판 UI 갱신 — 칸의 자식 Text에 점수 표시, 'BellIcon' 이름의 자식으로 방울 칸 표시
+    private void UpdateBoardUI()
+    {
+        for (int i = 0; i < boardTiles.Length && i < board.tiles.Count; i++)
+        {
+            GameObject tileObj = boardTiles[i];
+            if (tileObj == null)
+            {
+                continue;
+            }
+            Text tileText = tileObj.GetComponentInChildren<Text>(true);
+            if (tileText != null)
+            {
+                tileText.text = board.tiles[i].Score.ToString();
+            }
+            Transform bellIcon = tileObj.transform.Find("BellIcon");
+            if (bellIcon != null)
+            {
+                bellIcon.gameObject.SetActive(board.tiles[i].hasBellEvent && !board.tiles[i].bellUsedThisRound);
+            }
+        }
+        if (lapCountText != null)
+        {
+            lapCountText.text = board.lapCount.ToString();
+        }
+    }
+
+    // 말 UI를 해당 칸 위치로 이동 (정산 데이터의 경유 칸을 순서대로 재생)
+    private void MovePieceVisual(int tileIndex)
+    {
+        if (playerPiece == null || tileIndex < 0 || tileIndex >= boardTiles.Length)
+        {
+            return;
+        }
+        GameObject tileObj = boardTiles[tileIndex];
+        if (tileObj != null)
+        {
+            playerPiece.position = tileObj.transform.position;
+        }
+    }
+
+    // 방울 이벤트 칸 착지 → 정산 연출 종료 후 선택창 표시 (판이 계속될 때만)
+    private void OpenBellChoice()
+    {
+        if (bellPool == null || bellPool.Count < 3)
+        {
+            Debug.LogWarning("[YutGameManager] bellPool이 3개 미만입니다 — 방울 이벤트를 건너뜁니다.", this);
+            return;
+        }
+        // 후보 3개 무작위 추출 (중복 없음)
+        List<int> pick = new List<int>();
+        for (int i = 0; i < bellPool.Count; i++)
+        {
+            pick.Add(i);
+        }
+        for (int i = pick.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (pick[i], pick[j]) = (pick[j], pick[i]);
+        }
+        currentBellOptions.Clear();
+        for (int i = 0; i < 3; i++)
+        {
+            currentBellOptions.Add(bellPool[pick[i]]);
+        }
+        selectedBellOption = -1;
+        isChoosingBell = true;
+        ActivatePanel(bellChoicePanel, nameof(bellChoicePanel));
+        UpdateUI();
+        Debug.Log("--- 방울 이벤트: 3개 중 1개를 선택하세요 ---");
+    }
+
+    // 방울 후보 선택 버튼(int): index 0~2 — 선택만 하고 확정은 ConfirmBellChoice()
+    public void SelectBellOption(int index)
+    {
+        if (!isChoosingBell || index < 0 || index >= currentBellOptions.Count)
+        {
+            return;
+        }
+        selectedBellOption = index;
+        Debug.Log($"방울 후보 선택: {currentBellOptions[index].bellName} (확정 버튼으로 결정)");
+        UpdateUI();
+    }
+
+    // 방울 후보 버튼(개별): 파라미터 없는 버전
+    public void SelectBellOption1() => SelectBellOption(0);
+    public void SelectBellOption2() => SelectBellOption(1);
+    public void SelectBellOption3() => SelectBellOption(2);
+
+    // 방울 선택 확정 버튼 — 선택한 방울을 이번 판 임시 보유에 추가하고 창 닫기
+    public void ConfirmBellChoice()
+    {
+        if (!isChoosingBell || selectedBellOption < 0)
+        {
+            return;
+        }
+        BellData chosen = currentBellOptions[selectedBellOption];
+        ownedBells.Add(chosen);
+        isChoosingBell = false;
+        SetPanel(bellChoicePanel, false);
+        Debug.Log($"--- 방울 획득: {chosen.bellName} (이번 판 한정) ---");
+        UpdateUI();
+    }
+
+    // 원클릭 버전 — 옵션 버튼에 바로 연결하면 선택과 확정을 한 번에 처리
+    public void SelectBellAndConfirm(int index)
+    {
+        SelectBellOption(index);
+        ConfirmBellChoice();
+    }
+    public void SelectBellAndConfirm1() => SelectBellAndConfirm(0);
+    public void SelectBellAndConfirm2() => SelectBellAndConfirm(1);
+    public void SelectBellAndConfirm3() => SelectBellAndConfirm(2);
 
     private YutResult DrawYut()
     {
@@ -628,11 +854,19 @@ public class YutGameManager : MonoBehaviour
             return settlement;
         }
 
-        // 1) 윷 결과의 초기 베이직·멀티플 — 주술 강화가 반영된 런타임 스탯 사용
+        // 1) 말 이동 → 도착 칸 점수 + 완주 보너스 + 윷 강화치 = 이번 투척 베이직
+        int steps = MoveSteps(selected);
+        int landing = board.MovePiece(steps, settlement.movePath);
+        BoardTile tile = board.tiles[landing];
+        settlement.landingTileIndex = landing;
+        settlement.tileScore = tile.Score;
+        settlement.lapBonus = board.lapCount * 10;   // 완주 보너스 = 완주 횟수 × 10 (도착 칸에 적용)
+        settlement.landedOnBellTile = tile.hasBellEvent;
+
         YutStatEntry stat = yutStats[selected];
-        settlement.baseBasic = stat.basic;
+        settlement.baseBasic = tile.Score + settlement.lapBonus + stat.basicBonus;
         settlement.baseMult = stat.mult;
-        settlement.finalBasic = stat.basic;
+        settlement.finalBasic = settlement.baseBasic;
         settlement.finalMult = stat.mult;
 
         // 2) 타겟 적중: 보너스 턴(횟수 차감 없음) + 콤보 증가. 2연속 적중부터 피버 효과 기록
@@ -696,8 +930,17 @@ public class YutGameManager : MonoBehaviour
         UpdateUI();
         yield return new WaitForSeconds(effectStepDelay);
 
-        // 2) 초기 베이직·멀티플 표시
+        // 2) 말 이동 연출 — 경유 칸을 한 칸씩 따라 이동 (저주 결과는 이동 없음)
+        foreach (int tileIndex in settlement.movePath)
+        {
+            MovePieceVisual(tileIndex);
+            yield return new WaitForSeconds(moveStepDelay);
+        }
+
+        // 3) 도착 칸 베이직 → 윷 멀티플 순서로 표시
         basicScore = settlement.baseBasic;
+        UpdateUI();
+        yield return new WaitForSeconds(effectStepDelay);
         multiplier = settlement.baseMult;
         UpdateUI();
 
@@ -717,12 +960,12 @@ public class YutGameManager : MonoBehaviour
             UpdateUI();
         }
 
-        // 4) 이번 투척 점수 표시
+        // 5) 이번 투척 점수 표시
         yield return new WaitForSeconds(effectStepDelay);
         throwScore = settlement.throwScore;
         UpdateUI();
 
-        // 5) 토탈 합산 표시 — 보스 HP 바 감소와 동기화 (displayTotal 기준으로 표시)
+        // 6) 토탈 합산 표시 — 보스 HP 바 감소와 동기화 (displayTotal 기준으로 표시)
         yield return new WaitForSeconds(effectStepDelay);
         FinishPresentation(settlement);
     }
@@ -755,6 +998,18 @@ public class YutGameManager : MonoBehaviour
             else
             {
                 AdvanceToNextRound();
+            }
+            return;
+        }
+        // 방울 이벤트 칸 착지 — 정산 연출이 끝나고 판이 계속될 때 선택창 표시
+        if (settlement.landedOnBellTile && settlement.landingTileIndex >= 0)
+        {
+            BoardTile tile = board.tiles[settlement.landingTileIndex];
+            if (tile.hasBellEvent && !tile.bellUsedThisRound)
+            {
+                tile.bellUsedThisRound = true;
+                UpdateBoardUI();
+                OpenBellChoice();
             }
         }
     }
@@ -879,6 +1134,51 @@ public class YutGameManager : MonoBehaviour
             targetYutText.text = targetConfirmed ? ToKorean(selectedTarget) : "";
         }
 
+        // 말판 UI — 칸 점수·방울 아이콘·완주 횟수 (Start/TargetSelection에서는 갱신 생략)
+        bool boardActive = currentState == GameState.Playing
+            || currentState == GameState.Cleared
+            || currentState == GameState.GameOver;
+        if (boardActive)
+        {
+            UpdateBoardUI();
+        }
+
+        // 방울 선택창 — 후보 이름·설명 표시 (선택 중이 아니면 빈칸)
+        for (int i = 0; i < 3; i++)
+        {
+            bool hasOption = isChoosingBell && i < currentBellOptions.Count;
+            if (i < bellOptionNameTexts.Length && bellOptionNameTexts[i] != null)
+            {
+                bellOptionNameTexts[i].text = hasOption ? currentBellOptions[i].bellName : "";
+            }
+            if (i < bellOptionDescTexts.Length && bellOptionDescTexts[i] != null)
+            {
+                bellOptionDescTexts[i].text = hasOption ? currentBellOptions[i].description : "";
+            }
+        }
+
+        // 보유 임시 방울 — bellSlots 앞에서부터 활성화 + 자식 Text에 이름 표시
+        if (bellSlots != null)
+        {
+            for (int i = 0; i < bellSlots.Length; i++)
+            {
+                if (bellSlots[i] == null)
+                {
+                    continue;
+                }
+                bool owned = i < ownedBells.Count;
+                bellSlots[i].SetActive(owned);
+                if (owned)
+                {
+                    Text slotText = bellSlots[i].GetComponentInChildren<Text>(true);
+                    if (slotText != null)
+                    {
+                        slotText.text = ownedBells[i].bellName;
+                    }
+                }
+            }
+        }
+
         // 보스 정보 — 선택 화면에서는 미리보기(만피), 전투 중에는 displayTotal과 동기화된 잔여 HP
         BossData boss = CurrentBoss;
         if (boss != null)
@@ -935,8 +1235,8 @@ public class YutGameManager : MonoBehaviour
             }
         }
 
-        // 던지기 버튼은 Playing 상태에서만, 그리고 연출 재생 중에는 숨긴다
-        SetPanel(rollButton, currentState == GameState.Playing && !isPresenting);
+        // 던지기 버튼은 Playing 상태에서만, 그리고 연출·방울 선택 중에는 숨긴다
+        SetPanel(rollButton, currentState == GameState.Playing && !isPresenting && !isChoosingBell);
     }
 
     private void Start()
