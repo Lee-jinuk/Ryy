@@ -8,7 +8,31 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ```
 [2026-10-14 오후 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — GPT 요청(투척별 점수 정산 + 연쇄 효과 연출 구조) — Devin 구현:
+★ 최신 — GPT 요청(보스전 5종 + 클리어/게임오버 + 정산 연출 완성) — Devin 구현:
+- BossData(이름/maxHP/abilityDescription/nakBonusPercent) + bosses 리스트 5명:
+  첫~다섯 번째 저승지기, HP 1000/2000/3000/4000/5000 — 이름·수치 전부 임시 테스트값
+- 보스 선택: SelectBoss(int)/SelectBoss1()~SelectBoss5() — Start 상태에서만 동작.
+  StartGame() = BeginBossFight()(보스 적용·전투 초기화·특수능력 적용) + EnterTargetSelection()
+- 특수능력: 낙 +2%p(퍼센트포인트 가산) — 일반 5종에서 상대 비중 유지하며 비례 차감,
+  백도 불변, 음수 보정. BeginBossFight 때마다 BuildWeights() 재구축 → 재도전 중복 없음.
+  BackToBossSelect()는 ResetProbabilities()로 효과 제거
+- 판 구조: roundsPerBoss=3, roundIndex, roundScore(이번 판 누적=백도 차감 범위 —
+  이전 판 확정분 불침범 실체화). totalScore는 보스전 누적(판 넘어 유지)
+- 상태: GameState에 Cleared/GameOver 추가(RoundEnd 폐기). 판 끝 → totalScore≥goalScore
+  이면 EnterClear(), 아니면 roundIndex≥3이면 EnterGameOver(), 아니면 다음 판 타겟 재선택
+- 보스 HP: 잔여 = Max(0, goalScore − displayTotal). bossHpBar(Image fillAmount) 또는
+  bossHpSlider(Slider value) — 연결된 쪽만 갱신. 토탈 합산 단계와 동기화
+- 정산 연출 완성: displayTotal 도입 — 토탈 텍스트·HP 바는 '토탈 합산' 단계에서만 갱신.
+  throwScore 표시도 '투척 점수' 단계에서만 갱신 (정산 시점과 표시 시점 완전 분리)
+- 결과 패널: clearPanel/gameOverPanel + 결과 텍스트 5종 (clearBossNameText/clearScoreText/
+  gameOverBossNameText/gameOverScoreText/gameOverGoalText) + RetryBoss()/BackToBossSelect()
+- ResetRound() 재정의 = RetryBoss() (같은 보스 1판부터 재시작)
+- ⚠ 신규 Inspector 연결 필요: 보스 선택 버튼→SelectBoss1~5, 보스 UI 6종, 체력바(Image 또는
+  Slider 둘 중 하나), clearPanel/gameOverPanel + 결과 텍스트 5종, 다시 도전→RetryBoss,
+  돌아가기→BackToBossSelect. 전부 미연결도 null-safe
+- 보스 잠금/해금, 클리어 보상, 다음 보스 자동 이동, 판 결과 화면 — 미구현 (기획 대기)
+
+GPT 요청(직전 — 이어서 기록): 투척별 점수 정산 + 연쇄 효과 연출 구조.
 - 점수 모델 교체: 누적 풀×배율(baseScorePool×currentMultiplier) 폐기 → 투척마다 독립 정산.
   ThrowScore = 이번 투척 BasicScore × Multiplier → TotalScore에 1회만 합산.
   이번 투척의 베이직/멀티플은 임시값(basicScore/multiplier 필드)이라 매 투척 초기화, 미누적.
@@ -101,9 +125,9 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 현재 상태
 
-- 마지막 작업 일시: 2026-10-14 오전
+- 마지막 작업 일시: 2026-10-14 오후
 - 작업 담당 AI: Devin Desktop (Cognition)
-- Git 커밋: 본 문서를 포함한 커밋 — `git log -1` 참조 (직전: `0ddd3b7`)
+- Git 커밋: 본 문서를 포함한 커밋 — `git log -1` 참조
 - 현재 브랜치: `develop` (origin: https://github.com/Lee-jinuk/Ryy.git)
 
 ### [2026-10-14 오후 - GPT 기획 / Devin 구현]
@@ -118,6 +142,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - GPT 기획 원칙 기록(코드/씬 변경 없음): UI 확장성 가이드 — 기준 1920×1080(16:9), Canvas Scaler `Scale With Screen Size`/Match 0.5, 앵커 기반 리사이즈 대응, 배경 이미지와 HUD 요소 스케일 방식 분리, 21:9 울트라와이드·20:9 모바일 가로 대응 지향, 세로 전용 UI 미구현. 에디터 수동 배치·Inspector 연결 원칙 및 기존 UI 대규모 재배치 금지 유지
   - 참고: 현재 씬 Canvas Scaler = Constant Pixel Size(800×600) — 원칙 적용 시 에디터에서 수동 변경 필요 (자동 변경하면 기존 배치가 재조정되므로 코드/YAML로 임의 적용하지 않음)
 - 투척별 점수 정산 + 효과 단계 구조 (GPT 기획 / Devin 구현): `ThrowScore = Basic × Mult` → `TotalScore` 1회 합산. `ScoreEffectStep`/`ThrowSettlement`로 부적·방울·주술·피버 발동 기록 → 코루틴 순차 재생 (`PresentSettlement`, `SkipPresentation`). 윷 스탯 `baseYutStats` (도10×2~모50×6) + `UpgradeYutStat()` 영구 강화 API. MainResult 결과명 전용 + `throwScoreText`/`feverText` 신규 필드. `baseScorePool`/`currentMultiplier` 폐기. 백도 차감 기준 `totalScore`로 변경. 피버 ×Min(콤보,8) 투척 멀티플 적용은 이식식 — 확정 필요
+- 보스전 + 클리어/게임오버 (GPT 기획 / Devin 구현): `BossData` 5명 임시(HP 1000~5000), `SelectBoss1~5`, 낙 +2%p 공통 능력(비례 차감·백도 불변·중복 없음), 관문당 3판(`roundsPerBoss`), `roundScore` 판별 누적으로 백도 범위 실체화, `Cleared`/`GameOver` 상태 + 패널, 보스 HP UI(Image/Slider), `displayTotal` 토탈·HP 동기화 연출, `RetryBoss`/`BackToBossSelect`. ResetRound = 보스전 재시작으로 재정의
 
 ### [2026-10-14 오전 - Gemini & Devin 작업분]
 
@@ -152,7 +177,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 ## 미확정 결정 사항 (사용자 승인 필요)
 
 - **피버 적용 수식**: 투척 정산 구조로 "이번 투척 멀티플 ×Min(콤보, 8)"로 이식됨 — 구 기준(전체 누적 배율)과 산출 차이 있음. 확정 또는 대안 수치 필요 (GPT 예시의 '+증가' 방식도 구조는 지원됨)
-- 라운드 목표 점수 값 (현재 테스트값 1000)
+- 보스 이름·HP(1000~5000)·특수능력 수치(낙 +2%p) — 전부 임시 테스트값, 밸런스 검토 필요
 - `effectStepDelay` 연출 간격 (테스트값 0.35초)
 - 비타겟/백도 페널티 수치 감각 (`GAME_RULES.md` 7절 '검토 중')
 - 윷 확률 테스트값 확정 여부: 개 32.5%/낙 5% (낙 추가 조정분), `backDoPenalty` 차감량, `bossIndex` 분기 기준 — 전부 테스트값
@@ -161,11 +186,12 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 다음 작업 목표 (제안)
 
-1. 사용자가 `ThrowScoreText`/`FeverText` Text 오브젝트를 에디터에서 만들어 Inspector 연결 후 Play 테스트 → 점수 정산·연출 순서 확인
+1. 사용자가 에디터에서 신규 UI 제작·연결: 보스 선택 버튼 5개(→`SelectBoss1~5`), 보스 정보 6종, 체력바(Image Filled 또는 Slider), `ClearPanel`/`GameOverPanel` + 결과 텍스트 5종, 다시 도전→`RetryBoss`, 돌아가기→`BackToBossSelect` → Play 테스트
 2. 피버 적용 수식 확정 (×콤보 vs +증가 등) → 확정 시 `SettleThrow` 피버 단계 한 곳만 수정
 3. 타겟 선택 오버레이 블러 효과 적용 여부 검토 (현재 반투명 딤)
 4. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기획 확정 후 착수. `bellSlots`/`talismanSlots` 배열과 `ScoreEffectStep` 기록 구조는 이미 준비됨
 5. 부적·방울 실제 아이템 구현 시 `SettleThrow()`의 "3) 향후 효과" 지점에 단계 추가 + 연출에서 아이템 이미지 강조/진동 확장
+6. 보스 잠금/해금·클리어 보상·다음 보스 자동 이동·판 결과 화면 — 기획 확정 후 착수
 
 ## 관련 파일
 

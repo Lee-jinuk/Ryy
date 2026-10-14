@@ -98,6 +98,20 @@
 - 삭제 필드: `baseScorePool`, `currentMultiplier`, `ResultMessage()`, `BaseScore()`, `MultiplierBonus()` — 씬에 남은 구형 직렬화 키는 무시됨
 - 검증 결과 (코드 시뮬레이션): 도→10×2=20, 이후 개→20×3=60, 토탈 80 — 임시값 미누적 확인. 피버 1회 Hit/2회 피버/3회 피버3 표시 확인. Devin은 에디터 미실행 — 사용자 Play 테스트 필요
 
+**추가 구현 — 보스전 5종 + 클리어/게임오버 + 정산 연출 완성** (GPT 기획 / Devin 구현, `YutGameManager.cs`):
+
+- GPT 요청: 보스 5명 데이터·선택, 보스 HP=목표 점수 + HP 바, 낙 +2%p 공통 특수능력, 투척별 순차 정산 연출, 클리어·게임오버 패널과 복귀 흐름, 관문당 3판 구조
+- 보스 데이터: `[Serializable] BossData`(이름/최대HP/능력설명/`nakBonusPercent`) + `List<BossData> bosses` 5명 (첫~다섯 번째 저승지기, HP 1000~5000 — 전부 임시값). 보스 번호 = `selectedBossIndex + 1`로 백도 1~5/6~10 분기에 사용 (기존 `bossIndex` 필드 폐기)
+- 보스 선택: `SelectBoss(int)` + `SelectBoss1()`~`SelectBoss5()` — Start 상태에서만 동작(전투 중 변경 방지). 선택 시 목표 점수·이름·능력 미리보기 표시
+- 보스 특수능력: `ApplyBossAbility()` — `runtimeWeights`에 낙 +2%p(퍼센트포인트), 증가분을 일반 5종에서 상대 비중 유지하며 비례 차감, 백도 불변, 음수 보정. `BeginBossFight()`에서 `BuildWeights()` 후 적용 → 재도전 시 중복 누적 없음. `BackToBossSelect()`는 `ResetProbabilities()`로 효과 제거
+- 판 구조: `roundsPerBoss = 3`, `roundIndex`, `roundScore`(이번 판 누적 — 백도 차감 범위로 실체화, 이전 판 확정분 불침범). `totalScore`는 보스전 전체 누적(판 넘어 유지) = 보스 HP와 대응
+- 상태 전환: `GameState.Cleared`/`GameOver` 추가 (RoundEnd 폐기). `FinishPresentation` 후처리 — `totalScore >= goalScore` → `EnterClear()` / 판 소진 시 `roundIndex >= roundsPerBoss` → `EnterGameOver()`, 아니면 `AdvanceToNextRound()`(판 카운터·콤보 리셋 후 타겟 재선택)
+- 클리어/게임오버 패널: `clearPanel`/`gameOverPanel` GameObject + 결과 텍스트 5종(`clearBossNameText`/`clearScoreText`/`gameOverBossNameText`/`gameOverScoreText`/`gameOverGoalText`) — 사용자가 에디터에서 생성·연결. `RetryBoss()`(다시 도전) / `BackToBossSelect()`(보스 선택 복귀) public 제공. 두 패널 상호 배타 표시
+- 보스 HP UI: `bossNameText`/`bossHpText`/`bossMaxHpText`/`bossAbilityText` + `bossHpBar`(Image fillAmount) 또는 `bossHpSlider`(Slider value) — 연결된 쪽만 갱신, 둘 다 null-safe. 잔여 HP = Max(0, goalScore − displayTotal)
+- 정산 연출 완성: `displayTotal` 도입 — 토탈 텍스트·보스 HP 바는 '토탈 합산' 단계에서만 갱신 (500→740 연출 + HP 바 동기화). 단계: 결과명 → 초기 베이직·멀티플 → 효과 단계별 → 투척 점수 → 토탈+HP. `throwScore` 표시 필드도 '투척 점수 표시' 단계에서만 갱신되도록 수정
+- `ResetRound()` = `RetryBoss()`(같은 보스 1판부터 재시작)으로 재정의 — 기존 '현재 라운드 리셋' 의미를 보스전 재시작으로 확장
+- 검증 (코드 시뮬레이션): 낙 +2%p 적용 시 일반 5종 합계 88.75→86.75 비례 차감 + 백도 6.25 불변 + 낙 5→7 = 합계 100 유지. 재시작 시 BuildWeights 재구축으로 중복 없음. 연출 중 isPresenting으로 연타 차단. Devin 에디터 미실행 — Play 테스트는 사용자 확인 필요
+
 **테스트/남은 문제**: Devin은 에디터 미실행 — 사용자 연결 후 Play 테스트 필요. 블러 효과는 추후 작업. 부적·방울 이미지 진동 등 실제 애니메이션은 아이템 UI 연결 단계에서 확장 (현재는 Text 갱신 + 단계 재생 구조만).
 
 ## 구현된 기능 (코드 확인 완료)
@@ -109,7 +123,9 @@
 - 윷 스탯: 도 10×2 / 개 20×3 / 걸 30×4 / 윷 40×5 / 모 50×6 — `baseYutStats` → 런타임 `yutStats` + `UpgradeYutStat()` 영구 강화 API
 - 효과 단계 기록·재생: `ScoreEffectStep`/`ThrowSettlement` — 부적·방울·주술·피버 순차 발동 연출 구조 (정산 확정 후 코루틴 재생, 스킵 가능)
 - 피버 콤보: 타겟 적중 시 `feverCombo++`, 2연속부터 이번 투척 멀티플 ×Min(콤보, 8) — 피버 단계로 기록 (이식 수식, 확정 검토 필요)
-- 라운드 종료 판정: `roundTargetScore = 1000` 기준 클리어/게임오버
+- 보스전 구조: `BossData` 5명(임시)/보스 선택(`SelectBoss1~5`)/목표=보스 HP/낙 +2%p 특수능력(비례 차감·백도 불변·중복 없음)/관문당 3판(`roundsPerBoss`)×판당 5회/`roundScore` 판별 누적(백도 범위)/`Cleared`·`GameOver` 상태 + 클리어·게임오버 패널 + `RetryBoss`/`BackToBossSelect`
+- 보스 UI 연결 필드: `bossNameText`/`bossHpText`/`bossMaxHpText`/`bossAbilityText`/`bossHpBar`(Image)/`bossHpSlider`(Slider 대안)
+- 라운드 종료 판정: `totalScore >= goalScore`(보스 HP) 클리어 / 3판 소진 미달 게임오버
 - UI Text 필드: `mainResultText`(결과명 전용)/`basicScoreText`/`multScoreText`/`totalScoreText`/`goalScoreText`/`remainText`/`throwDataText`/`targetYutText`/`throwScoreText`/`feverText` — 전부 숫자·이름만 출력, null-safe
 - `ConfirmTargetSelection()`, `ResetRound()` public (Button OnClick 연결용)
 - 스페이스바 테스트 (`Update` 내 `Input.GetKeyDown`)
@@ -145,3 +161,4 @@
 | 2026-10-14 오후 | 타겟 선택을 모달 팝업 방식으로 전환 (`gamePanel`/`targetSelectOverlay` 필드, 딤 오버레이 토글 로직) | GPT 기획 / Devin 코드 구현, 블러는 추후 |
 | 2026-10-14 오후 | 윷 결과 7종 확장(낙 추가), 저주 계열 구조(`IsCurse`/`HandleCurseResult`), 확률 시스템 재설계(인스펙터 편집 + 런타임 가중치 분리), 백도 보스 분기 | GPT 기획 / Devin 구현. 확률·차감량·bossIndex는 테스트값 |
 | 2026-10-14 오후 | 투척별 점수 정산 구조 도입 (`ThrowScore`→`TotalScore`), 윷 스탯 테이블 + 영구 강화 API, `ScoreEffectStep`/`ThrowSettlement` 효과 기록·코루틴 재생 구조, MainResult 결과명 전용 + 신규 `throwScoreText`/`feverText` | GPT 기획 / Devin 구현. 피버 ×콤보 이식식·effectStepDelay·백도 차감량은 테스트값/검토 필요 |
+| 2026-10-14 오후 | 보스전 5종(임시 저승지기 1~5, HP 1000~5000) + 보스 선택(`SelectBoss`), 낙 +2%p 공통 특수능력, 관문당 3판 구조, 클리어·게임오버 패널 + `RetryBoss`/`BackToBossSelect`, 보스 HP UI(Image/Slider), 정산 연출 단계 완성(`displayTotal` 토탈·HP 동기화) | GPT 기획 / Devin 구현. 보스 이름·HP·능력 수치 전부 테스트값 |
