@@ -37,6 +37,14 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 테스트값(미확정): 확률 개 32.5%/낙 5%, bossIndex=1, backDoPenalty=30 — 전부 Inspector 조정 가능
 
+추가 GPT 기획 원칙 (UI 확장성 — 구현 없이 기록만):
+- 기준 해상도 1920×1080 (16:9), Canvas Scaler = Scale With Screen Size / Match 0.5
+- UI는 Anchor로 리사이즈 대응, 배경 이미지와 HUD 요소의 스케일 방식 분리
+- 21:9 울트라와이드·20:9 모바일 가로 테스트 가능한 설계 지향, 세로 전용 UI 미구현
+- 에디터 수동 배치 + Inspector 연결 원칙 유지, 기존 UI 대규모 재배치 금지
+- 주의: 현재 씬 Canvas Scaler는 Constant Pixel Size(800×600) — 적용하려면 에디터에서
+  Scale With Screen Size(Reference 1920×1080, Match 0.5)로 변경 필요 (변경 시 기존 UI 배치 재조정됨)
+
 사용자 에디터 작업 필요 (권장 Hierarchy):
   Canvas
   ├─ GamePanel               ← 메인 게임 UI 부모
@@ -68,6 +76,8 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - 미테스트: Devin은 에디터 미실행 — 연결 후 Play 확인 필요
 - 사용자 확인: 타겟 버튼 무반응은 OnClick 미연결(코드 문제 아님) — 연결 후 정상 작동. 타겟 선택 함수들은 수정 없이 유지됨
 - 윷 7종 확장(낙) + 저주 계열: `IsCurse`/`HandleCurseResult`, 확률 시스템 이원화(`baseProbabilities`↔`runtimeWeights`), 백도 보스 분기, 낙 처리 — 전부 코드 완료, 테스트값만 Inspector 조정 대기
+- GPT 기획 원칙 기록(코드/씬 변경 없음): UI 확장성 가이드 — 기준 1920×1080(16:9), Canvas Scaler `Scale With Screen Size`/Match 0.5, 앵커 기반 리사이즈 대응, 배경 이미지와 HUD 요소 스케일 방식 분리, 21:9 울트라와이드·20:9 모바일 가로 대응 지향, 세로 전용 UI 미구현. 에디터 수동 배치·Inspector 연결 원칙 및 기존 UI 대규모 재배치 금지 유지
+  - 참고: 현재 씬 Canvas Scaler = Constant Pixel Size(800×600) — 원칙 적용 시 에디터에서 수동 변경 필요 (자동 변경하면 기존 배치가 재조정되므로 코드/YAML로 임의 적용하지 않음)
 
 ### [2026-10-14 오전 - Gemini & Devin 작업분]
 
