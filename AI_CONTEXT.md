@@ -39,5 +39,8 @@ Unity + C# (New Input System 패키지 사용).
 
 ## 진행 상태
 
-- 로컬 Git 세팅 완료 (원격 GitHub 미연결).
-- 폴더 구조화 및 단일 타겟 피버 룰 구현 예정.
+- 로컬 Git 세팅 완료 (원격 GitHub 미연결). `main` 초기 커밋, `develop` 브랜치 운영 중.
+- 폴더 구조화 완료: `Assets/Scripts/Core|Data|UI`, `Assets/Prefabs`, `Assets/ScriptableObjects`.
+- `YutGameManager.cs` → `Assets/Scripts/Core/`로 이동 (.meta GUID 유지).
+- 단일 타겟 & 피버 룰 구현 완료: `selectedTarget` 단일 타겟, `feverCombo` X-Mult 폭발,
+  `GameState.TargetSelection → Playing → RoundEnd`, 목표 점수(`roundTargetScore=1000`) 클리어/게임오버 판정.
