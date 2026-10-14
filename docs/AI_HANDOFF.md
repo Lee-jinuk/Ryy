@@ -8,7 +8,32 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ```
 [2026-10-14 오후 변경사항 요약 - GPT 기획 / Devin 구현]
 
-GPT 요청: 타겟 선택 화면을 전체 전환 방식에서 "메인 게임 화면 위에 뜨는 모달 팝업" 방식으로 변경.
+★ 최신 — GPT 요청(투척별 점수 정산 + 연쇄 효과 연출 구조) — Devin 구현:
+- 점수 모델 교체: 누적 풀×배율(baseScorePool×currentMultiplier) 폐기 → 투척마다 독립 정산.
+  ThrowScore = 이번 투척 BasicScore × Multiplier → TotalScore에 1회만 합산.
+  이번 투척의 베이직/멀티플은 임시값(basicScore/multiplier 필드)이라 매 투척 초기화, 미누적.
+- 윷 스탯 테이블: baseYutStats — 도 10×2 / 개 20×3 / 걸 30×4 / 윷 40×5 / 모 50×6 (GPT 지시).
+  런타임 yutStats 복사본 + UpgradeYutStat(result, basic, mult) API = 주술 영구 강화용.
+  기존 "타겟 적중 시 배수 +1~+5 가산" 방식 폐기됨.
+- 효과 기록 구조 (핵심): ScoreEffectStep — 원인(YutResult/Talisman/Bell/Spell/Fever),
+  sourceId, 표시명, 대상(Basic/Multiplier), 연산(Add/Multiply + opValue), 적용 전/후 수치,
+  증가량(delta), 재생 순서. ×2와 +2처럼 연산 종류와 실제 증가량을 구분 기록.
+  ThrowSettlement = 한 투척의 확정 정산(초기/최종 스탯, throwScore, steps[]). currentSettlement 공개.
+- 연출 분리: SettleThrow()에서 점수 즉시 확정 → PresentSettlement() 코루틴이 기록을 순서대로
+  재생(결과명 → 초기 베이직·멀티플 → 효과 단계 → 투척 점수). effectStepDelay=0.35 테스트값.
+  연출 중 isPresenting으로 RollYut 연타 무시 + rollButton 숨김. SkipPresentation() 추가 —
+  스킵해도 동일 결과(점수는 이미 확정). 실제 아이템 이펙트 애니메이션은 미구현(구조만).
+- MainResult: 윷 결과 이름만 표시(도/개/걸/윷/모/낙/백도). Start/TargetSelection에서
+  오브젝트 숨김, Playing 진입 시 빈칸, 안내 문구 전부 제거.
+- feverText 신규: FeverLabel() — 0빈칸 / 1 Hit / 2 피버 / 3+ 피버N.
+- 백도 페널티 기준 변경: 베이직 풀 → 이번 판 누적 총점(totalScore) 차감/초기화.
+- 피버 수식 이식(★검토 필요, 확정 아님): 구 기준 "전체 누적 배율 ×Min(콤보,8)" →
+  투척 정산 구조로 "이번 투척 멀티플 ×Min(콤보,8)". 산출 차이 있으므로 수치 확정 필요.
+- ⚠ 신규 Inspector 연결 필요: Throw Score Text / Fever Text 필드에 사용자 제작 Text 연결
+  (미연결도 null-safe 동작). Base Yut Stats / Effect Step Delay는 Inspector 조정 가능.
+- 삭제된 필드: baseScorePool, currentMultiplier (씬에 남은 구형 직렬화 키는 무시됨)
+
+GPT 요청(직전 — 이어서 기록): 타겟 선택 화면을 전체 전환 방식에서 "메인 게임 화면 위에 뜨는 모달 팝업" 방식으로 변경.
 시작 화면 → [게임 시작] → 메인 화면 노출 + 반투명 딤 + 중앙 타겟 팝업 → 선택 시 오버레이만 꺼지고 본 게임 진행.
 
 Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사용자가 에디터에서 수행):
@@ -71,7 +96,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 주의사항:
 - 코드로 UI를 동적 생성하는 방식은 폐기된 상태 유지 — 다시 추가하지 말 것
 - Devin은 에디터 미실행 — 사용자 연결 후 Play 테스트 필요
-- 누적 규칙: maxThrows 5, 피버 배수 상한 8 (appliedFever = Min(feverCombo, feverCap))
+- 누적 규칙: maxThrows 5, 투척별 정산(ThrowScore=Basic×Mult→TotalScore), 피버 ×Min(콤보,8)은 투척 멀티플에 적용(이식식, 검토 중)
 ```
 
 ## 현재 상태
@@ -92,6 +117,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - UI 텍스트 분리(GPT 기획): `remainText`/`throwDataText` 분리(숫자만), `basicScoreText`/`multScoreText`/`targetYutText` 라벨 제거, `rollButton` 필드 추가(Playing에서만 표시) — 코드 완료, Inspector 재연결 필요
 - GPT 기획 원칙 기록(코드/씬 변경 없음): UI 확장성 가이드 — 기준 1920×1080(16:9), Canvas Scaler `Scale With Screen Size`/Match 0.5, 앵커 기반 리사이즈 대응, 배경 이미지와 HUD 요소 스케일 방식 분리, 21:9 울트라와이드·20:9 모바일 가로 대응 지향, 세로 전용 UI 미구현. 에디터 수동 배치·Inspector 연결 원칙 및 기존 UI 대규모 재배치 금지 유지
   - 참고: 현재 씬 Canvas Scaler = Constant Pixel Size(800×600) — 원칙 적용 시 에디터에서 수동 변경 필요 (자동 변경하면 기존 배치가 재조정되므로 코드/YAML로 임의 적용하지 않음)
+- 투척별 점수 정산 + 효과 단계 구조 (GPT 기획 / Devin 구현): `ThrowScore = Basic × Mult` → `TotalScore` 1회 합산. `ScoreEffectStep`/`ThrowSettlement`로 부적·방울·주술·피버 발동 기록 → 코루틴 순차 재생 (`PresentSettlement`, `SkipPresentation`). 윷 스탯 `baseYutStats` (도10×2~모50×6) + `UpgradeYutStat()` 영구 강화 API. MainResult 결과명 전용 + `throwScoreText`/`feverText` 신규 필드. `baseScorePool`/`currentMultiplier` 폐기. 백도 차감 기준 `totalScore`로 변경. 피버 ×Min(콤보,8) 투척 멀티플 적용은 이식식 — 확정 필요
 
 ### [2026-10-14 오전 - Gemini & Devin 작업분]
 
@@ -125,7 +151,9 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 미확정 결정 사항 (사용자 승인 필요)
 
-- 코드의 임의 점수/배율/목표 점수 값 채택 여부 (`GAME_RULES.md` 5절 전부 미확정: 도10~모50, 배수+1~+5, 목표 1000)
+- **피버 적용 수식**: 투척 정산 구조로 "이번 투척 멀티플 ×Min(콤보, 8)"로 이식됨 — 구 기준(전체 누적 배율)과 산출 차이 있음. 확정 또는 대안 수치 필요 (GPT 예시의 '+증가' 방식도 구조는 지원됨)
+- 라운드 목표 점수 값 (현재 테스트값 1000)
+- `effectStepDelay` 연출 간격 (테스트값 0.35초)
 - 비타겟/백도 페널티 수치 감각 (`GAME_RULES.md` 7절 '검토 중')
 - 윷 확률 테스트값 확정 여부: 개 32.5%/낙 5% (낙 추가 조정분), `backDoPenalty` 차감량, `bossIndex` 분기 기준 — 전부 테스트값
 - 저주 발생 시 피버 콤보 리셋 여부 (구현은 리셋 — 기획 미명시라 확인 필요)
@@ -133,14 +161,15 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 다음 작업 목표 (제안)
 
-1. 사용자가 에디터에서 모달 UI 배치·인스펙터 연결 완료 후 Play 테스트 → 피버 상한 8·배율 밸런스 감각 보고
-2. 타겟 선택 오버레이 블러 효과 적용 여부 검토 (현재 반투명 딤)
-3. `GAME_RULES.md` 5절 점수 계산 규칙 확정 → 코드 임의값 반영 여부 결정
-4. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기획 확정 후 착수. `bellSlots`/`talismanSlots` 배열은 이미 준비됨
+1. 사용자가 `ThrowScoreText`/`FeverText` Text 오브젝트를 에디터에서 만들어 Inspector 연결 후 Play 테스트 → 점수 정산·연출 순서 확인
+2. 피버 적용 수식 확정 (×콤보 vs +증가 등) → 확정 시 `SettleThrow` 피버 단계 한 곳만 수정
+3. 타겟 선택 오버레이 블러 효과 적용 여부 검토 (현재 반투명 딤)
+4. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기획 확정 후 착수. `bellSlots`/`talismanSlots` 배열과 `ScoreEffectStep` 기록 구조는 이미 준비됨
+5. 부적·방울 실제 아이템 구현 시 `SettleThrow()`의 "3) 향후 효과" 지점에 단계 추가 + 연출에서 아이템 이미지 강조/진동 확장
 
 ## 관련 파일
 
-- `Assets/Scripts/Core/YutGameManager.cs` (게임 로직 + UI 자동 생성)
+- `Assets/Scripts/Core/YutGameManager.cs` (게임 로직 — 점수 정산/효과 기록/상태 전환. UI 동적 생성 없음)
 - `Assets/Scenes/SampleScene.unity` (`GameManager` 오브젝트에 매니저 컴포넌트 배치됨)
 - `ProjectSettings/ProjectSettings.asset` (`activeInputHandler: 2`)
 - `docs/GAME_DESIGN.md`, `docs/GAME_RULES.md`, `docs/DEVELOPMENT_LOG.md`

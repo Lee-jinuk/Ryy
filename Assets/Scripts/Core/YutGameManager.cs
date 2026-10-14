@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -14,17 +15,63 @@ public class YutProbabilityEntry
     public float percent;
 }
 
+// 윷 결과별 영구 스탯 — 주술 등으로 런타임에 강화하면 다음 투척부터 적용
+[System.Serializable]
+public class YutStatEntry
+{
+    public YutResult result;
+    public int basic;
+    public int mult;
+}
+
+public enum EffectSourceType { YutResult, Talisman, Bell, Spell, Fever }
+public enum EffectTarget { Basic, Multiplier }
+public enum EffectOp { Add, Multiply }
+
+// 효과 적용 1단계 기록 — 향후 부적/방울/주술/피버 발동 연출은 이 목록을 순서대로 재생한다
+[System.Serializable]
+public class ScoreEffectStep
+{
+    public EffectSourceType source;  // 효과 발생 원인 (윷 결과/부적/방울/주술/피버)
+    public string sourceId;          // 효과를 발생시킨 아이템·능력 식별자
+    public string displayName;       // 화면에 표시할 효과 이름
+    public EffectTarget target;      // 적용 대상: 베이직 or 멀티플
+    public EffectOp op;              // 연산 종류: +고정값 or ×배율 (×2와 +2는 서로 다른 연산)
+    public int opValue;              // 연산값 (×2이면 2, +3이면 3)
+    public int beforeValue;          // 적용 전 수치
+    public int afterValue;           // 적용 후 수치
+    public int delta;                // 실제 증가량 (after - before)
+    public int order;                // 연출 재생 순서
+}
+
+// 한 번의 투척에 대한 확정 정산 — 점수는 여기서 계산되고, 연출은 이 데이터만 재생한다
+[System.Serializable]
+public class ThrowSettlement
+{
+    public YutResult result;
+    public bool isTargetHit;
+    public int baseBasic;            // 효과 적용 전 초기 베이직 (윷 스탯 기준)
+    public int baseMult;             // 효과 적용 전 초기 멀티플
+    public int finalBasic;           // 모든 효과 적용 후 베이직
+    public int finalMult;            // 모든 효과 적용 후 멀티플
+    public int throwScore;           // finalBasic × finalMult — TotalScore에 1회만 합산
+    public int feverComboAtRoll;     // 이 투척 시점의 콤보 횟수
+    public List<ScoreEffectStep> steps = new List<ScoreEffectStep>();
+}
+
 public class YutGameManager : MonoBehaviour
 {
     [Header("UI Texts")]
-    public Text mainResultText;    // 중앙 결과 화면: 윷 결과 / 피버 / 클리어·게임오버 메시지
-    public Text basicScoreText;    // 베이직 점수 (숫자만 출력)
-    public Text multScoreText;     // 멀티플 배수 (숫자만 출력)
-    public Text totalScoreText;    // 총 점수 (숫자만 출력)
+    public Text mainResultText;    // 중앙 결과: 윷 결과 이름만 표시 (Playing/RoundEnd에서만 보임)
+    public Text basicScoreText;    // 이번 투척 베이직 (숫자만 출력)
+    public Text multScoreText;     // 이번 투척 멀티플 (숫자만 출력)
+    public Text totalScoreText;    // 누적 총점 (숫자만 출력)
     public Text goalScoreText;     // 목표 점수 (숫자만 출력)
     public Text remainText;        // 남은 투척 기회 (숫자만 출력)
     public Text throwDataText;     // 전체 투척 기회 (숫자만 출력)
     public Text targetYutText;     // 선택된 타겟 윷 이름 (선택 전 빈 문자열)
+    public Text throwScoreText;    // 이번 투척 확정 점수 (숫자만 출력)
+    public Text feverText;         // 피버 상태 (빈칸 / Hit / 피버 / 피버N)
 
     [Header("Panels")]
     public GameObject startPanel;            // '게임 시작' 버튼이 있는 첫 화면
@@ -33,7 +80,7 @@ public class YutGameManager : MonoBehaviour
     public GameObject targetSelectPanel;     // 중앙 타겟 선택 팝업 (overlay 자식 — 미연결도 동작)
 
     [Header("Buttons")]
-    public GameObject rollButton;    // 윷 던지기 버튼 오브젝트 — Playing 상태에서만 표시
+    public GameObject rollButton;    // 윷 던지기 버튼 오브젝트 — Playing 상태 + 연출 중이 아닐 때만 표시
 
     [Header("Slots")]
     public GameObject[] bellSlots = new GameObject[3];      // 방울 슬롯 3칸 (방울 선택 결과 표시용)
@@ -42,14 +89,18 @@ public class YutGameManager : MonoBehaviour
     [Header("Round State")]
     public int maxThrows = 5;
     public int currentThrows = 0;
-    public int baseScorePool = 0;
-    public int currentMultiplier = 2;
     public int feverCombo = 0;
     public int feverCap = 8;
     public int roundTargetScore = 1000;
 
+    [Header("Score — 이번 투척 표시용 임시값 (투척마다 초기화)")]
+    public int basicScore = 0;    // 이번 투척 계산의 베이직 (효과 단계마다 갱신)
+    public int multiplier = 0;    // 이번 투척 계산의 멀티플 (효과 단계마다 갱신)
+    public int throwScore = 0;    // 이번 투척 확정 점수
+    public int totalScore = 0;    // 투척 점수가 누적된 총점
+
     [Header("Boss / Curse (임시 테스트값)")]
-    public int bossIndex = 1;        // 1~5: 백도 점수 차감 / 6~10: 점수 풀 초기화
+    public int bossIndex = 1;        // 1~5: 백도 총점 차감 / 6~10: 총점 초기화
     public int backDoPenalty = 30;   // 보스 1~5 백도 차감량 (미확정 수치 — 테스트값)
 
     [Header("Probabilities — 임시 테스트값 (합계 100% 유지)")]
@@ -65,13 +116,32 @@ public class YutGameManager : MonoBehaviour
         new YutProbabilityEntry { result = YutResult.Nak,    percent = 5f },
     };
 
+    [Header("Yut Stats — 윷별 베이직/멀티플 기준값 (테스트값)")]
+    public List<YutStatEntry> baseYutStats = new List<YutStatEntry>
+    {
+        new YutStatEntry { result = YutResult.Do,   basic = 10, mult = 2 },
+        new YutStatEntry { result = YutResult.Gae,  basic = 20, mult = 3 },
+        new YutStatEntry { result = YutResult.Geol, basic = 30, mult = 4 },
+        new YutStatEntry { result = YutResult.Yut,  basic = 40, mult = 5 },
+        new YutStatEntry { result = YutResult.Mo,   basic = 50, mult = 6 },
+    };
+
+    [Header("Presentation (임시 테스트값)")]
+    public float effectStepDelay = 0.35f;   // 효과 단계 재생 간격(초) — 실제 애니메이션 도입 시 재조정
+
     // 런타임 추첨용 가중치 — 보스/방울/주술의 확률 조작은 여기만 적용해 기본 데이터 오염 방지
     private readonly Dictionary<YutResult, float> runtimeWeights = new Dictionary<YutResult, float>();
+
+    // 런타임 윷 스탯 — 주술 등의 영구 강화는 여기만 적용해 기본 데이터 오염 방지
+    private readonly Dictionary<YutResult, YutStatEntry> yutStats = new Dictionary<YutResult, YutStatEntry>();
 
     [Header("Target")]
     public YutResult selectedTarget = YutResult.Gae;
 
     public GameState currentState = GameState.Start;
+
+    // 최근 투척 정산 데이터 — 디버그 인스펙터 노출 + 향후 연출/UI 코드가 읽는다
+    public ThrowSettlement currentSettlement;
 
     // SelectTargetAndStart(int) 인덱스 ↔ 결과 매핑: 0=도 1=개 2=걸 3=윷 4=모
     // 타겟 선택은 일반 결과 5종만 허용 (백도·낙 등 저주 계열 제외)
@@ -82,30 +152,12 @@ public class YutGameManager : MonoBehaviour
     private bool hasRolled;
     private bool roundCleared;
     private int lastBackDoLoss;
+    private bool isPresenting;
+    private Coroutine activePresentation;
 
     // 저주(Curse) 계열 판별 — 부적/방울/주술이 이 함수로 저주 결과를 구분한다
     public static bool IsCurse(YutResult result) =>
         result == YutResult.BackDo || result == YutResult.Nak;
-
-    private static int BaseScore(YutResult result) => result switch
-    {
-        YutResult.Do => 10,
-        YutResult.Gae => 20,
-        YutResult.Geol => 30,
-        YutResult.Yut => 40,
-        YutResult.Mo => 50,
-        _ => 0,
-    };
-
-    private static int MultiplierBonus(YutResult result) => result switch
-    {
-        YutResult.Do => 1,
-        YutResult.Gae => 2,
-        YutResult.Geol => 3,
-        YutResult.Yut => 4,
-        YutResult.Mo => 5,
-        _ => 0,
-    };
 
     private static string ToKorean(YutResult result) => result switch
     {
@@ -196,7 +248,7 @@ public class YutGameManager : MonoBehaviour
         UpdateUI();
     }
 
-    // '윷 던지기' 버튼
+    // '윷 던지기' 버튼 — 정산은 즉시 확정되고, 화면 연출은 정산 데이터를 그대로 재생한다
     public void RollYut()
     {
         if (currentState != GameState.Playing)
@@ -204,88 +256,52 @@ public class YutGameManager : MonoBehaviour
             Debug.Log("윷을 던질 수 있는 상태가 아닙니다. (GameState.Playing 아님)");
             return;
         }
+        if (isPresenting)
+        {
+            return;   // 연출 재생 중 연타 방지 — 중복 투척/중복 득점 불가
+        }
         if (currentThrows >= maxThrows)
         {
             EndRound();
             return;
         }
 
-        float totalWeight = 0f;
-        foreach (float weight in runtimeWeights.Values)
-        {
-            totalWeight += weight;
-        }
-        if (totalWeight <= 0f)
-        {
-            Debug.LogError("[YutGameManager] 확률 가중치 총합이 0입니다. baseProbabilities를 확인하세요.", this);
-            return;
-        }
-
-        // 가중치 합으로 나눠 추첨하므로 수정으로 합계가 100을 넘어도 정규화되어 동작
-        float roll = Random.value * totalWeight;
-        float cumulative = 0f;
-        float selectedProbability = 0f;
-        YutResult selected = YutResult.Mo;
-
-        // enum 선언 순서대로 순회해 결정적인 추첨 순서 유지
-        foreach (YutResult result in System.Enum.GetValues(typeof(YutResult)))
-        {
-            cumulative += runtimeWeights[result];
-            if (roll < cumulative)
-            {
-                selected = result;
-                selectedProbability = runtimeWeights[result] / totalWeight;
-                break;
-            }
-        }
-
-        bool isTarget = selected == selectedTarget;
-
-        if (IsCurse(selected))
-        {
-            HandleCurseResult(selected);
-        }
-        else
-        {
-            baseScorePool += BaseScore(selected);
-            if (isTarget)
-            {
-                // 타겟 적중: 보너스 턴(횟수 차감 없음) + 배수 합산 + 연속 적중 시 X-Mult 폭발
-                feverCombo++;
-                currentMultiplier += MultiplierBonus(selected);
-                if (feverCombo >= 2)
-                {
-                    int appliedFever = Mathf.Min(feverCombo, feverCap);
-                    currentMultiplier *= appliedFever;
-                    Debug.Log($"FEVER x{feverCombo} (적용 x{appliedFever})! Multiplier: x{currentMultiplier}");
-                }
-            }
-            else
-            {
-                feverCombo = 0;
-                currentThrows++;
-            }
-        }
-
-        lastResult = selected;
+        ThrowSettlement settlement = SettleThrow();
+        currentSettlement = settlement;
+        lastResult = settlement.result;
         hasRolled = true;
 
-        Debug.Log($"Yut Result: {ToKorean(selected)} (Probability: {selectedProbability * 100f}%) | Target: {isTarget} | Pool: {baseScorePool} | Multiplier: x{currentMultiplier} | Fever: {feverCombo} | Throws: {currentThrows}/{maxThrows} | Turn Total: {baseScorePool * currentMultiplier}");
+        activePresentation = StartCoroutine(PresentSettlement(settlement));
+    }
 
-        UpdateUI();
-
-        if (currentThrows >= maxThrows)
+    // 연출 스킵 — 정산 데이터는 이미 확정되어 있으므로 스킵해도 같은 결과가 표시된다
+    public void SkipPresentation()
+    {
+        if (!isPresenting || currentSettlement == null)
         {
-            EndRound();
+            return;
         }
+        if (activePresentation != null)
+        {
+            StopCoroutine(activePresentation);
+        }
+        FinishPresentation(currentSettlement);
     }
 
     // 라운드 리셋 버튼: 타겟 선택 화면으로 되돌아간다
     public void ResetRound()
     {
+        if (activePresentation != null)
+        {
+            StopCoroutine(activePresentation);
+            activePresentation = null;
+        }
+        isPresenting = false;
         currentThrows = 0;
-        baseScorePool = 0;
-        currentMultiplier = 2;
+        basicScore = 0;
+        multiplier = 0;
+        throwScore = 0;
+        totalScore = 0;
         feverCombo = 0;
         hasRolled = false;
         roundCleared = false;
@@ -302,6 +318,7 @@ public class YutGameManager : MonoBehaviour
     {
         currentState = GameState.Start;
         BuildWeights();
+        BuildYutStats();
         WarnIfPanelNested();
         SetPanel(startPanel, true);
         SetPanel(gamePanel, false);
@@ -350,6 +367,193 @@ public class YutGameManager : MonoBehaviour
     // 런타임 확률 변경을 모두 되돌리고 기본 확률로 재구축
     public void ResetProbabilities() => BuildWeights();
 
+    // 기본 윷 스탯 → 런타임 스탯 복사 (누락 결과는 0/0)
+    private void BuildYutStats()
+    {
+        yutStats.Clear();
+        foreach (YutResult result in System.Enum.GetValues(typeof(YutResult)))
+        {
+            yutStats[result] = new YutStatEntry { result = result };
+        }
+        foreach (YutStatEntry entry in baseYutStats)
+        {
+            if (entry != null)
+            {
+                yutStats[entry.result] = entry;
+            }
+        }
+    }
+
+    // 주술 등 영구 강화용 API — 다음 투척부터 적용. baseYutStats는 오염되지 않음
+    public void UpgradeYutStat(YutResult result, int newBasic, int newMult)
+    {
+        yutStats[result].basic = Mathf.Max(0, newBasic);
+        yutStats[result].mult = Mathf.Max(0, newMult);
+    }
+
+    private YutResult DrawYut()
+    {
+        float totalWeight = 0f;
+        foreach (float weight in runtimeWeights.Values)
+        {
+            totalWeight += weight;
+        }
+        if (totalWeight <= 0f)
+        {
+            Debug.LogError("[YutGameManager] 확률 가중치 총합이 0입니다. baseProbabilities를 확인하세요.", this);
+            return YutResult.Nak;
+        }
+
+        // 가중치 합으로 나눠 추첨하므로 수정으로 합계가 100을 넘어도 정규화되어 동작
+        float roll = Random.value * totalWeight;
+        float cumulative = 0f;
+
+        // enum 선언 순서대로 순회해 결정적인 추첨 순서 유지
+        foreach (YutResult result in System.Enum.GetValues(typeof(YutResult)))
+        {
+            cumulative += runtimeWeights[result];
+            if (roll < cumulative)
+            {
+                return result;
+            }
+        }
+        return YutResult.Mo;
+    }
+
+    // 투척 1회 정산: 결과 추첨 → 초기 베이직·멀티플 → 효과 단계 기록 → ThrowScore 확정 → TotalScore 1회 합산
+    private ThrowSettlement SettleThrow()
+    {
+        // 이전 투척의 표시용 임시값만 초기화 (윷별 영구 스탯·누적 총점은 유지)
+        basicScore = 0;
+        multiplier = 0;
+        throwScore = 0;
+
+        YutResult selected = DrawYut();
+        bool isTarget = selected == selectedTarget;
+
+        ThrowSettlement settlement = new ThrowSettlement
+        {
+            result = selected,
+            isTargetHit = isTarget,
+            feverComboAtRoll = feverCombo,
+        };
+
+        if (IsCurse(selected))
+        {
+            // 저주: 점수 계산 없이 고정 처리 (백도 총점 페널티 / 낙 무득점)
+            HandleCurseResult(selected);
+            Debug.Log($"Curse Result: {ToKorean(selected)} | Throws: {currentThrows}/{maxThrows} | Total: {totalScore}");
+            return settlement;
+        }
+
+        // 1) 윷 결과의 초기 베이직·멀티플 — 주술 강화가 반영된 런타임 스탯 사용
+        YutStatEntry stat = yutStats[selected];
+        settlement.baseBasic = stat.basic;
+        settlement.baseMult = stat.mult;
+        settlement.finalBasic = stat.basic;
+        settlement.finalMult = stat.mult;
+
+        // 2) 타겟 적중: 보너스 턴(횟수 차감 없음) + 콤보 증가. 2연속 적중부터 피버 효과 기록
+        if (isTarget)
+        {
+            feverCombo++;
+            settlement.feverComboAtRoll = feverCombo;
+            if (feverCombo >= 2)
+            {
+                int appliedFever = Mathf.Min(feverCombo, feverCap);
+                int before = settlement.finalMult;
+                settlement.finalMult *= appliedFever;
+                AddStep(settlement.steps, EffectSourceType.Fever, "fever",
+                    $"피버 x{appliedFever}", EffectTarget.Multiplier, EffectOp.Multiply,
+                    appliedFever, before, settlement.finalMult);
+            }
+        }
+        else
+        {
+            feverCombo = 0;
+            currentThrows++;
+        }
+
+        // 3) 향후 부적·방울·주술 효과는 이 지점에서 settlement.steps에 순차 추가된다
+
+        // 4) 이번 투척 점수 확정 + 토탈 1회 합산
+        settlement.throwScore = settlement.finalBasic * settlement.finalMult;
+        throwScore = settlement.throwScore;
+        totalScore += settlement.throwScore;
+
+        Debug.Log($"Yut Result: {ToKorean(selected)} | Target: {isTarget} | {settlement.finalBasic} x {settlement.finalMult} = {settlement.throwScore} | Fever: {feverCombo} | Throws: {currentThrows}/{maxThrows} | Total: {totalScore}");
+
+        return settlement;
+    }
+
+    private static void AddStep(List<ScoreEffectStep> steps, EffectSourceType source, string sourceId,
+        string displayName, EffectTarget target, EffectOp op, int opValue, int before, int after)
+    {
+        steps.Add(new ScoreEffectStep
+        {
+            source = source,
+            sourceId = sourceId,
+            displayName = displayName,
+            target = target,
+            op = op,
+            opValue = opValue,
+            beforeValue = before,
+            afterValue = after,
+            delta = after - before,
+            order = steps.Count,
+        });
+    }
+
+    // 정산 데이터를 화면에 순서대로 재생 — 점수 계산과 분리되어 스킵해도 같은 결과
+    private IEnumerator PresentSettlement(ThrowSettlement settlement)
+    {
+        isPresenting = true;
+
+        // 1) 윷 결과 표시 (이전 투척의 베이직·멀티플·투척점수는 0으로 초기화된 상태)
+        UpdateUI();
+        yield return new WaitForSeconds(effectStepDelay);
+
+        // 2) 초기 베이직·멀티플 표시
+        basicScore = settlement.baseBasic;
+        multiplier = settlement.baseMult;
+        UpdateUI();
+
+        // 3) 발동 효과를 기록 순서대로 재생
+        foreach (ScoreEffectStep step in settlement.steps)
+        {
+            yield return new WaitForSeconds(effectStepDelay);
+            if (step.target == EffectTarget.Basic)
+            {
+                basicScore = step.afterValue;
+            }
+            else
+            {
+                multiplier = step.afterValue;
+            }
+            Debug.Log($"[효과 {step.order + 1}] {step.displayName} — {step.target} {step.beforeValue} → {step.afterValue} ({step.op} {step.opValue}, 증가량 {(step.delta >= 0 ? "+" : "")}{step.delta})");
+            UpdateUI();
+        }
+
+        // 4) 최종 투척 점수 표시 + 토탈 반영
+        yield return new WaitForSeconds(effectStepDelay);
+        FinishPresentation(settlement);
+    }
+
+    private void FinishPresentation(ThrowSettlement settlement)
+    {
+        basicScore = settlement.finalBasic;
+        multiplier = settlement.finalMult;
+        throwScore = settlement.throwScore;
+        isPresenting = false;
+        activePresentation = null;
+        UpdateUI();
+
+        if (currentState == GameState.Playing && currentThrows >= maxThrows)
+        {
+            EndRound();
+        }
+    }
+
     // 저주 계열 결과 처리: 백도와 낙은 별개 결과이며 둘 다 투척 1회 소모 + 콤보 단절
     private void HandleCurseResult(YutResult result)
     {
@@ -360,15 +564,15 @@ public class YutGameManager : MonoBehaviour
         {
             if (bossIndex <= 5)
             {
-                // 보스 1~5: 현재 판 베이직 점수에서 차감 (확정된 이전 판 점수는 건드리지 않음)
-                lastBackDoLoss = Mathf.Min(baseScorePool, backDoPenalty);
-                baseScorePool -= lastBackDoLoss;
+                // 보스 1~5: 이번 판 누적 총점에서 차감 (확정된 이전 판 점수는 건드리지 않음)
+                lastBackDoLoss = Mathf.Min(totalScore, backDoPenalty);
+                totalScore -= lastBackDoLoss;
             }
             else
             {
-                // 보스 6~10: 현재 판 점수 풀 초기화
-                lastBackDoLoss = baseScorePool;
-                baseScorePool = 0;
+                // 보스 6~10: 이번 판 누적 총점 초기화
+                lastBackDoLoss = totalScore;
+                totalScore = 0;
             }
         }
         // 낙: 획득 점수 0 + 누적 점수 유지 — 추가 처리 없음 (투척 소모·콤보 단절은 위 공통 처리)
@@ -401,67 +605,53 @@ public class YutGameManager : MonoBehaviour
 
     private void EndRound()
     {
-        int finalScore = baseScorePool * currentMultiplier;
-        roundCleared = finalScore >= roundTargetScore;
+        roundCleared = totalScore >= roundTargetScore;
         currentState = GameState.RoundEnd;
 
         Debug.Log(roundCleared
-            ? $"--- 라운드 클리어! 최종 점수: {finalScore} / 목표 {roundTargetScore} ---"
-            : $"--- 게임 오버. 최종 점수: {finalScore} / 목표 {roundTargetScore} ---");
+            ? $"--- 라운드 클리어! 최종 점수: {totalScore} / 목표 {roundTargetScore} ---"
+            : $"--- 게임 오버. 최종 점수: {totalScore} / 목표 {roundTargetScore} ---");
 
         UpdateUI();
     }
 
-    private string ResultMessage()
+    private string FeverLabel()
     {
-        if (!hasRolled)
+        if (feverCombo <= 0)
         {
-            return "윷을 던지세요";
+            return "";
         }
-        if (lastResult == YutResult.BackDo)
+        if (feverCombo == 1)
         {
-            return bossIndex <= 5
-                ? $"백도! 베이직 -{lastBackDoLoss}"
-                : "백도! 점수 풀 초기화";
+            return "Hit";
         }
-        if (lastResult == YutResult.Nak)
+        if (feverCombo == 2)
         {
-            return "낙… 점수 획득 없음";
+            return "피버";
         }
-        if (lastResult == selectedTarget)
-        {
-            return feverCombo >= 2
-                ? $"FEVER! {ToKorean(lastResult)} 적중 (x{Mathf.Min(feverCombo, feverCap)} 배수 폭발)"
-                : $"타겟 적중! {ToKorean(lastResult)}";
-        }
-        return $"결과: {ToKorean(lastResult)}";
+        return $"피버{feverCombo}";
     }
 
     private void UpdateUI()
     {
-        int turnTotal = baseScorePool * currentMultiplier;
-
         if (mainResultText != null)
         {
-            mainResultText.text = currentState switch
-            {
-                GameState.Start => "게임 시작을 누르세요",
-                GameState.TargetSelection => "타겟 윷을 선택하세요",
-                GameState.Playing => ResultMessage(),
-                _ => roundCleared ? "라운드 클리어!" : "게임 오버",
-            };
+            // 윷 결과 이름만 표시 — Start/TargetSelection에서는 오브젝트 자체를 숨긴다
+            bool showResult = currentState == GameState.Playing || currentState == GameState.RoundEnd;
+            mainResultText.gameObject.SetActive(showResult);
+            mainResultText.text = showResult && hasRolled ? ToKorean(lastResult) : "";
         }
         if (basicScoreText != null)
         {
-            basicScoreText.text = baseScorePool.ToString();
+            basicScoreText.text = basicScore.ToString();
         }
         if (multScoreText != null)
         {
-            multScoreText.text = currentMultiplier.ToString();
+            multScoreText.text = multiplier.ToString();
         }
         if (totalScoreText != null)
         {
-            totalScoreText.text = turnTotal.ToString();
+            totalScoreText.text = totalScore.ToString();
         }
         if (goalScoreText != null)
         {
@@ -475,13 +665,21 @@ public class YutGameManager : MonoBehaviour
         {
             throwDataText.text = maxThrows.ToString();
         }
+        if (throwScoreText != null)
+        {
+            throwScoreText.text = throwScore.ToString();
+        }
+        if (feverText != null)
+        {
+            feverText.text = FeverLabel();
+        }
         if (targetYutText != null)
         {
             bool targetConfirmed = currentState == GameState.Playing || currentState == GameState.RoundEnd;
             targetYutText.text = targetConfirmed ? ToKorean(selectedTarget) : "";
         }
-        // 던지기 버튼은 본 게임(Playing) 상태에서만 표시 — 타겟 선택 모달 뒤에서도 숨김
-        SetPanel(rollButton, currentState == GameState.Playing);
+        // 던지기 버튼은 Playing 상태에서만, 그리고 연출 재생 중에는 숨긴다
+        SetPanel(rollButton, currentState == GameState.Playing && !isPresenting);
     }
 
     private void Start()

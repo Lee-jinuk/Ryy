@@ -82,17 +82,35 @@
 
 **기획 원칙 기록 (구현 없음)**: UI 확장성 가이드 — 기준 1920×1080, Canvas Scaler Scale With Screen Size/Match 0.5, 앵커 기반 리사이즈, 배경·HUD 스케일 분리, 21:9/20:9 가로 지향, 세로 미구현 (상세: `AI_HANDOFF.md`)
 
-**테스트/남은 문제**: Devin은 에디터 미실행 — 사용자 연결 후 Play 테스트 필요. 블러 효과는 추후 작업.
+**추가 구현 — 투척별 점수 정산 + 효과 단계 기록 + 연출 재생 구조** (GPT 기획 / Devin 구현, `YutGameManager.cs`):
+
+- GPT 요청: 투척마다 독립 정산(`ThrowScore = Basic × Mult`) → `TotalScore` 1회 합산, 부적·방울·주술·피버 효과 단계를 기록해 순차 연출 가능한 구조, MainResult 단순화, 새 Text 필드 2종 (`ThrowScoreText`/`FeverText`)
+- 점수 모델 교체: `baseScorePool`/`currentMultiplier`(누적 풀×배율) 폐기 → 투척 표시용 임시값 `basicScore`/`multiplier` + `throwScore` + 누적 `totalScore`. 투척마다 임시값 초기화, 이전 투척 수치 미누적
+- 윷 스탯 테이블: `List<YutStatEntry> baseYutStats` (도 10×2 / 개 20×3 / 걸 30×4 / 윷 40×5 / 모 50×6) → 런타임 `yutStats` 딕셔너리 복사. `UpgradeYutStat(result, basic, mult)` API — 주술 영구 강화용, 기본 데이터 오염 없음. 기존 타겟 적중 +1~+5 배수 보너스 방식 폐기
+- 효과 기록 구조: `ScoreEffectStep` (원인/식별자/표시명/대상 Basic·Multiplier/연산 Add·Multiply/연산값/전·후 수치/증가량/순서) + `ThrowSettlement` (결과/초기·최종 베이직·멀티플/확정 투척점수/콤보/단계 목록). ×2와 +2 같은 연산 차이는 `op`+`opValue`+`delta`로 구분 기록. `currentSettlement` 공개로 인스펙터 디버그 가능
+- 피버: 타겟 적중 시 `feverCombo++`, 2연속부터 `finalMult × Min(feverCombo, feverCap)`을 피버 단계(`EffectSourceType.Fever`)로 기록. **구현 판단 사항 (검토 필요)**: 구 기준은 '전체 누적 배율 ×콤보'였으나 투척 정산 구조로 이식하면서 '이번 투척 멀티플 ×콤보'로 적용 — 산출 차이 있으므로 확정 필요
+- 정산-연출 분리: `SettleThrow()`에서 점수 즉시 확정(토탈 1회 합산) → `PresentSettlement()` 코루틴이 기록을 순서대로 재생(결과 표시 → 초기 베이직·멀티플 → 효과 단계 → 투척점수). `effectStepDelay = 0.35f` 테스트값
+- 중복 방지: 연출 중 `isPresenting`으로 RollYut 무시 + rollButton 숨김. `SkipPresentation()` — 스킵해도 동일 결과 표시(점수는 이미 확정). `ResetRound()`는 진행 중 코루틴 정지 후 초기화
+- `mainResultText`: 윷 결과 이름만 표시 (도·개·걸·윷·모·낙·백도). Start/TargetSelection에서는 오브젝트 비활성, Playing 진입 시 빈칸, 라운드/타겟 변경 시 초기화 — 안내 문구 전부 제거
+- `feverText`: `FeverLabel()` — 0빈칸/1 Hit/2 피버/3+ 피버N 표시
+- 백도 페널티 기준 변경: `baseScorePool` → `totalScore` 차감/초기화 (이전 판 확정 점수 불침범 규칙 유지 — 확정 점수 개념은 아직 미구현)
+- 신규 Inspector 필드: `throwScoreText`, `feverText`, `baseYutStats`, `effectStepDelay`, `currentSettlement` — 사용자가 `ThrowScoreText`/`FeverText` Text 오브젝트 생성·연결 필요 (미연결 시 null-safe 동작)
+- 삭제 필드: `baseScorePool`, `currentMultiplier`, `ResultMessage()`, `BaseScore()`, `MultiplierBonus()` — 씬에 남은 구형 직렬화 키는 무시됨
+- 검증 결과 (코드 시뮬레이션): 도→10×2=20, 이후 개→20×3=60, 토탈 80 — 임시값 미누적 확인. 피버 1회 Hit/2회 피버/3회 피버3 표시 확인. Devin은 에디터 미실행 — 사용자 Play 테스트 필요
+
+**테스트/남은 문제**: Devin은 에디터 미실행 — 사용자 연결 후 Play 테스트 필요. 블러 효과는 추후 작업. 부적·방울 이미지 진동 등 실제 애니메이션은 아이템 UI 연결 단계에서 확장 (현재는 Text 갱신 + 단계 재생 구조만).
 
 ## 구현된 기능 (코드 확인 완료)
 
 - `YutResult` enum 7종 (BackDo + Nak 포함, 2026-10-14 오후 확장)
 - 인스펙터 편집 확률 리스트 `baseProbabilities` → 런타임 `runtimeWeights` 분리 구조 (테스트값: 백도 6.25 / 도 18.75 / 개 32.5 / 걸 25 / 윷 6.25 / 모 6.25 / 낙 5 %)
 - 단일 타겟 선택: `selectedTarget`, `GameState { TargetSelection, Playing, RoundEnd }`
-- 피버 콤보: 타겟 적중 시 `feverCombo++`, 배수 지수 합산, `feverCombo >= 2`부터 `currentMultiplier *= feverCombo` (X-Mult)
-- 점수: 도10/개20/걸30/윷40/모50, 배수 지수 +1~+5, `baseScorePool * currentMultiplier`
+- 투척별 독립 정산: `ThrowScore = BasicScore × Multiplier` → `TotalScore` 1회 합산 (투척 임시값 매 투척 초기화)
+- 윷 스탯: 도 10×2 / 개 20×3 / 걸 30×4 / 윷 40×5 / 모 50×6 — `baseYutStats` → 런타임 `yutStats` + `UpgradeYutStat()` 영구 강화 API
+- 효과 단계 기록·재생: `ScoreEffectStep`/`ThrowSettlement` — 부적·방울·주술·피버 순차 발동 연출 구조 (정산 확정 후 코루틴 재생, 스킵 가능)
+- 피버 콤보: 타겟 적중 시 `feverCombo++`, 2연속부터 이번 투척 멀티플 ×Min(콤보, 8) — 피버 단계로 기록 (이식 수식, 확정 검토 필요)
 - 라운드 종료 판정: `roundTargetScore = 1000` 기준 클리어/게임오버
-- UI Text 필드 5개 (rollResultText, roundText, calcText, totalScoreText, targetYutText)
+- UI Text 필드: `mainResultText`(결과명 전용)/`basicScoreText`/`multScoreText`/`totalScoreText`/`goalScoreText`/`remainText`/`throwDataText`/`targetYutText`/`throwScoreText`/`feverText` — 전부 숫자·이름만 출력, null-safe
 - `ConfirmTargetSelection()`, `ResetRound()` public (Button OnClick 연결용)
 - 스페이스바 테스트 (`Update` 내 `Input.GetKeyDown`)
 - (오전 2차 반영) `GameState.Start` 상태, `StartGame()`/`SelectTargetAndStart(int)`/`SelectTarget도~Mo()` 버튼 함수, 인스펙터 연결용 UI 변수 6종 + 패널 2종 + 슬롯 배열 2종
@@ -103,7 +121,8 @@
 
 - **투척 횟수**: ~~코드 `maxThrows = 7` ↔ 확정 규칙 5회~~ → 해결 (2026-10-14 오전, 코드·씬 모두 5로 수정)
 - **타겟/피버 시스템**: 사용자 승인으로 채택 확정 + 피버 배수 상한 8 적용 (2026-10-14 오전). 밸런스 수치는 계속 검토 대상.
-- **점수·배율·목표 점수**: 전부 미확정 규칙이나 코드에 임의값으로 구현됨 (도10~모50, 배수+1~+5, 목표 1000).
+- **점수·배율·목표 점수**: ~~전부 미확정 규칙이나 코드에 임의값으로 구현됨 (도10~모50, 배수+1~+5, 목표 1000)~~ → 투척 정산 구조·윷 스탯 확정 (2026-10-14 오후, GPT 기획). 목표 1000은 여전히 테스트값.
+- **피버 적용식**: 구 기준 '전체 누적 배율 ×콤보' → 투척 정산 구조로 '이번 투척 멀티플 ×Min(콤보,8)' 이식 — 산출 차이 있어 확정 필요.
 - **`Update()` 입력**: ~~`activeInputHandler: 1` 환경에서 `Input.GetKeyDown` 런타임 예외~~ → 해결 (2026-10-14 오전, `activeInputHandler: 2` Both로 변경)
 
 ## 미구현 기능
@@ -125,3 +144,4 @@
 | 2026-10-14 오전 | 동적 UI 생성 폐기 → 인스펙터 연결용 변수·버튼 함수로 리팩토링, 화면 플로우(시작→타겟선택→본게임) 구현 | UI 배치·연결은 사용자가 에디터에서 수동 작업 예정 |
 | 2026-10-14 오후 | 타겟 선택을 모달 팝업 방식으로 전환 (`gamePanel`/`targetSelectOverlay` 필드, 딤 오버레이 토글 로직) | GPT 기획 / Devin 코드 구현, 블러는 추후 |
 | 2026-10-14 오후 | 윷 결과 7종 확장(낙 추가), 저주 계열 구조(`IsCurse`/`HandleCurseResult`), 확률 시스템 재설계(인스펙터 편집 + 런타임 가중치 분리), 백도 보스 분기 | GPT 기획 / Devin 구현. 확률·차감량·bossIndex는 테스트값 |
+| 2026-10-14 오후 | 투척별 점수 정산 구조 도입 (`ThrowScore`→`TotalScore`), 윷 스탯 테이블 + 영구 강화 API, `ScoreEffectStep`/`ThrowSettlement` 효과 기록·코루틴 재생 구조, MainResult 결과명 전용 + 신규 `throwScoreText`/`feverText` | GPT 기획 / Devin 구현. 피버 ×콤보 이식식·effectStepDelay·백도 차감량은 테스트값/검토 필요 |
