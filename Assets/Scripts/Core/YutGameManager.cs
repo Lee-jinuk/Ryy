@@ -1,20 +1,28 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public enum YutResult { BackDo, Do, Gae, Geol, Yut, Mo }
 
-public enum GameState { TargetSelection, Playing, RoundEnd }
+public enum GameState { Start, TargetSelection, Playing, RoundEnd }
 
 public class YutGameManager : MonoBehaviour
 {
-    [Header("UI")]
-    public Text rollResultText;
-    public Text roundText;
-    public Text calcText;
-    public Text totalScoreText;
-    public Text targetYutText;
+    [Header("UI Texts")]
+    public Text mainResultText;    // 중앙 결과 화면: 윷 결과 / 피버 / 클리어·게임오버 메시지
+    public Text basicScoreText;    // 베이직 점수 풀
+    public Text multScoreText;     // 멀티플 배수
+    public Text totalScoreText;    // 총 점수 / 목표 점수
+    public Text throwCountText;    // 현재 투척 수 / 총 투척 수
+    public Text targetYutText;     // 선택된 타겟 윷 + 피버 콤보
+
+    [Header("Panels")]
+    public GameObject startPanel;         // '게임 시작' 버튼이 있는 첫 화면
+    public GameObject targetSelectPanel;  // '타겟 윷 선택' 화면
+
+    [Header("Slots")]
+    public GameObject[] bellSlots = new GameObject[3];      // 방울 슬롯 3칸 (방울 선택 결과 표시용)
+    public GameObject[] talismanSlots = new GameObject[4];  // 부적 슬롯 4칸
 
     [Header("Round State")]
     public int maxThrows = 5;
@@ -28,7 +36,7 @@ public class YutGameManager : MonoBehaviour
     [Header("Target")]
     public YutResult selectedTarget = YutResult.Gae;
 
-    public GameState currentState = GameState.TargetSelection;
+    public GameState currentState = GameState.Start;
 
     // 유물 효과 등으로 런타임에 수정 가능하도록 인스턴스 Dictionary로 관리
     private readonly Dictionary<YutResult, float> probabilityTable = new Dictionary<YutResult, float>
@@ -41,16 +49,13 @@ public class YutGameManager : MonoBehaviour
         { YutResult.Mo, 0.0625f },
     };
 
+    // SelectTargetAndStart(int) 인덱스 ↔ 결과 매핑: 0=도 1=개 2=걸 3=윷 4=모
     private static readonly YutResult[] selectableTargets =
         { YutResult.Do, YutResult.Gae, YutResult.Geol, YutResult.Yut, YutResult.Mo };
 
     private YutResult lastResult;
+    private bool hasRolled;
     private bool roundCleared;
-
-    private Canvas canvas;
-    private GameObject targetPanel;
-    private Button rollButton;
-    private static Font defaultFont;
 
     private static int BaseScore(YutResult result) => result switch
     {
@@ -83,150 +88,61 @@ public class YutGameManager : MonoBehaviour
         _ => result.ToString(),
     };
 
-    // 인스펙터 수동 연결 없이 Play 즉시 플레이 가능하도록 UI를 코드로 보장한다.
-    private void Awake()
-    {
-        EnsureEventSystem();
-        EnsureUI();
-    }
+    // ============ 버튼 OnClick 연결용 Public 함수 ============
 
-    private void EnsureEventSystem()
+    // '게임 시작' 버튼: 시작 화면을 끄고 타겟 선택 화면을 연다
+    public void StartGame()
     {
-        if (FindFirstObjectByType<EventSystem>() != null)
+        if (currentState == GameState.Playing)
         {
             return;
         }
-        GameObject eventSystem = new GameObject("EventSystem");
-        eventSystem.AddComponent<EventSystem>();
-        eventSystem.AddComponent<StandaloneInputModule>();
+        SetPanel(startPanel, false);
+        SetPanel(targetSelectPanel, true);
+        currentState = GameState.TargetSelection;
+        Debug.Log("--- 게임 시작: 타겟 윷을 선택하세요 ---");
+        UpdateUI();
     }
 
-    private void EnsureUI()
+    // 타겟 선택 버튼(int): yutIndex 0=도 1=개 2=걸 3=윷 4=모
+    public void SelectTargetAndStart(int yutIndex)
     {
-        canvas = FindFirstObjectByType<Canvas>();
-        if (canvas == null)
+        if (yutIndex < 0 || yutIndex >= selectableTargets.Length)
         {
-            GameObject canvasObject = new GameObject("Canvas");
-            canvas = canvasObject.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvasObject.AddComponent<CanvasScaler>();
-            canvasObject.AddComponent<GraphicRaycaster>();
+            Debug.LogWarning($"SelectTargetAndStart: 잘못된 인덱스 {yutIndex} (0~4)");
+            return;
         }
-
-        targetYutText = EnsureText(targetYutText, "TargetYutText", new Vector2(0f, 175f), 26);
-        roundText = EnsureText(roundText, "RoundText", new Vector2(0f, 55f), 22);
-        rollResultText = EnsureText(rollResultText, "RollResultText", new Vector2(0f, 15f), 24);
-        calcText = EnsureText(calcText, "CalcText", new Vector2(0f, -25f), 20);
-        totalScoreText = EnsureText(totalScoreText, "TotalScoreText", new Vector2(0f, -65f), 22);
-
-        targetPanel = new GameObject("TargetPanel");
-        targetPanel.transform.SetParent(canvas.transform, false);
-        RectTransform panelRect = targetPanel.AddComponent<RectTransform>();
-        panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.anchoredPosition = new Vector2(0f, 115f);
-        panelRect.sizeDelta = new Vector2(460f, 60f);
-
-        for (int i = 0; i < selectableTargets.Length; i++)
-        {
-            YutResult target = selectableTargets[i];
-            Button button = CreateButton(targetPanel.transform, $"Target{target}", ToKorean(target),
-                new Vector2(-176f + i * 88f, 0f), new Vector2(80f, 52f));
-            button.onClick.AddListener(() => SelectTarget(target));
-        }
-
-        rollButton = CreateButton(canvas.transform, "RollButton", "윷 던지기",
-            new Vector2(0f, -125f), new Vector2(220f, 60f));
-        rollButton.onClick.AddListener(RollYut);
-
-        Button resetButton = CreateButton(canvas.transform, "ResetButton", "라운드 리셋",
-            new Vector2(0f, -200f), new Vector2(160f, 42f));
-        resetButton.onClick.AddListener(ResetRound);
-    }
-
-    private Text EnsureText(Text text, string name, Vector2 position, int fontSize)
-    {
-        if (text == null)
-        {
-            GameObject textObject = new GameObject(name);
-            textObject.transform.SetParent(canvas.transform, false);
-            text = textObject.AddComponent<Text>();
-        }
-        RectTransform rect = text.GetComponent<RectTransform>();
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = new Vector2(700f, 40f);
-        text.font = GetDefaultFont();
-        text.fontSize = fontSize;
-        text.alignment = TextAnchor.MiddleCenter;
-        text.color = Color.white;
-        text.horizontalOverflow = HorizontalWrapMode.Overflow;
-        return text;
-    }
-
-    private static Font GetDefaultFont()
-    {
-        if (defaultFont == null)
-        {
-            defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        }
-        return defaultFont;
-    }
-
-    private static Button CreateButton(Transform parent, string name, string label, Vector2 position, Vector2 size)
-    {
-        GameObject buttonObject = new GameObject(name);
-        buttonObject.transform.SetParent(parent, false);
-        RectTransform rect = buttonObject.AddComponent<RectTransform>();
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = position;
-        rect.sizeDelta = size;
-
-        Image image = buttonObject.AddComponent<Image>();
-        image.color = new Color(0.94f, 0.87f, 0.68f);
-
-        Button button = buttonObject.AddComponent<Button>();
-        button.targetGraphic = image;
-
-        GameObject labelObject = new GameObject("Label");
-        labelObject.transform.SetParent(buttonObject.transform, false);
-        RectTransform labelRect = labelObject.AddComponent<RectTransform>();
-        labelRect.anchorMin = Vector2.zero;
-        labelRect.anchorMax = Vector2.one;
-        labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
-        Text labelText = labelObject.AddComponent<Text>();
-        labelText.font = GetDefaultFont();
-        labelText.text = label;
-        labelText.fontSize = 20;
-        labelText.alignment = TextAnchor.MiddleCenter;
-        labelText.color = new Color(0.12f, 0.12f, 0.12f);
-
-        return button;
-    }
-
-    // 타겟 선택 버튼 전용: 선택과 동시에 라운드 시작
-    public void SelectTarget(YutResult target)
-    {
-        selectedTarget = target;
+        selectedTarget = selectableTargets[yutIndex];
         ConfirmTargetSelection();
     }
 
-    // 라운드 시작 시 타겟 윷 1개 선택 확정 (UI Button OnClick 연결용)
+    // 타겟 선택 버튼(개별): 인스펙터에서 파라미터 없이 바로 연결 가능
+    public void SelectTargetDo() => SelectTargetAndStart(0);
+    public void SelectTargetGae() => SelectTargetAndStart(1);
+    public void SelectTargetGeol() => SelectTargetAndStart(2);
+    public void SelectTargetYut() => SelectTargetAndStart(3);
+    public void SelectTargetMo() => SelectTargetAndStart(4);
+
+    // 타겟 선택 확정: 타겟 선택 화면을 끄고 본 게임 시작
     public void ConfirmTargetSelection()
     {
         if (currentState != GameState.TargetSelection)
         {
             return;
         }
+        SetPanel(targetSelectPanel, false);
+        hasRolled = false;
         currentState = GameState.Playing;
         Debug.Log($"--- 타겟 선택: {ToKorean(selectedTarget)} ---");
         UpdateUI();
     }
 
+    // '윷 던지기' 버튼
     public void RollYut()
     {
         if (currentState != GameState.Playing)
         {
-            Debug.Log("타겟 윷을 먼저 선택하세요. (GameState.TargetSelection)");
+            Debug.Log("윷을 던질 수 있는 상태가 아닙니다. (GameState.Playing 아님)");
             return;
         }
         if (currentThrows >= maxThrows)
@@ -283,6 +199,7 @@ public class YutGameManager : MonoBehaviour
         }
 
         lastResult = selected;
+        hasRolled = true;
 
         Debug.Log($"Yut Result: {ToKorean(selected)} (Probability: {selectedProbability * 100f}%) | Target: {isTarget} | Pool: {baseScorePool} | Multiplier: x{currentMultiplier} | Fever: {feverCombo} | Throws: {currentThrows}/{maxThrows} | Turn Total: {baseScorePool * currentMultiplier}");
 
@@ -291,6 +208,38 @@ public class YutGameManager : MonoBehaviour
         if (currentThrows >= maxThrows)
         {
             EndRound();
+        }
+    }
+
+    // 라운드 리셋 버튼: 타겟 선택 화면으로 되돌아간다
+    public void ResetRound()
+    {
+        currentThrows = 0;
+        baseScorePool = 0;
+        currentMultiplier = 2;
+        feverCombo = 0;
+        hasRolled = false;
+        roundCleared = false;
+        SetPanel(startPanel, false);
+        SetPanel(targetSelectPanel, true);
+        currentState = GameState.TargetSelection;
+        UpdateUI();
+    }
+
+    // ============ 내부 로직 ============
+
+    private void Awake()
+    {
+        currentState = GameState.Start;
+        SetPanel(startPanel, true);
+        SetPanel(targetSelectPanel, false);
+    }
+
+    private static void SetPanel(GameObject panel, bool active)
+    {
+        if (panel != null)
+        {
+            panel.SetActive(active);
         }
     }
 
@@ -307,70 +256,76 @@ public class YutGameManager : MonoBehaviour
         UpdateUI();
     }
 
-    // 라운드 초기화 (테스트/재시작용)
-    public void ResetRound()
+    private string ResultMessage()
     {
-        currentThrows = 0;
-        baseScorePool = 0;
-        currentMultiplier = 2;
-        feverCombo = 0;
-        roundCleared = false;
-        currentState = GameState.TargetSelection;
-        UpdateUI();
+        if (!hasRolled)
+        {
+            return "윷을 던지세요";
+        }
+        if (lastResult == YutResult.BackDo)
+        {
+            return "백도! 점수 풀 초기화";
+        }
+        if (lastResult == selectedTarget)
+        {
+            return feverCombo >= 2
+                ? $"FEVER! {ToKorean(lastResult)} 적중 (x{Mathf.Min(feverCombo, feverCap)} 배수 폭발)"
+                : $"타겟 적중! {ToKorean(lastResult)}";
+        }
+        return $"결과: {ToKorean(lastResult)}";
     }
 
     private void UpdateUI()
     {
         int turnTotal = baseScorePool * currentMultiplier;
 
-        if (rollResultText != null)
+        if (mainResultText != null)
         {
-            rollResultText.text = currentState switch
+            mainResultText.text = currentState switch
             {
+                GameState.Start => "게임 시작을 누르세요",
                 GameState.TargetSelection => "타겟 윷을 선택하세요",
-                GameState.Playing => $"결과: {ToKorean(lastResult)}",
+                GameState.Playing => ResultMessage(),
                 _ => roundCleared ? "라운드 클리어!" : "게임 오버",
             };
         }
-        if (roundText != null)
+        if (basicScoreText != null)
         {
-            roundText.text = $"남은 투척: {maxThrows - currentThrows} / {maxThrows}";
+            basicScoreText.text = $"베이직: {baseScorePool}";
         }
-        if (calcText != null)
+        if (multScoreText != null)
         {
-            string feverInfo = feverCombo >= 2 ? $" (x{Mathf.Min(feverCombo, feverCap)} 적용)" : "";
-            calcText.text = $"베이직: {baseScorePool}  |  배수: x{currentMultiplier}  |  피버: {feverCombo}콤보{feverInfo}";
+            multScoreText.text = $"배수: x{currentMultiplier}";
         }
         if (totalScoreText != null)
         {
-            totalScoreText.text = $"현재 점수: {turnTotal} / 목표 {roundTargetScore}";
+            totalScoreText.text = $"점수: {turnTotal} / 목표 {roundTargetScore}";
+        }
+        if (throwCountText != null)
+        {
+            throwCountText.text = $"투척: {currentThrows} / {maxThrows}";
         }
         if (targetYutText != null)
         {
-            targetYutText.text = $"타겟: {ToKorean(selectedTarget)}";
-        }
-        if (targetPanel != null)
-        {
-            targetPanel.SetActive(currentState == GameState.TargetSelection);
-        }
-        if (rollButton != null)
-        {
-            rollButton.interactable = currentState == GameState.Playing;
+            targetYutText.text = $"타겟: {ToKorean(selectedTarget)}  |  피버: {feverCombo}콤보";
         }
     }
 
     private void Start()
     {
-        Debug.Log("--- 게임 시작: 타겟 윷을 선택하세요 ---");
         UpdateUI();
     }
 
     private void Update()
     {
-        // 스페이스바 테스트: 타겟 미선택 시 현재 선택값으로 확정, 이후 윷 던지기
+        // 스페이스바 테스트: 화면 플로우를 순서대로 진행
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            if (currentState == GameState.TargetSelection)
+            if (currentState == GameState.Start)
+            {
+                StartGame();
+            }
+            else if (currentState == GameState.TargetSelection)
             {
                 ConfirmTargetSelection();
             }

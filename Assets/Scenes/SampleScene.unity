@@ -1029,10 +1029,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6821dee594567434b8931c3cccd095b2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::YutGameManager
-  rollResultText: {fileID: 812577627}
-  roundText: {fileID: 2005047071}
-  calcText: {fileID: 48511263}
+  mainResultText: {fileID: 812577627}
+  basicScoreText: {fileID: 48511263}
+  multScoreText: {fileID: 0}
   totalScoreText: {fileID: 1357217859}
+  throwCountText: {fileID: 2005047071}
   targetYutText: {fileID: 724033222}
   maxThrows: 5
   currentThrows: 0
