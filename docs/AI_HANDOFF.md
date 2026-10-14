@@ -54,6 +54,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - Devin 구현: `gamePanel`/`targetSelectOverlay` 필드 추가, `StartGame`/`ConfirmTargetSelection`/`ResetRound`/`Awake`의 패널 토글 로직을 모달 흐름으로 갱신
 - 사용자 에디터 작업 대기: GamePanel/TargetSelectOverlay/TargetSelectPanel 오브젝트 생성 + Inspector 연결 (권장 Hierarchy는 상단 요약 블록 참조)
 - 미테스트: Devin은 에디터 미실행 — 연결 후 Play 확인 필요
+- 사용자 확인: 타겟 버튼 무반응은 OnClick 미연결(코드 문제 아님) — 연결 후 정상 작동. 타겟 선택 함수들은 수정 없이 유지됨
 
 ### [2026-10-14 오전 - Gemini & Devin 작업분]
 
