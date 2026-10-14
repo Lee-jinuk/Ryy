@@ -2,9 +2,17 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-public enum YutResult { BackDo, Do, Gae, Geol, Yut, Mo }
+public enum YutResult { BackDo, Do, Gae, Geol, Yut, Mo, Nak }
 
 public enum GameState { Start, TargetSelection, Playing, RoundEnd }
+
+// 인스펙터에서 확률을 직접 조정할 수 있는 직렬화 항목
+[System.Serializable]
+public class YutProbabilityEntry
+{
+    public YutResult result;
+    public float percent;
+}
 
 public class YutGameManager : MonoBehaviour
 {
@@ -35,29 +43,44 @@ public class YutGameManager : MonoBehaviour
     public int feverCap = 8;
     public int roundTargetScore = 1000;
 
+    [Header("Boss / Curse (임시 테스트값)")]
+    public int bossIndex = 1;        // 1~5: 백도 점수 차감 / 6~10: 점수 풀 초기화
+    public int backDoPenalty = 30;   // 보스 1~5 백도 차감량 (미확정 수치 — 테스트값)
+
+    [Header("Probabilities — 임시 테스트값 (합계 100% 유지)")]
+    // 낙 추가로 개 37.5→32.5 조정분과 낙 5%는 테스트값 (확정 확률 아님)
+    public List<YutProbabilityEntry> baseProbabilities = new List<YutProbabilityEntry>
+    {
+        new YutProbabilityEntry { result = YutResult.BackDo, percent = 6.25f },
+        new YutProbabilityEntry { result = YutResult.Do,     percent = 18.75f },
+        new YutProbabilityEntry { result = YutResult.Gae,    percent = 32.5f },
+        new YutProbabilityEntry { result = YutResult.Geol,   percent = 25f },
+        new YutProbabilityEntry { result = YutResult.Yut,    percent = 6.25f },
+        new YutProbabilityEntry { result = YutResult.Mo,     percent = 6.25f },
+        new YutProbabilityEntry { result = YutResult.Nak,    percent = 5f },
+    };
+
+    // 런타임 추첨용 가중치 — 보스/방울/주술의 확률 조작은 여기만 적용해 기본 데이터 오염 방지
+    private readonly Dictionary<YutResult, float> runtimeWeights = new Dictionary<YutResult, float>();
+
     [Header("Target")]
     public YutResult selectedTarget = YutResult.Gae;
 
     public GameState currentState = GameState.Start;
 
-    // 유물 효과 등으로 런타임에 수정 가능하도록 인스턴스 Dictionary로 관리
-    private readonly Dictionary<YutResult, float> probabilityTable = new Dictionary<YutResult, float>
-    {
-        { YutResult.BackDo, 0.0625f },
-        { YutResult.Do, 0.1875f },
-        { YutResult.Gae, 0.375f },
-        { YutResult.Geol, 0.25f },
-        { YutResult.Yut, 0.0625f },
-        { YutResult.Mo, 0.0625f },
-    };
-
     // SelectTargetAndStart(int) 인덱스 ↔ 결과 매핑: 0=도 1=개 2=걸 3=윷 4=모
+    // 타겟 선택은 일반 결과 5종만 허용 (백도·낙 등 저주 계열 제외)
     private static readonly YutResult[] selectableTargets =
         { YutResult.Do, YutResult.Gae, YutResult.Geol, YutResult.Yut, YutResult.Mo };
 
     private YutResult lastResult;
     private bool hasRolled;
     private bool roundCleared;
+    private int lastBackDoLoss;
+
+    // 저주(Curse) 계열 판별 — 부적/방울/주술이 이 함수로 저주 결과를 구분한다
+    public static bool IsCurse(YutResult result) =>
+        result == YutResult.BackDo || result == YutResult.Nak;
 
     private static int BaseScore(YutResult result) => result switch
     {
@@ -87,6 +110,7 @@ public class YutGameManager : MonoBehaviour
         YutResult.Geol => "걸",
         YutResult.Yut => "윷",
         YutResult.Mo => "모",
+        YutResult.Nak => "낙",
         _ => result.ToString(),
     };
 
@@ -181,7 +205,19 @@ public class YutGameManager : MonoBehaviour
             return;
         }
 
-        float roll = Random.value;
+        float totalWeight = 0f;
+        foreach (float weight in runtimeWeights.Values)
+        {
+            totalWeight += weight;
+        }
+        if (totalWeight <= 0f)
+        {
+            Debug.LogError("[YutGameManager] 확률 가중치 총합이 0입니다. baseProbabilities를 확인하세요.", this);
+            return;
+        }
+
+        // 가중치 합으로 나눠 추첨하므로 수정으로 합계가 100을 넘어도 정규화되어 동작
+        float roll = Random.value * totalWeight;
         float cumulative = 0f;
         float selectedProbability = 0f;
         YutResult selected = YutResult.Mo;
@@ -189,22 +225,20 @@ public class YutGameManager : MonoBehaviour
         // enum 선언 순서대로 순회해 결정적인 추첨 순서 유지
         foreach (YutResult result in System.Enum.GetValues(typeof(YutResult)))
         {
-            cumulative += probabilityTable[result];
+            cumulative += runtimeWeights[result];
             if (roll < cumulative)
             {
                 selected = result;
-                selectedProbability = probabilityTable[result];
+                selectedProbability = runtimeWeights[result] / totalWeight;
                 break;
             }
         }
 
         bool isTarget = selected == selectedTarget;
 
-        if (selected == YutResult.BackDo)
+        if (IsCurse(selected))
         {
-            baseScorePool = 0;
-            feverCombo = 0;
-            currentThrows++;
+            HandleCurseResult(selected);
         }
         else
         {
@@ -262,11 +296,77 @@ public class YutGameManager : MonoBehaviour
     private void Awake()
     {
         currentState = GameState.Start;
+        BuildWeights();
         WarnIfPanelNested();
         SetPanel(startPanel, true);
         SetPanel(gamePanel, false);
         SetPanel(targetSelectOverlay, false);
         SetPanel(targetSelectPanel, false);
+    }
+
+    // 기본 확률 → 런타임 가중치 복사. 누락 결과는 0, 음수는 0으로 보정
+    private void BuildWeights()
+    {
+        runtimeWeights.Clear();
+        foreach (YutResult result in System.Enum.GetValues(typeof(YutResult)))
+        {
+            runtimeWeights[result] = 0f;
+        }
+        foreach (YutProbabilityEntry entry in baseProbabilities)
+        {
+            if (entry == null)
+            {
+                continue;
+            }
+            runtimeWeights[entry.result] += Mathf.Max(0f, entry.percent);
+        }
+        ValidateWeights();
+    }
+
+    private void ValidateWeights()
+    {
+        float sum = 0f;
+        foreach (float weight in runtimeWeights.Values)
+        {
+            sum += weight;
+        }
+        if (Mathf.Abs(sum - 100f) > 0.01f)
+        {
+            Debug.LogWarning($"[YutGameManager] 확률 합계 {sum}% (100% 아님) — 추첨 시 정규화되어 동작하지만 값 확인 필요.", this);
+        }
+    }
+
+    // 보스 특수능력·방울·주술의 확률 조작용 API — runtimeWeights만 변경되고 baseProbabilities는 오염되지 않음
+    public void ModifyProbability(YutResult result, float deltaPercent)
+    {
+        runtimeWeights[result] = Mathf.Max(0f, runtimeWeights[result] + deltaPercent);
+    }
+
+    // 런타임 확률 변경을 모두 되돌리고 기본 확률로 재구축
+    public void ResetProbabilities() => BuildWeights();
+
+    // 저주 계열 결과 처리: 백도와 낙은 별개 결과이며 둘 다 투척 1회 소모 + 콤보 단절
+    private void HandleCurseResult(YutResult result)
+    {
+        feverCombo = 0;
+        currentThrows++;
+
+        if (result == YutResult.BackDo)
+        {
+            if (bossIndex <= 5)
+            {
+                // 보스 1~5: 현재 판 베이직 점수에서 차감 (확정된 이전 판 점수는 건드리지 않음)
+                lastBackDoLoss = Mathf.Min(baseScorePool, backDoPenalty);
+                baseScorePool -= lastBackDoLoss;
+            }
+            else
+            {
+                // 보스 6~10: 현재 판 점수 풀 초기화
+                lastBackDoLoss = baseScorePool;
+                baseScorePool = 0;
+            }
+        }
+        // 낙: 획득 점수 0 + 누적 점수 유지 — 추가 처리 없음 (투척 소모·콤보 단절은 위 공통 처리)
     }
 
     // 타겟 선택 UI가 startPanel 자식이면 부모가 꺼질 때 같이 숨겨지므로 미리 경고한다
@@ -315,7 +415,13 @@ public class YutGameManager : MonoBehaviour
         }
         if (lastResult == YutResult.BackDo)
         {
-            return "백도! 점수 풀 초기화";
+            return bossIndex <= 5
+                ? $"백도! 베이직 -{lastBackDoLoss}"
+                : "백도! 점수 풀 초기화";
+        }
+        if (lastResult == YutResult.Nak)
+        {
+            return "낙… 점수 획득 없음";
         }
         if (lastResult == selectedTarget)
         {

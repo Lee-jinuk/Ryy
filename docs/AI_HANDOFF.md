@@ -25,6 +25,18 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - 진단: 패널 미연결/부모 비활성 시 LogWarning (ActivatePanel 헬퍼, WarnIfPanelNested)
 - 블러는 미구현 — 기본 UI Image 반투명 딤으로 대체, 추후 작업 예정
 
+추가 GPT 요청(윷 결과 7종 + 저주 계열) — Devin 구현:
+- YutResult enum 7종: Do/Gae/Geol/Yut/Mo(일반) + BackDo/Nak(저주). 타겟 선택은 일반 5종만
+- 저주 판별 `IsCurse(YutResult)` + `HandleCurseResult()`로 일반/저주 처리 분리
+- 백도: bossIndex ≤5 → 베이직 점수 차감(backDoPenalty) / ≥6 → 점수 풀 초기화. 투척 1회 소모
+- 낙: 점수 0, 투척 1회 소모, 누적 점수 유지
+- 확률: 인스펙터 편집 List<YutProbabilityEntry> baseProbabilities → 런타임 runtimeWeights 분리
+  (ModifyProbability/ResetProbabilities API, 음수 보정, 합계 검증+정규화 추첨)
+- 중앙 텍스트: 백도(차감/초기화)·낙 메시지 표시
+- 구현 판단(검토 필요): 저주 발생 시 feverCombo 리셋 — 기획 미명시, 비타겟 콤보 초기화 규칙에 맞춰 적용
+
+테스트값(미확정): 확률 개 32.5%/낙 5%, bossIndex=1, backDoPenalty=30 — 전부 Inspector 조정 가능
+
 사용자 에디터 작업 필요 (권장 Hierarchy):
   Canvas
   ├─ GamePanel               ← 메인 게임 UI 부모
@@ -55,6 +67,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - 사용자 에디터 작업 대기: GamePanel/TargetSelectOverlay/TargetSelectPanel 오브젝트 생성 + Inspector 연결 (권장 Hierarchy는 상단 요약 블록 참조)
 - 미테스트: Devin은 에디터 미실행 — 연결 후 Play 확인 필요
 - 사용자 확인: 타겟 버튼 무반응은 OnClick 미연결(코드 문제 아님) — 연결 후 정상 작동. 타겟 선택 함수들은 수정 없이 유지됨
+- 윷 7종 확장(낙) + 저주 계열: `IsCurse`/`HandleCurseResult`, 확률 시스템 이원화(`baseProbabilities`↔`runtimeWeights`), 백도 보스 분기, 낙 처리 — 전부 코드 완료, 테스트값만 Inspector 조정 대기
 
 ### [2026-10-14 오전 - Gemini & Devin 작업분]
 
@@ -90,6 +103,8 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 - 코드의 임의 점수/배율/목표 점수 값 채택 여부 (`GAME_RULES.md` 5절 전부 미확정: 도10~모50, 배수+1~+5, 목표 1000)
 - 비타겟/백도 페널티 수치 감각 (`GAME_RULES.md` 7절 '검토 중')
+- 윷 확률 테스트값 확정 여부: 개 32.5%/낙 5% (낙 추가 조정분), `backDoPenalty` 차감량, `bossIndex` 분기 기준 — 전부 테스트값
+- 저주 발생 시 피버 콤보 리셋 여부 (구현은 리셋 — 기획 미명시라 확인 필요)
 - 방울 개별 능력, 부적 능력, 중단 시스템 상세 — `GAME_RULES.md` 미확정 목록 참조
 
 ## 다음 작업 목표 (제안)
