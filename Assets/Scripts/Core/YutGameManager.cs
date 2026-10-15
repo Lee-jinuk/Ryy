@@ -106,6 +106,7 @@ public class YutGameManager : MonoBehaviour
     [Header("Result Texts (숫자·이름만 출력)")]
     public Text clearBossNameText;       // 클리어한 보스 이름
     public Text clearScoreText;          // 클리어 시 최종 점수
+    public Text clearMessageText;        // 클리어 메시지 — 마지막 보스 클리어 시 "최종 클리어" 표시 (선택 사항)
     public Text gameOverBossNameText;    // 도전한 보스 이름
     public Text gameOverScoreText;       // 최종 획득 점수
     public Text gameOverGoalText;        // 목표 점수
@@ -134,7 +135,8 @@ public class YutGameManager : MonoBehaviour
     public List<BellData> ownedBells = new List<BellData>();  // 이번 판 획득한 임시 방울 (판 종료 시 소멸)
 
     [Header("Buttons")]
-    public GameObject rollButton;    // 윷 던지기 버튼 오브젝트 — Playing 상태 + 연출/선택 중이 아닐 때만 표시
+    public GameObject rollButton;       // 윷 던지기 버튼 오브젝트 — Playing 상태 + 연출/선택 중이 아닐 때만 표시
+    public GameObject nextBossButton;   // 클리어 패널의 '다음 관문' 버튼 — 마지막 보스 클리어 시 자동 숨김 (미연결 시 무시)
 
     [Header("Slots")]
     public GameObject[] bellSlots = new GameObject[3];      // 방울 슬롯 3칸 (방울 선택 결과 표시용)
@@ -294,6 +296,17 @@ public class YutGameManager : MonoBehaviour
         SetPanel(clearPanel, false);
         SetPanel(gameOverPanel, false);
         StartGame();
+    }
+
+    // 클리어 화면의 '다음 관문' 버튼 — 다음 보스전으로 진행 (마지막 보스 클리어 시 버튼 자체가 숨겨짐)
+    public void GoToNextBoss()
+    {
+        if (currentState != GameState.Cleared || bosses == null || selectedBossIndex + 1 >= bosses.Count)
+        {
+            return;   // 클리어 상태에서만, 다음 보스가 있을 때만
+        }
+        selectedBossIndex++;
+        StartGame();   // BeginBossFight: 점수·피버·말·말판·방울 전부 초기화 + 새 보스 특수능력 적용
     }
 
     // 클리어·게임오버 화면의 '보스 선택으로 돌아가기' 버튼
@@ -504,9 +517,16 @@ public class YutGameManager : MonoBehaviour
         SetPanel(targetSelectPanel, false);
         SetPanel(bellChoicePanel, false);
         ActivatePanel(clearPanel, nameof(clearPanel));
+        // 다음 관문 버튼: 마지막 보스 클리어(최종 클리어)면 숨기고 메시지 표시
+        bool isFinalClear = bosses == null || selectedBossIndex >= bosses.Count - 1;
+        SetPanel(nextBossButton, !isFinalClear);
+        if (clearMessageText != null)
+        {
+            clearMessageText.text = isFinalClear ? "최종 클리어" : "";
+        }
         UpdateUI();
         BossData boss = CurrentBoss;
-        Debug.Log($"--- 보스 클리어! {boss?.bossName} | 최종 점수 {totalScore} / 목표 {goalScore} ---");
+        Debug.Log($"--- 보스 클리어! {boss?.bossName} | 최종 점수 {totalScore} / 목표 {goalScore}{(isFinalClear ? " | 최종 클리어" : "")} ---");
     }
 
     // 게임오버: 3판 종료 후에도 목표 미달

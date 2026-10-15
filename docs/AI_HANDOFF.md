@@ -3,12 +3,28 @@
 AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 갱신 시 `### [날짜 오전/오후 - 담당 AI]` 세션 헤더로 구분하고, 최상단 요약 블록을 최신 작업으로 교체한다.
 
-## [2026-10-14 오후 작업 요약 (GPT 전달용)]
+## [2026-10-15 작업 요약 (GPT 전달용)]
 
 ```
-[2026-10-14 오후 변경사항 요약 - GPT 기획 / Devin 구현]
+[2026-10-15 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — GPT 요청(말판 시작점 규칙 + 보스 UI 단순화) — Devin 구현:
+★ 최신 — GPT 요청(보스 클리어 후 다음 관문 진행) — Devin 구현:
+- GoToNextBoss() public 추가: ClearPanel '다음 관문' 버튼용 — Cleared 상태 +
+  다음 보스 존재 시에만 동작 → selectedBossIndex++ 후 StartGame() 재사용.
+  클리어 즉시 자동 이동 없음 (반드시 버튼 클릭)
+- 초기화는 기존 BeginBossFight/SetupBoard가 전부 커버: 총점·판 점수·투척 점수·
+  베이직·멀티플·피버·투척 횟수·말 위치(BoardTile_01)·완주·말판 재배치·
+  방울 칸·임시 방울 + StopPresentation으로 잔여 연출 정리 + BuildWeights
+  재구축으로 낙 +2%p 중복 없음. yutStats 등 런 전체 성장 데이터는 미초기화
+  (향후 엽전·윷 강화·부적·영구 방울 유지 구조)
+- 최종 클리어: 보스 5 클리어 시 nextBossButton 자동 숨김 + clearMessageText에
+  "최종 클리어" 표시
+- ⚠ 신규 Inspector 연결: Next Boss Button (GameObject 필드, OnClick→
+  GoToNextBoss()), Clear Message Text (Text, 선택 — 최종 클리어 메시지용).
+  둘 다 미연결도 null-safe
+- 게임오버·보스 선택 복귀(BackToBossSelect)·RetryBoss 변경 없음
+
+GPT 요청(직전 — 이어서 기록): 말판 시작점 규칙 + 보스 UI 단순화.
 - 시작점: 별도 시작점 폐기 → BoardTile_01(인덱스 0)이 시작점 겸 일반 점수 칸.
   첫 도 → BoardTile_02. BeginBossFight에서 MovePieceVisual(0)로 말을 시작 칸에 배치.
   완주 판정: BoardTile_18→BoardTile_01 경계 통과마다 +1 (totalMoved 기반)
@@ -51,17 +67,19 @@ GPT 요청(직전 — 이어서 기록): 보스전 5종 + 클리어/게임오버
   이전 판 확정분 불침범 실체화). totalScore는 보스전 누적(판 넘어 유지)
 - 상태: GameState에 Cleared/GameOver 추가(RoundEnd 폐기). 판 끝 → totalScore≥goalScore
   이면 EnterClear(), 아니면 roundIndex≥3이면 EnterGameOver(), 아니면 다음 판 타겟 재선택
-- 보스 HP: 잔여 = Max(0, goalScore − displayTotal). bossHpBar(Image fillAmount) 또는
-  bossHpSlider(Slider value) — 연결된 쪽만 갱신. 토탈 합산 단계와 동기화
+- 보스 잔여 수치 = Max(0, goalScore − totalScore) — HP 바/텍스트 UI는 폐기됨
+  (위 10-14 오후 항목 참조), 목표·총점 텍스트로 확인
 - 정산 연출 완성: displayTotal 도입 — 토탈 텍스트·HP 바는 '토탈 합산' 단계에서만 갱신.
   throwScore 표시도 '투척 점수' 단계에서만 갱신 (정산 시점과 표시 시점 완전 분리)
 - 결과 패널: clearPanel/gameOverPanel + 결과 텍스트 5종 (clearBossNameText/clearScoreText/
   gameOverBossNameText/gameOverScoreText/gameOverGoalText) + RetryBoss()/BackToBossSelect()
 - ResetRound() 재정의 = RetryBoss() (같은 보스 1판부터 재시작)
-- ⚠ 신규 Inspector 연결 필요: 보스 선택 버튼→SelectBoss1~5, 보스 UI 6종, 체력바(Image 또는
-  Slider 둘 중 하나), clearPanel/gameOverPanel + 결과 텍스트 5종, 다시 도전→RetryBoss,
-  돌아가기→BackToBossSelect. 전부 미연결도 null-safe
-- 보스 잠금/해금, 클리어 보상, 다음 보스 자동 이동, 판 결과 화면 — 미구현 (기획 대기)
+- ⚠ 신규 Inspector 연결 필요: 보스 선택 버튼→SelectBoss1~5, 보스 UI(이름·능력),
+  clearPanel/gameOverPanel + 결과 텍스트 5종 + clearMessageText + nextBossButton
+  (OnClick→GoToNextBoss), 다시 도전→RetryBoss, 돌아가기→BackToBossSelect.
+  전부 미연결도 null-safe
+- 보스 잠금/해금, 클리어 보상, 판 결과 화면 — 미구현 (기획 대기). 다음 관문 수동
+  이동은 GoToNextBoss()로 구현됨
 
 GPT 요청(직전 — 이어서 기록): 투척별 점수 정산 + 연쇄 효과 연출 구조.
 - 점수 모델 교체: 누적 풀×배율(baseScorePool×currentMultiplier) 폐기 → 투척마다 독립 정산.
@@ -220,7 +238,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 다음 작업 목표 (제안)
 
-1. 사용자가 에디터에서 신규 UI 제작·연결: `boardTiles[18]`(칸 오브젝트 — 자식 Text=점수, 자식 `BellIcon`=방울 표시), `playerPiece`, `bellChoicePanel` + 옵션 텍스트·버튼, 보스 선택 버튼(→`SelectBoss1~5`), 클리어·게임오버 패널 → Play 테스트
+1. 사용자가 에디터에서 신규 UI 제작·연결: `boardTiles[18]`(칸 오브젝트 — 자식 Text=점수, 자식 `BellIcon`=방울 표시), `playerPiece`, `bellChoicePanel` + 옵션 텍스트·버튼, 보스 선택 버튼(→`SelectBoss1~5`), 클리어·게임오버 패널 + `nextBossButton`(OnClick→`GoToNextBoss()`) + `clearMessageText`(선택) → Play 테스트
 2. 피버 적용 수식 확정 (×콤보 vs +증가 등) → 확정 시 `SettleThrow` 피버 단계 한 곳만 수정
 3. 백도·낙 말 이동 규칙 확정 → 확정 시 `SettleThrow` 저주 분기에 추가
 4. 방울 실제 효과 기획 확정 → `BellData`에 효과 필드 추가 + 사용 버튼/`ScoreEffectStep` 연동

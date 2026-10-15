@@ -134,6 +134,18 @@
 
 **테스트/남은 문제**: Devin은 에디터 미실행 — 사용자 연결 후 Play 테스트 필요. 블러 효과는 추후 작업. 부적·방울 이미지 진동 등 실제 애니메이션은 아이템 UI 연결 단계에서 확장 (현재는 Text 갱신 + 단계 재생 구조만). 방울 실제 효과·사용 버튼 미구현 — 현재 획득·표시만.
 
+### [2026-10-15 - GPT 기획 / Devin 구현]
+
+**보스 클리어 후 다음 관문 진행** — 기존 구현 확인 결과 클리어 후 이동 기능 없음 → 추가:
+
+- `GoToNextBoss()` public 메서드: Cleared 상태 + 다음 보스 존재 시에만 동작 → `selectedBossIndex++` 후 `StartGame()`(=`BeginBossFight` + `EnterTargetSelection`) 재사용
+- 초기화는 기존 `BeginBossFight`/`SetupBoard`가 전부 커버: 총점·판 점수·투척 점수·베이직·멀티플·피버·투척 횟수·말 위치(BoardTile_01)·완주·말판 재배치·방울 칸·임시 방울 + `StopPresentation`으로 잔여 연출 정리 + `BuildWeights` 재구축으로 낙 +2%p 중복 없음. `yutStats` 등 런 전체 성장 데이터는 초기화하지 않음(향후 유지 구조)
+- 최종 클리어: `EnterClear`에서 마지막 보스(`selectedBossIndex == bosses.Count-1`) 판정 → `nextBossButton` 숨김 + `clearMessageText`에 "최종 클리어" 표시
+- 신규 Inspector 필드: `nextBossButton`(GameObject, OnClick→`GoToNextBoss()`), `clearMessageText`(Text, 선택)
+- 기존 `RetryBoss`/`BackToBossSelect`·클리어/게임오버 판정 변경 없음
+
+**테스트/남은 문제**: Devin은 에디터 미실행 — Play 테스트 필요. `nextBossButton` 미연결 시 최종 클리어 구분 메시지만 표시됨.
+
 ## 구현된 기능 (코드 확인 완료)
 
 - `YutResult` enum 7종 (BackDo + Nak 포함, 2026-10-14 오후 확장)
@@ -146,7 +158,8 @@
 - 효과 단계 기록·재생: `ScoreEffectStep`/`ThrowSettlement` — 부적·방울·주술·피버 순차 발동 연출 구조 (정산 확정 후 코루틴 재생, 스킵 가능)
 - 피버 콤보: 타겟 적중 시 `feverCombo++`, 2연속부터 이번 투척 멀티플 ×Min(콤보, 8) — 피버 단계로 기록 (이식 수식, 확정 검토 필요)
 - 보스전 구조: `BossData` 5명(임시)/보스 선택(`SelectBoss1~5`)/목표=보스 HP/낙 +2%p 특수능력(비례 차감·백도 불변·중복 없음)/관문당 3판(`roundsPerBoss`)×판당 5회/`roundScore` 판별 누적(백도 범위)/`Cleared`·`GameOver` 상태 + 클리어·게임오버 패널 + `RetryBoss`/`BackToBossSelect`
-- 보스 UI 연결 필드: `bossNameText`/`bossHpText`/`bossMaxHpText`/`bossAbilityText`/`bossHpBar`(Image)/`bossHpSlider`(Slider 대안)
+- 보스 UI 연결 필드: `bossNameText`/`bossAbilityText` (HP 텍스트·체력바 필드는 목표 점수 관문 전환으로 제거됨)
+- 관문 진행: `GoToNextBoss()`(클리어 패널 '다음 관문' 버튼) — 보스 1→5 수동 진행, 보스 5 클리어 시 `nextBossButton` 숨김 + `clearMessageText` "최종 클리어"
 - 라운드 종료 판정: `totalScore >= goalScore`(보스 HP) 클리어 / 3판 소진 미달 게임오버
 - UI Text 필드: `mainResultText`(결과명 전용)/`basicScoreText`/`multScoreText`/`totalScoreText`/`goalScoreText`/`remainText`/`throwDataText`/`targetYutText`/`throwScoreText`/`feverText` — 전부 숫자·이름만 출력, null-safe
 - `ConfirmTargetSelection()`, `ResetRound()` public (Button OnClick 연결용)
@@ -186,3 +199,4 @@
 | 2026-10-14 오후 | 보스전 5종(임시 저승지기 1~5, HP 1000~5000) + 보스 선택(`SelectBoss`), 낙 +2%p 공통 특수능력, 관문당 3판 구조, 클리어·게임오버 패널 + `RetryBoss`/`BackToBossSelect`, 보스 HP UI(Image/Slider), 정산 연출 단계 완성(`displayTotal` 토탈·HP 동기화) | GPT 기획 / Devin 구현. 보스 이름·HP·능력 수치 전부 테스트값 |
 | 2026-10-14 오후 | 18칸 원형 말판(`YutBoard.cs` 분리) — 점수 무작위 배치, 윷별 이동·완주 보너스, 방울 이벤트 칸 + 3택1 임시 방울, 말 이동 연출 | GPT 기획 / Devin 구현. 방울 효과·백도/낙 이동 규칙 미확정, `bellEventTileCount` 2개는 프로토타입값 |
 | 2026-10-14 오후 | 말판 시작점을 BoardTile_01로 변경(별도 시작점 폐기), 완주 판정을 순환 통과로 단순화, 보스 HP UI 필드 제거(보스=목표 점수 관문) | GPT 기획 / Devin 구현. 클리어/게임오버·보스 데이터 유지 |
+| 2026-10-15 | 보스 클리어 후 다음 관문 진행 — `GoToNextBoss()` + `nextBossButton`/`clearMessageText` 필드, 보스 5 클리어 = 최종 클리어 | GPT 기획 / Devin 구현. 초기화는 기존 BeginBossFight 재사용 |
