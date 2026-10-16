@@ -88,6 +88,7 @@ public class YutGameManager : MonoBehaviour
     public Text targetYutText;     // 선택된 타겟 윷 이름 (선택 전 빈 문자열)
     public Text throwScoreText;    // 이번 투척 확정 점수 (숫자만 출력)
     public Text feverText;         // 피버 상태 (빈칸 / Hit / 피버 / 피버N)
+    public Text roundProgressText; // 판 진행도 "현재 판 / 전체 판" (예: 1 / 3)
 
     [Header("Boss UI")]
     public Text bossNameText;        // 보스 이름
@@ -102,6 +103,7 @@ public class YutGameManager : MonoBehaviour
     public GameObject targetSelectPanel;     // 중앙 타겟 선택 팝업 (overlay 자식 — 미연결도 동작)
     public GameObject clearPanel;            // 보스 클리어 패널
     public GameObject gameOverPanel;         // 게임오버 패널
+    public GameObject bossSelectPanel;       // 보스 소개/진입 패널 — 최초 선택과 클리어 후 다음 보스 소개에 공용 사용
 
     [Header("Result Texts (숫자·이름만 출력)")]
     public Text clearBossNameText;       // 클리어한 보스 이름
@@ -110,6 +112,11 @@ public class YutGameManager : MonoBehaviour
     public Text gameOverBossNameText;    // 도전한 보스 이름
     public Text gameOverScoreText;       // 최종 획득 점수
     public Text gameOverGoalText;        // 목표 점수
+
+    [Header("Boss Select UI — 보스 소개 화면")]
+    public Text bossSelectNameText;      // 진입 예정 보스 이름
+    public Text bossSelectGoalText;      // 진입 예정 보스 목표 점수 (= 보스 HP, 숫자만 출력)
+    public Text bossSelectAbilityText;   // 진입 예정 보스 특수능력 설명
 
     [Header("Board UI — 말판")]
     public GameObject boardPanel;                    // 원형 말판 부모 (있으면 상태에 맞춰 표시)
@@ -223,6 +230,7 @@ public class YutGameManager : MonoBehaviour
 
     private YutResult lastResult;
     private bool hasRolled;
+    private int pendingBossIndex;        // 보스 소개 화면에 표시 중인 보스 — '진입' 버튼이 이 보스전을 시작
     private int lastBackDoLoss;
     private int displayTotal;          // 화면에 보이는 총점 — 정산 연출의 '토탈 합산' 단계에서만 갱신
     private bool isPresenting;
@@ -268,6 +276,11 @@ public class YutGameManager : MonoBehaviour
         }
         selectedBossIndex = index;
         goalScore = bosses[index].maxHP;   // 선택 화면에서 목표 점수 미리보기
+        // 보스 소개 패널이 열려 있으면 표시 내용도 함께 갱신 (최초 선택과 다음 관문 소개가 같은 UI 공유)
+        if (bossSelectPanel != null && bossSelectPanel.activeSelf)
+        {
+            ShowBossSelect(index);
+        }
         Debug.Log($"--- 보스 선택: {bosses[index].bossName} (HP {bosses[index].maxHP}, {bosses[index].abilityDescription}) ---");
         UpdateUI();
     }
@@ -279,55 +292,141 @@ public class YutGameManager : MonoBehaviour
     public void SelectBoss4() => SelectBoss(3);
     public void SelectBoss5() => SelectBoss(4);
 
-    // '게임 시작' 버튼: 선택한 보스전을 시작하고 타겟 선택으로 진행
+    // '게임 시작' 버튼: 보스 소개 화면을 열고, 진입 버튼(EnterBossBattle)에서 실제 시작
     public void StartGame()
     {
-        if (currentState == GameState.Playing)
+        if (currentState != GameState.Start)
         {
             return;
         }
+        ShowBossSelect(selectedBossIndex);
+    }
+
+    // 보스 소개 화면의 '진입' 버튼 — 소개 중인 보스전을 시작하고 타겟 선택으로 진행
+    public void EnterBossBattle()
+    {
+        if (currentState != GameState.Start && currentState != GameState.Cleared)
+        {
+            return;
+        }
+        if (bosses == null || pendingBossIndex < 0 || pendingBossIndex >= bosses.Count)
+        {
+            Debug.LogWarning($"EnterBossBattle: 잘못된 보스 인덱스 {pendingBossIndex}");
+            return;
+        }
+        selectedBossIndex = pendingBossIndex;
+        SetPanel(bossSelectPanel, false);
+        StartBossBattle();
+    }
+
+    // 보스 소개/진입 화면 표시 — 최초 선택(Start)과 클리어 후 다음 관문(Cleared)에서 같은 UI 사용
+    private void ShowBossSelect(int index)
+    {
+        if (bosses == null || index < 0 || index >= bosses.Count)
+        {
+            Debug.LogWarning($"ShowBossSelect: 잘못된 인덱스 {index} (0~{(bosses?.Count ?? 0) - 1})");
+            return;
+        }
+        pendingBossIndex = index;
+        BossData boss = bosses[index];
+        if (bossSelectNameText != null)
+        {
+            bossSelectNameText.text = boss.bossName;
+        }
+        if (bossSelectGoalText != null)
+        {
+            bossSelectGoalText.text = boss.maxHP.ToString();
+        }
+        if (bossSelectAbilityText != null)
+        {
+            bossSelectAbilityText.text = boss.abilityDescription;
+        }
+        ActivatePanel(bossSelectPanel, nameof(bossSelectPanel));
+        Debug.Log($"--- 보스 소개: {boss.bossName} | 목표 {boss.maxHP} | {boss.abilityDescription} ---");
+    }
+
+    // 실제 보스전 시작 (소개 화면 '진입'과 '다시 도전'이 공용 사용)
+    private void StartBossBattle()
+    {
         BeginBossFight();
         EnterTargetSelection();
     }
 
-    // 클리어·게임오버 화면의 '다시 도전' 버튼 — 같은 보스로 보스전 재시작
+    // 클리어·게임오버 화면의 '다시 도전' 버튼 — 소개 없이 같은 보스로 즉시 재시작
     public void RetryBoss()
     {
         SetPanel(clearPanel, false);
         SetPanel(gameOverPanel, false);
-        StartGame();
+        SetPanel(bossSelectPanel, false);
+        StartBossBattle();
     }
 
-    // 클리어 화면의 '다음 관문' 버튼 — 다음 보스전으로 진행 (마지막 보스 클리어 시 버튼 자체가 숨겨짐)
+    // 클리어 화면의 '다음 관문' 버튼 — 다음 보스 소개 화면 표시 (전투 진입은 진입 버튼에서)
     public void GoToNextBoss()
     {
         if (currentState != GameState.Cleared || bosses == null || selectedBossIndex + 1 >= bosses.Count)
         {
             return;   // 클리어 상태에서만, 다음 보스가 있을 때만
         }
-        selectedBossIndex++;
-        StartGame();   // BeginBossFight: 점수·피버·말·말판·방울 전부 초기화 + 새 보스 특수능력 적용
+        SetPanel(clearPanel, false);
+        ShowBossSelect(selectedBossIndex + 1);
     }
 
-    // 클리어·게임오버 화면의 '보스 선택으로 돌아가기' 버튼
+    // 게임오버 화면의 '처음으로' 버튼 — 런 전체 데이터 초기화 후 시작(보스 선택) 화면으로 복귀
+    public void RestartRun() => BackToBossSelect();
+
+    // 클리어·게임오버 화면의 '보스 선택으로 돌아가기' 버튼 — 런 데이터를 전부 초기화하고 시작 화면으로 복귀
     public void BackToBossSelect()
     {
-        StopPresentation();
-        isChoosingBell = false;
+        ResetRunState();
         SetPanel(clearPanel, false);
         SetPanel(gameOverPanel, false);
         SetPanel(bellChoicePanel, false);
+        SetPanel(bossSelectPanel, false);
         SetPanel(targetSelectOverlay, false);
         SetPanel(targetSelectPanel, false);
         SetPanel(gamePanel, false);
         SetPanel(startPanel, true);
         currentState = GameState.Start;
-        // 보스전 종료 — 특수능력 제거(기본 확률 복원) + 점수 초기화로 선택 화면 미리보기 정상화
-        ResetProbabilities();
+        UpdateUI();
+    }
+
+    // 런 전체 초기화 — 게임오버/보스 선택 복귀로 런이 끝날 때 호출
+    // 관문 이동(GoToNextBoss→EnterBossBattle)은 여기를 거치지 않으므로 런 성장 요소가 유지된다
+    private void ResetRunState()
+    {
+        StopPresentation();                  // 이전 보스전의 잔여 연출 정리
+        isChoosingBell = false;
+        selectedBellOption = -1;
+        currentBellOptions.Clear();
+        ownedBells.Clear();                  // 임시 방울·방울 이벤트 상태
+        hasRolled = false;                   // 이전 윷 결과 표시용 데이터
+        currentSettlement = null;
+        lastBackDoLoss = 0;
+        feverCombo = 0;
+        currentThrows = 0;
+        roundIndex = 1;
+        roundScore = 0;
         totalScore = 0;
         displayTotal = 0;
-        roundScore = 0;
-        UpdateUI();
+        basicScore = 0;
+        multiplier = 0;
+        throwScore = 0;
+        // 말판 점수 배치·칸 강화·방울 칸·말 위치·완주 횟수 초기화
+        foreach (BoardTile tile in board.tiles)
+        {
+            tile.bonusScore = 0;
+            tile.hasBellEvent = false;
+            tile.bellUsedThisRound = false;
+        }
+        board.pieceIndex = 0;
+        board.totalMoved = 0;
+        board.lapCount = 0;
+        MovePieceVisual(0);
+        // 런 전체 성장 요소 초기화 — 런이 끝났으므로 윷 강화·보스 특수능력 원복
+        BuildYutStats();
+        ResetProbabilities();
+        goalScore = CurrentBoss != null ? CurrentBoss.maxHP : 0;   // 선택 화면 미리보기
     }
 
     // 라운드 리셋 버튼: 현재 보스전을 처음(1판)부터 다시 시작한다
@@ -439,6 +538,7 @@ public class YutGameManager : MonoBehaviour
         SetPanel(targetSelectPanel, false);
         SetPanel(clearPanel, false);
         SetPanel(gameOverPanel, false);
+        SetPanel(bossSelectPanel, false);
     }
 
     // 보스전 시작: 선택 보스 적용 + 전투 상태 초기화 + 보스 특수능력 적용
@@ -480,6 +580,7 @@ public class YutGameManager : MonoBehaviour
         SetPanel(startPanel, false);
         SetPanel(clearPanel, false);
         SetPanel(gameOverPanel, false);
+        SetPanel(bossSelectPanel, false);
         SetPanel(bellChoicePanel, false);
         isChoosingBell = false;
         currentState = GameState.TargetSelection;
@@ -1076,6 +1177,10 @@ public class YutGameManager : MonoBehaviour
         {
             Debug.LogWarning("[YutGameManager] targetSelectPanel이 startPanel의 자식(또는 같은 오브젝트)입니다. startPanel이 꺼지면 함께 숨겨지니 Canvas 바로 아래로 분리하세요.", targetSelectPanel);
         }
+        if (bossSelectPanel != null && clearPanel != null && bossSelectPanel.transform.IsChildOf(clearPanel.transform))
+        {
+            Debug.LogWarning("[YutGameManager] bossSelectPanel이 clearPanel의 자식입니다. 다음 관문 클릭 시 clearPanel이 꺼지면 함께 숨겨지니 Canvas 바로 아래로 분리하세요.", bossSelectPanel);
+        }
     }
 
     private static void SetPanel(GameObject panel, bool active)
@@ -1151,6 +1256,11 @@ public class YutGameManager : MonoBehaviour
         {
             bool targetConfirmed = currentState != GameState.Start && currentState != GameState.TargetSelection;
             targetYutText.text = targetConfirmed ? ToKorean(selectedTarget) : "";
+        }
+        // 판 진행도 — Start 화면에서는 빈칸, 보스전 진행 중에는 실제 판 번호 표시
+        if (roundProgressText != null)
+        {
+            roundProgressText.text = currentState == GameState.Start ? "" : $"{roundIndex} / {roundsPerBoss}";
         }
 
         // 말판 UI — 칸 점수·방울 아이콘·완주 횟수 (Start/TargetSelection에서는 갱신 생략)
@@ -1250,7 +1360,19 @@ public class YutGameManager : MonoBehaviour
         {
             if (currentState == GameState.Start)
             {
-                StartGame();
+                // 보스 소개 화면이 열려 있으면 스페이스바가 진입 버튼 역할
+                if (bossSelectPanel != null && bossSelectPanel.activeSelf)
+                {
+                    EnterBossBattle();
+                }
+                else
+                {
+                    StartGame();
+                }
+            }
+            else if (currentState == GameState.Cleared && bossSelectPanel != null && bossSelectPanel.activeSelf)
+            {
+                EnterBossBattle();
             }
             else if (currentState == GameState.TargetSelection)
             {

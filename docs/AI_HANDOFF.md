@@ -3,12 +3,32 @@
 AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 갱신 시 `### [날짜 오전/오후 - 담당 AI]` 세션 헤더로 구분하고, 최상단 요약 블록을 최신 작업으로 교체한다.
 
-## [2026-10-15 작업 요약 (GPT 전달용)]
+## [2026-10-16 오후 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-15 변경사항 요약 - GPT 기획 / Devin 구현]
+[2026-10-16 오후 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — GPT 요청(보스 클리어 후 다음 관문 진행) — Devin 구현:
+★ 최신 — 보스 소개 화면 + 게임오버 전체 초기화 + 판 번호 표시:
+- 보스 소개 화면: bossSelectPanel + bossSelectNameText/bossSelectGoalText/
+  bossSelectAbilityText 신규 Inspector 필드. GoToNextBoss()는 소개 패널만 표시,
+  실제 진입은 새 public EnterBossBattle()(진입 버튼용). StartGame()(게임 시작)도
+  같은 패널 경유 — 최초 선택과 다음 관문이 같은 UI 공유. 소개 패널 열린 상태에서
+  SelectBoss() 호출 시 내용 갱신. RetryBoss()는 소개 생략·즉시 재시작 유지
+- 게임오버 초기화: 새 ResetRunState()가 런 전체 초기화(점수·판·피버·말 위치·
+  완주·말판 배치·칸 강화·임시 방울·방울 이벤트·yutStats·확률 효과). '처음으로'
+  버튼용 RestartRun() public 추가 = BackToBossSelect()와 동일 동작(전체 초기화 후
+  StartPanel 복귀). 관문 이동(GoToNextBoss→EnterBossBattle)은 미경유라 런 성장 유지
+- 판 번호: roundProgressText 필드 추가 — "{roundIndex} / {roundsPerBoss}" 출력,
+  Start 화면 빈칸
+- WarnIfPanelNested 확장: bossSelectPanel이 clearPanel 자식이면 경고
+- ⚠ 사용자 Inspector 연결 필요: Boss Select Panel + Boss Select Name/Goal/Ability
+  Text + Round Progress Text — 전부 null-safe
+- ⚠ 주의: bossSelectPanel을 StartPanel 위를 덮는 전체화면 모달로 만들면 뒤쪽
+  보스 선택 버튼이 차단됨 — 재선택 허용하려면 배치/Raycast Target 고려
+- 보스전 건너뛰기: 미확정 규칙 — 미구현
+
+[이전] 2026-10-15 변경사항 요약 - GPT 기획 / Devin 구현:
+
 - GoToNextBoss() public 추가: ClearPanel '다음 관문' 버튼용 — Cleared 상태 +
   다음 보스 존재 시에만 동작 → selectedBossIndex++ 후 StartGame() 재사용.
   클리어 즉시 자동 이동 없음 (반드시 버튼 클릭)
@@ -174,10 +194,18 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 현재 상태
 
-- 마지막 작업 일시: 2026-10-14 오후
+- 마지막 작업 일시: 2026-10-16 오후
 - 작업 담당 AI: Devin Desktop (Cognition)
 - Git 커밋: 본 문서를 포함한 커밋 — `git log -1` 참조
 - 현재 브랜치: `develop` (origin: https://github.com/Lee-jinuk/Ryy.git)
+
+### [2026-10-16 오후 - GPT 기획 / Devin 구현]
+
+- 보스 소개 화면: `bossSelectPanel` + `bossSelectNameText`/`bossSelectGoalText`/`bossSelectAbilityText` 필드, `GoToNextBoss()`는 소개 패널 표시만, `EnterBossBattle()`(진입 버튼)에서 실제 전투 진입. `StartGame()`도 같은 패널 경유 — 최초·다음 관문 UI 공유. `RetryBoss()` 즉시 재시작 유지
+- 게임오버 전체 초기화: `ResetRunState()` 신규 — 런 데이터 전부 리셋. `RestartRun()`('처음으로' 버튼) = `BackToBossSelect()`와 동일 동작
+- 판 번호 표시: `roundProgressText` — `"1 / 3"` 형식, Start 화면 빈칸
+- 사용자 Inspector 연결 필요: `Boss Select Panel`, `Boss Select Name/Goal/Ability Text`, `Round Progress Text` — 전부 null-safe
+- 미테스트: Devin 에디터 미실행 — Play 확인 필요. 보스전 건너뛰기 미확정(미구현)
 
 ### [2026-10-14 오후 - GPT 기획 / Devin 구현]
 

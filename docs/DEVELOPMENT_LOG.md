@@ -146,6 +146,19 @@
 
 **테스트/남은 문제**: Devin은 에디터 미실행 — Play 테스트 필요. `nextBossButton` 미연결 시 최종 클리어 구분 메시지만 표시됨.
 
+### [2026-10-16 오후 - GPT 기획 / Devin 구현]
+
+**보스 소개 화면 + 게임오버 전체 초기화 + 판 번호 표시** (`YutGameManager.cs` 코드만 — UI 오브젝트는 사용자가 에디터에서 생성):
+
+- 보스 소개 화면: `bossSelectPanel` + `bossSelectNameText`/`bossSelectGoalText`/`bossSelectAbilityText` 필드 추가. `GoToNextBoss()`는 이제 다음 보스 소개 패널만 표시하고, 신규 `EnterBossBattle()`('진입' 버튼용 public)이 `pendingBossIndex` → `selectedBossIndex` 확정 후 실제 전투 진입. `StartGame()`('게임 시작')도 같은 패널을 열도록 변경해 최초 선택·다음 관문이 같은 UI 공유. 소개 패널이 열린 상태에서 `SelectBoss()` 호출 시 표시 내용 갱신. `RetryBoss()`는 소개 생략하고 즉시 재시작(기존 동작 유지). 내부 공용 `StartBossBattle()` = `BeginBossFight` + `EnterTargetSelection`
+- 게임오버 초기화: 신규 `ResetRunState()` — 연출 코루틴·방울 선택 상태·임시 방울·윷 결과 표시·피버·투척/판 카운터·점수 전부·말판(칸 강화·방울 칸·사용 플래그)·말 위치(BoardTile_01)·완주·런 성장(`BuildYutStats`)·확률 효과(`ResetProbabilities`) 초기화. `BackToBossSelect()`가 이를 호출하도록 강화 + '처음으로' 버튼용 `RestartRun()` public 추가 (같은 동작)
+- 판 번호: `roundProgressText` 필드 추가 — `UpdateUI()`에서 `"{roundIndex} / {roundsPerBoss}"` 출력, Start 상태 빈칸, `BeginBossFight`/`AdvanceToNextRound`에서 갱신됨
+- `WarnIfPanelNested()` 확장: bossSelectPanel이 clearPanel 자식이면 경고
+- 스페이스바 테스트: Start에서 소개 패널 열려 있으면 EnterBossBattle, Cleared에서 패널 열려 있으면 EnterBossBattle
+- ⚠ 신규 Inspector 연결 필요: `Boss Select Panel` + `Boss Select Name/Goal/Ability Text` + `Round Progress Text` — 전부 미연결도 null-safe
+
+**테스트/남은 문제**: Devin 에디터 미실행 — Play 테스트 필요. 보스 소개 패널이 StartPanel 위를 덮는 모달로 만들면 뒤쪽 보스 버튼 클릭이 차단될 수 있음 (재선택 허용하려면 패널을 옆에 배치하거나 Raycast Target 조정). 보스전 건너뛰기는 규칙 미확정으로 미구현.
+
 ## 구현된 기능 (코드 확인 완료)
 
 - `YutResult` enum 7종 (BackDo + Nak 포함, 2026-10-14 오후 확장)
@@ -159,7 +172,10 @@
 - 피버 콤보: 타겟 적중 시 `feverCombo++`, 2연속부터 이번 투척 멀티플 ×Min(콤보, 8) — 피버 단계로 기록 (이식 수식, 확정 검토 필요)
 - 보스전 구조: `BossData` 5명(임시)/보스 선택(`SelectBoss1~5`)/목표=보스 HP/낙 +2%p 특수능력(비례 차감·백도 불변·중복 없음)/관문당 3판(`roundsPerBoss`)×판당 5회/`roundScore` 판별 누적(백도 범위)/`Cleared`·`GameOver` 상태 + 클리어·게임오버 패널 + `RetryBoss`/`BackToBossSelect`
 - 보스 UI 연결 필드: `bossNameText`/`bossAbilityText` (HP 텍스트·체력바 필드는 목표 점수 관문 전환으로 제거됨)
-- 관문 진행: `GoToNextBoss()`(클리어 패널 '다음 관문' 버튼) — 보스 1→5 수동 진행, 보스 5 클리어 시 `nextBossButton` 숨김 + `clearMessageText` "최종 클리어"
+- 관문 진행: `GoToNextBoss()`(클리어 패널 '다음 관문' 버튼) → 보스 소개 패널 → `EnterBossBattle()`('진입' 버튼)으로 보스 1→5 수동 진행, 보스 5 클리어 시 `nextBossButton` 숨김 + `clearMessageText` "최종 클리어"
+- 보스 소개 화면: `bossSelectPanel` + 이름/목표/능력 텍스트 3종 — 최초 '게임 시작'과 클리어 후 '다음 관문'이 공용 사용. '다시 도전'은 소개 생략
+- 게임오버 런 초기화: `ResetRunState()` + `RestartRun()`('처음으로' 버튼) / `BackToBossSelect()` 동일 적용 — 런 전체 데이터 초기화 후 시작 화면 복귀
+- 판 번호 표시: `roundProgressText` — `"1 / 3"` 형식
 - 라운드 종료 판정: `totalScore >= goalScore`(보스 HP) 클리어 / 3판 소진 미달 게임오버
 - UI Text 필드: `mainResultText`(결과명 전용)/`basicScoreText`/`multScoreText`/`totalScoreText`/`goalScoreText`/`remainText`/`throwDataText`/`targetYutText`/`throwScoreText`/`feverText` — 전부 숫자·이름만 출력, null-safe
 - `ConfirmTargetSelection()`, `ResetRound()` public (Button OnClick 연결용)
@@ -200,3 +216,4 @@
 | 2026-10-14 오후 | 18칸 원형 말판(`YutBoard.cs` 분리) — 점수 무작위 배치, 윷별 이동·완주 보너스, 방울 이벤트 칸 + 3택1 임시 방울, 말 이동 연출 | GPT 기획 / Devin 구현. 방울 효과·백도/낙 이동 규칙 미확정, `bellEventTileCount` 2개는 프로토타입값 |
 | 2026-10-14 오후 | 말판 시작점을 BoardTile_01로 변경(별도 시작점 폐기), 완주 판정을 순환 통과로 단순화, 보스 HP UI 필드 제거(보스=목표 점수 관문) | GPT 기획 / Devin 구현. 클리어/게임오버·보스 데이터 유지 |
 | 2026-10-15 | 보스 클리어 후 다음 관문 진행 — `GoToNextBoss()` + `nextBossButton`/`clearMessageText` 필드, 보스 5 클리어 = 최종 클리어 | GPT 기획 / Devin 구현. 초기화는 기존 BeginBossFight 재사용 |
+| 2026-10-16 오후 | 보스 소개 화면(`bossSelectPanel`+텍스트 3종, `EnterBossBattle`), 게임오버 런 전체 초기화(`ResetRunState`/`RestartRun`), 판 번호 표시(`roundProgressText`) | GPT 기획 / Devin 구현. `StartGame`은 소개 화면 표시로 변경, `RetryBoss` 직행 유지 |
