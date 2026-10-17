@@ -2,12 +2,27 @@
 
 실제 Unity 프로젝트를 검사해 기록한 구현 현황. 코드를 확인하지 않은 기능은 구현 완료로 기록하지 않는다.
 
-## 파일 구조 (2026-10-14 검사)
+## 파일 구조 (2026-10-18 검사)
 
-- `Assets/Scripts/Core/YutGameManager.cs` — 유일한 게임 로직 스크립트
-- `Assets/Scripts/Data/`, `Assets/Scripts/UI/` — `.gitkeep`만 존재 (빈 폴더)
+- `Assets/Scripts/Core/` — `YutGameManager.cs`(게임 총괄) + 책임별 매니저 `YutRollManager.cs`, `BoardManager.cs`, `ScoreManager.cs`, `BossManager.cs`, `BellManager.cs` + 데이터 `YutBoard.cs`
+- `Assets/Scripts/UI/` — `GameUIManager.cs` (UI 표시·연출)
+- `Assets/Scripts/Data/` — `.gitkeep`만 존재 (빈 폴더)
 - `Assets/Prefabs/`, `Assets/ScriptableObjects/` — `.gitkeep`만 존재
-- `Assets/Scenes/SampleScene.unity` — Canvas, CalcText, TargetText, result, Text (Legacy), Button (Legacy), EventSystem 오브젝트 존재 확인
+- `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
+- 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
+
+### [2026-10-18 오전 - GPT 기획 / Devin 구현]
+
+**YutGameManager 책임별 분리 리팩터링 + 1단계 안정화** — 게임 규칙 변경 없음. 직렬화 필드는 전부 `YutGameManager`에 유지하고 로직만 일반 C# 매니저로 분리 (Inspector·OnClick 연결 영향 없음):
+
+- 신규 매니저 (모두 일반 C# 클래스, `Awake`에서 생성): `YutRollManager`(추첨·확률·윷 스탯), `BoardManager`(말판 배치·이동 연출·말판 UI), `ScoreManager`(점수 정산·피버·저주·효과 기록), `BossManager`(보스 선택·소개 정보·관문 조건), `BellManager`(방울 후보·선택·보유·초기화), `GameUIManager`(텍스트 갱신·패널 토글·정산 연출 코루틴 — `Scripts/UI/`)
+- `YutGameManager`는 상태 전환·실행 순서·투척→정산 흐름·관문 진입·OnClick 진입점만 유지. 기존 public 메서드 전부 보존(내부는 매니저 위임)
+- 1단계 수정: `BuildYutStats()`가 기본 `YutStatEntry`를 참조 공유하던 문제 수정 → 새 객체로 복사 (런타임 강화가 Inspector 기본 스탯을 오염시키지 않음)
+- 씬 `maxThrows` 3 → 5 (확정 규칙 5회와 일치 — 이전엔 테스트값 3으로 저장돼 있어 보고 대상이었음)
+- 보스 소개 패널 미연결 폴백: `bossSelectPanel == null`이면 소개를 건너뛰고 바로 `EnterBossBattle()` — 패널 미생성 상태에서도 플레이 진입 가능, 패널 연결 시 자동으로 소개 화면 사용
+- 씬 연결 검증 결과: 연결됨 = 텍스트 12종(mainResult~feverText, bossName/Ability, 결과 텍스트 5종), 패널 6종(start/game/targetSelectOverlay/targetSelectPanel/clear/gameOver/board), boardTiles 18개 + playerPiece, rollButton. **미연결 = `bossSelectPanel` + 소개 텍스트 3종(오브젝트 자체가 없음), `roundProgressText`, `lapCountText`, `clearMessageText`, `nextBossButton`, bellChoicePanel·옵션 텍스트·슬롯(bellEventTileCount=0이라 현재 무관)**
+- OnClick 검증: `SelectTarget*` 5종·`RollYut`·`StartGame`·`BackToBossSelect`×2 연결 확인 — 리팩터링 후에도 호환. `EnterBossBattle`/`GoToNextBoss`/`RetryBoss`/`SelectBoss*`를 호출하는 버튼은 씬에 아직 없음 → 다음 관문 수동 진행·보스 선택은 UI 연결 후 사용 가능 (폴백으로 플레이 진입은 가능)
+- 검증: `dotnet build Assembly-CSharp.csproj` 오류 0·경고 0. Devin 에디터 미실행 — Play 테스트는 사용자 확인 필요
 
 ### [2026-10-14 오전 - Gemini & Devin 작업분]
 
@@ -161,6 +176,7 @@
 
 ## 구현된 기능 (코드 확인 완료)
 
+- 책임별 매니저 분리 (2026-10-18): `YutGameManager`(총괄·OnClick·직렬화 필드) + POJO 매니저 `YutRollManager`/`BoardManager`/`ScoreManager`/`BossManager`/`BellManager`/`GameUIManager` — 역할·데이터 소유권은 `docs/ARCHITECTURE.md`
 - `YutResult` enum 7종 (BackDo + Nak 포함, 2026-10-14 오후 확장)
 - 인스펙터 편집 확률 리스트 `baseProbabilities` → 런타임 `runtimeWeights` 분리 구조 (테스트값: 백도 6.25 / 도 18.75 / 개 32.5 / 걸 25 / 윷 6.25 / 모 6.25 / 낙 5 %)
 - 단일 타겟 선택: `selectedTarget`, `GameState { TargetSelection, Playing, RoundEnd }`
@@ -186,7 +202,7 @@
 
 `GAME_RULES.md` 기준으로 코드와 충돌하는 항목. 규칙상 임의로 수정하지 않고 보고한다.
 
-- **투척 횟수**: ~~코드 `maxThrows = 7` ↔ 확정 규칙 5회~~ → 해결 (2026-10-14 오전, 코드·씬 모두 5로 수정)
+- **투척 횟수**: ~~코드 `maxThrows = 7` ↔ 확정 규칙 5회~~ → 해결 (2026-10-14 오전, 코드·씬 모두 5로 수정). ~~씬 직렬화값이 테스트용 3으로 되돌아가 있던 것~~ → 해결 (2026-10-18 오전, 씬 3→5)
 - **타겟/피버 시스템**: 사용자 승인으로 채택 확정 + 피버 배수 상한 8 적용 (2026-10-14 오전). 밸런스 수치는 계속 검토 대상.
 - **점수·배율·목표 점수**: ~~전부 미확정 규칙이나 코드에 임의값으로 구현됨 (도10~모50, 배수+1~+5, 목표 1000)~~ → 투척 정산 구조·윷 스탯 확정 (2026-10-14 오후, GPT 기획). 목표 1000은 여전히 테스트값.
 - **피버 적용식**: 구 기준 '전체 누적 배율 ×콤보' → 투척 정산 구조로 '이번 투척 멀티플 ×Min(콤보,8)' 이식 — 산출 차이 있어 확정 필요.
@@ -199,7 +215,7 @@
 - 판(여러 라운드) 진행 구조 — 미구현
 - 중단/점수 확정 시스템 — 미구현
 - ~~씬 연동: `YutGameManager` 미배치~~ → 해결 (2026-10-14 오전). `GameManager` 오브젝트에 컴포넌트 존재 확인.
-- **사용자 수동 배치 대기**: UI 레이아웃은 사용자가 에디터에서 직접 구성. 패널/버튼/슬롯 오브젝트 생성 후 Inspector 연결 필요 (연결 전까지 해당 텍스트는 빈 상태 — 코드는 null-safe로 정상 동작).
+- **사용자 수동 배치 대기**: `bossSelectPanel` + 소개 텍스트 3종 + '진입' 버튼(OnClick→`EnterBossBattle`), '다음 관문' 버튼(→`GoToNextBoss`), `roundProgressText`, `lapCountText` 등 — 상세 목록은 2026-10-18 세션 항목 참조. 미연결 항목은 전부 null-safe (보스 소개 패널은 미연결 시 자동 바로 진입 폴백).
 
 ## 로그
 
@@ -217,3 +233,4 @@
 | 2026-10-14 오후 | 말판 시작점을 BoardTile_01로 변경(별도 시작점 폐기), 완주 판정을 순환 통과로 단순화, 보스 HP UI 필드 제거(보스=목표 점수 관문) | GPT 기획 / Devin 구현. 클리어/게임오버·보스 데이터 유지 |
 | 2026-10-15 | 보스 클리어 후 다음 관문 진행 — `GoToNextBoss()` + `nextBossButton`/`clearMessageText` 필드, 보스 5 클리어 = 최종 클리어 | GPT 기획 / Devin 구현. 초기화는 기존 BeginBossFight 재사용 |
 | 2026-10-16 오후 | 보스 소개 화면(`bossSelectPanel`+텍스트 3종, `EnterBossBattle`), 게임오버 런 전체 초기화(`ResetRunState`/`RestartRun`), 판 번호 표시(`roundProgressText`) | GPT 기획 / Devin 구현. `StartGame`은 소개 화면 표시로 변경, `RetryBoss` 직행 유지 |
+| 2026-10-18 오전 | `YutGameManager` 책임별 분리 — POJO 매니저 6개(`YutRollManager`/`BoardManager`/`ScoreManager`/`BossManager`/`BellManager`/`GameUIManager`), 직렬화 필드·public 메서드 전부 유지. `BuildYutStats` 원본 공유 버그 수정, 씬 `maxThrows` 3→5, 보스 소개 패널 미연결 시 바로 진입 폴백 | GPT 기획 / Devin 구현. 규칙 변경 없음, dotnet build 0오류. 매니저 구조는 `docs/ARCHITECTURE.md` |

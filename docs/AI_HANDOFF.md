@@ -3,12 +3,50 @@
 AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 갱신 시 `### [날짜 오전/오후 - 담당 AI]` 세션 헤더로 구분하고, 최상단 요약 블록을 최신 작업으로 교체한다.
 
-## [2026-10-16 오후 작업 요약 (다음 AI 전달용)]
+## [2026-10-18 오전 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-16 오후 변경사항 요약 - GPT 기획 / Devin 구현]
+[2026-10-18 오전 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — 보스 소개 화면 + 게임오버 전체 초기화 + 판 번호 표시:
+★ 최신 — YutGameManager 책임별 분리 리팩터링 + 1단계 안정화:
+- 스크립트 6개 신설 (전부 일반 C# 클래스, YutGameManager.Awake에서 생성 —
+  Inspector/OnClick 연결 영향 없음):
+  * Scripts/Core/YutRollManager.cs — 추첨·확률 가중치·보스 낙+2%p·윷 스탯
+    (YutProbabilityEntry/YutStatEntry 타입 포함)
+  * Scripts/Core/BoardManager.cs — 말판 배치·MovePieceVisual·UpdateBoardUI·초기화
+  * Scripts/Core/ScoreManager.cs — 점수 정산 유일 경로·피버·저주
+    (ScoreEffectStep/ThrowSettlement/EffectSourceType·Target·Op 타입 포함)
+  * Scripts/Core/BossManager.cs — BossData·보스 선택·소개 정보·HasNextBoss/IsFinalClear
+  * Scripts/Core/BellManager.cs — 방울 후보·선택·보유·판/런 초기화
+    (isChoosingBell/selectedBellOption/currentBellOptions가 여기로 이동)
+  * Scripts/UI/GameUIManager.cs — UpdateUI·SetPanel/ActivatePanel·PresentSettlement
+- YutGameManager: 직렬화 필드 + 상태 전환 + 흐름 조정 + OnClick public 메서드
+  전부 유지 (이름·시그니처 동일 — 기존 버튼 연결 그대로 작동)
+- 데이터 소유권: 점수·피버·투척 수는 ScoreManager만 쓴다. 말판 데이터는 board
+  필드 저장 + BoardManager/YutBoard만 쓴다. 상세 → docs/ARCHITECTURE.md
+- 1단계 수정:
+  * BuildYutStats() — 기본 YutStatEntry를 참조 공유하던 버그 수정 → 새 객체 복사
+    (런타임 강화가 Inspector 기본값을 오염시키지 않음)
+  * 씬 maxThrows 3 → 5 (확정 규칙과 일치)
+  * bossSelectPanel 미연결 폴백 — 소개 패널이 없으면 경고 후 EnterBossBattle()
+    직행 (패널 미생성 상태에서도 플레이 진입 가능, 패널 연결 시 자동 소개 화면)
+- 씬 연결 현황 (SampleScene.unity 검사):
+  * 연결됨: 텍스트 12종, 패널 6종, boardTiles[18]+playerPiece, rollButton
+  * 미연결(오브젝트 없음): bossSelectPanel + Boss Select 텍스트 3종,
+    roundProgressText, lapCountText, clearMessageText, nextBossButton,
+    bellChoicePanel·bellOption 텍스트·bellSlots/talismanSlots
+    (bellEventTileCount=0이라 방울 UI 없어도 진행 무관)
+  * OnClick 연결됨: SelectTarget* 5종, RollYut, StartGame, BackToBossSelect×2
+  * OnClick 미연결(버튼 자체 없음): EnterBossBattle, GoToNextBoss, RetryBoss,
+    SelectBoss1~5, ConfirmTargetSelection, ResetRound, SkipPresentation, 방울 관련
+    → 다음 관문 진행·보스 선택은 패널/버튼 제작·연결 후 사용 가능
+- 검증: dotnet build Assembly-CSharp.csproj → 오류 0·경고 0 (Unity 미실행 — Play 테스트 필요)
+- 다음 단계(2단계) 착수 전 사용자 답 필요: 윷 4면↔결과 대응, 개별 윷 확률,
+  백도·낙 프로토타입 포함 여부 (GPT 지시서 선행 질문 참조)
+
+[이전] 2026-10-16 오후 변경사항 요약 - GPT 기획 / Devin 구현:
+
+보스 소개 화면 + 게임오버 전체 초기화 + 판 번호 표시:
 - 보스 소개 화면: bossSelectPanel + bossSelectNameText/bossSelectGoalText/
   bossSelectAbilityText 신규 Inspector 필드. GoToNextBoss()는 소개 패널만 표시,
   실제 진입은 새 public EnterBossBattle()(진입 버튼용). StartGame()(게임 시작)도
@@ -194,10 +232,18 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 현재 상태
 
-- 마지막 작업 일시: 2026-10-16 오후
+- 마지막 작업 일시: 2026-10-18 오전
 - 작업 담당 AI: Devin Desktop (Cognition)
 - Git 커밋: 본 문서를 포함한 커밋 — `git log -1` 참조
 - 현재 브랜치: `develop` (origin: https://github.com/Lee-jinuk/Ryy.git)
+- 코드 구조: `YutGameManager` 총괄 + 책임별 POJO 매니저 6개 — `docs/ARCHITECTURE.md` 참조
+
+### [2026-10-18 오전 - GPT 기획 / Devin 구현]
+
+- `YutGameManager` 책임별 분리 리팩터링: `YutRollManager`/`BoardManager`/`ScoreManager`/`BossManager`/`BellManager`/`GameUIManager` 신설 (일반 C# 클래스 — 직렬화 필드·public 메서드는 `YutGameManager`에 유지해 Inspector·OnClick 보존). 규칙 변경 없음
+- 1단계 안정화: `BuildYutStats()` 원본 참조 공유 → 새 객체 복사 수정. 씬 `maxThrows` 3→5. `bossSelectPanel` 미연결 시 `EnterBossBattle()` 직행 폴백
+- 씬 검사: 연결 양호. 미연결 = `bossSelectPanel`+텍스트 3종(오브젝트 없음), `roundProgressText`, `lapCountText`, `nextBossButton`, 방울 UI 전체. `EnterBossBattle`/`GoToNextBoss`/`RetryBoss`/`SelectBoss*` 버튼 없음 — 보고 완료
+- 검증: dotnet build 0 오류·0 경고. Unity Play 테스트는 사용자 확인 필요
 
 ### [2026-10-16 오후 - GPT 기획 / Devin 구현]
 
@@ -249,8 +295,9 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - ~~피버 시스템 채택 여부 미결~~ → 해결 (상한 8 포함 채택, 밸런스 수치는 계속 검토)
 - ~~`Input.GetKeyDown` 런타임 예외~~ → 해결 (Both 입력 핸들러)
 - ~~`YutGameManager` 씬 미배치 / UI 미연결~~ → 해결 (씬 배치 확인 + 텍스트 필드 연결 유지)
-- **UI 수동 연결 대기 (사용자 작업)**: 사용자가 에디터에서 gamePanel/targetSelectOverlay/targetSelectPanel/버튼/슬롯 오브젝트를 만들어 Inspector에 연결할 예정. 연결 전까지는 텍스트가 비어 보이지만 코드는 null-safe로 정상 동작함.
+- **UI 수동 연결 대기 (사용자 작업)** — 2026-10-18 씬 검사 기준 미연결: `bossSelectPanel` + `bossSelectNameText`/`bossSelectGoalText`/`bossSelectAbilityText`(오브젝트 자체가 없음), `roundProgressText`, `lapCountText`, `clearMessageText`, `nextBossButton`, `bellChoicePanel`/`bellOptionNameTexts`/`bellOptionDescTexts`/`bellSlots`/`talismanSlots`(방울 칸 0이라 현재 무관). `EnterBossBattle`/`GoToNextBoss`/`RetryBoss`/`SelectBoss1~5`/`ConfirmTargetSelection`/`ResetRound`/`SkipPresentation`/방울 선택 버튼 OnClick도 없음 — bossSelectPanel 미연결 시 바로 진입 폴백으로 플레이는 가능하지만, 보스 소개·다음 관문 진행·보스 선택은 연결 후에만 사용 가능
 - **블러 미구현**: 타겟 선택 모달 배경은 반투명 딤(Image 알파)만 적용. 실제 블러는 셰이더/패키지 필요로 추후 작업.
+- **Unity Play 테스트 미수행**: Devin은 에디터 미실행 — dotnet build(0 오류)까지만 검증. 사용자가 Unity에서 컴파일·Play 확인 필요
 
 ## 미확정 결정 사항 (사용자 승인 필요)
 
@@ -266,18 +313,21 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 
 ## 다음 작업 목표 (제안)
 
-1. 사용자가 에디터에서 신규 UI 제작·연결: `boardTiles[18]`(칸 오브젝트 — 자식 Text=점수, 자식 `BellIcon`=방울 표시), `playerPiece`, `bellChoicePanel` + 옵션 텍스트·버튼, 보스 선택 버튼(→`SelectBoss1~5`), 클리어·게임오버 패널 + `nextBossButton`(OnClick→`GoToNextBoss()`) + `clearMessageText`(선택) → Play 테스트
-2. 피버 적용 수식 확정 (×콤보 vs +증가 등) → 확정 시 `SettleThrow` 피버 단계 한 곳만 수정
-3. 백도·낙 말 이동 규칙 확정 → 확정 시 `SettleThrow` 저주 분기에 추가
-4. 방울 실제 효과 기획 확정 → `BellData`에 효과 필드 추가 + 사용 버튼/`ScoreEffectStep` 연동
-5. 타겟 선택 오버레이 블러 효과 적용 여부 검토 (현재 반투명 딤)
-6. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기존 12장 덱 구상과 이벤트 방울 통합 규칙 확정 후 착수
-7. 보스 잠금/해금·클리어 보상·다음 보스 자동 이동·판 결과 화면 — 기획 확정 후 착수
+1. **GPT 6단계 지시서의 2단계 착수 전 선행 질문 답 필요** (사용자 승인 대기): 윷 4면↔결과 대응 규칙, 개별 윷 면 확률(최초 투척·재투척 동일 여부), 백도·낙 프로토타입 포함 여부. 3~6단계 질문도 지시서 표 참조
+2. 사용자가 에디터에서 신규 UI 제작·연결: `bossSelectPanel` + 소개 텍스트 3종 + '진입' 버튼(→`EnterBossBattle`), '다음 관문' 버튼(→`GoToNextBoss`)을 `nextBossButton`에 연결, `roundProgressText`, `lapCountText`, 보스 선택 버튼(→`SelectBoss1~5`) → Play 테스트
+3. 피버 적용 수식 확정 (×콤보 vs +증가 등) → 확정 시 `ScoreManager.SettleNormalThrow` 피버 단계 한 곳만 수정
+4. 백도·낙 말 이동 규칙 확정 → 확정 시 `SettleThrow` 저주 분기에 추가
+5. 방울 실제 효과 기획 확정 → `BellData`에 효과 필드 추가 + 사용 버튼/`ScoreEffectStep` 연동
+6. 타겟 선택 오버레이 블러 효과 적용 여부 검토 (현재 반투명 딤)
+7. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기존 12장 덱 구상과 이벤트 방울 통합 규칙 확정 후 착수
+8. 보스 잠금/해금·클리어 보상·다음 보스 자동 이동·판 결과 화면 — 기획 확정 후 착수
 
 ## 관련 파일
 
-- `Assets/Scripts/Core/YutGameManager.cs` (게임 로직 — 점수 정산/효과 기록/상태 전환. UI 동적 생성 없음)
-- `Assets/Scenes/SampleScene.unity` (`GameManager` 오브젝트에 매니저 컴포넌트 배치됨)
+- `Assets/Scripts/Core/YutGameManager.cs` — 게임 총괄(상태 전환·흐름·OnClick·직렬화 필드)
+- `Assets/Scripts/Core/` — `YutRollManager.cs`, `BoardManager.cs`, `ScoreManager.cs`, `BossManager.cs`, `BellManager.cs`, `YutBoard.cs`
+- `Assets/Scripts/UI/GameUIManager.cs` — UI 표시·연출
+- `Assets/Scenes/SampleScene.unity` (`Gamemanager` 오브젝트에 `YutGameManager` 컴포넌트 배치됨 — 새 매니저는 POJO라 추가 배치 불필요)
 - `ProjectSettings/ProjectSettings.asset` (`activeInputHandler: 2`)
-- `docs/GAME_DESIGN.md`, `docs/GAME_RULES.md`, `docs/DEVELOPMENT_LOG.md`
+- `docs/ARCHITECTURE.md` (매니저 역할·데이터 소유권), `docs/GAME_DESIGN.md`, `docs/GAME_RULES.md`, `docs/DEVELOPMENT_LOG.md`
 - `AGENTS.md`

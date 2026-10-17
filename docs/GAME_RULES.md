@@ -111,6 +111,12 @@
 
 ## 변경 이력
 
+### [2026-10-18 오전 - GPT 기획 / Devin 구현]
+
+- 코드 구조 변경(규칙 변경 아님): `YutGameManager`의 기능을 책임별 POJO 매니저(`YutRollManager`/`BoardManager`/`ScoreManager`/`BossManager`/`BellManager`/`GameUIManager`)로 분리 — 확률·말판·점수·보스·방울·피버 등 모든 확정 규칙 동일 유지. 구조 상세는 `docs/ARCHITECTURE.md`
+- 씬 테스트값 정정(규칙 변경 아님): `SampleScene.unity`의 `maxThrows` 직렬화값이 테스트용 3이었으나 확정 규칙 5와 불일치 → 5로 수정 (문서상 규칙은 원래 5회)
+- `bossSelectPanel` 미연결 폴백(UX 구조, 규칙 아님): 소개 패널 미연결 시 소개 단계를 건너뛰고 바로 전투 진입 — 패널 연결 시 기존 소개 화면 흐름 사용
+
 ### [2026-10-16 오후 - GPT 기획 / Devin 구현]
 
 - 보스 소개 화면 확정: '다음 관문'(`GoToNextBoss`)은 다음 보스 정보 패널(`BossSelectPanel`: 이름·목표 점수·특수능력)만 표시하고, 전투 진입은 '진입' 버튼(`EnterBossBattle`)에서 수행. 최초 '게임 시작'(`StartGame`)도 같은 패널 경유로 UI 재사용. '다시 도전'(`RetryBoss`)은 소개 없이 즉시 재시작 유지
