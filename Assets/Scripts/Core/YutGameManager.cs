@@ -15,7 +15,7 @@ public enum GameState { Start, TargetSelection, Playing, Cleared, GameOver }
 public class YutGameManager : MonoBehaviour
 {
     [Header("UI Texts")]
-    public Text mainResultText;    // 중앙 결과: 윷 결과 이름만 표시 (전투 중에만 보임)
+    public Text mainResultText;    // 중앙 결과: 윷 결과 이름만 표시 (전투 중에만 보임) 
     public Text basicScoreText;    // 이번 투척 베이직 (숫자만 출력)
     public Text multScoreText;     // 이번 투척 멀티플 (숫자만 출력)
     public Text totalScoreText;    // 누적 총점 (숫자만 출력)
