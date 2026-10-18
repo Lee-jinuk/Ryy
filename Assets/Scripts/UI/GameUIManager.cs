@@ -55,28 +55,11 @@ public class GameUIManager
         }
     }
 
-    private string FeverLabel()
-    {
-        if (gm.feverCombo <= 0)
-        {
-            return "";
-        }
-        if (gm.feverCombo == 1)
-        {
-            return "Hit";
-        }
-        if (gm.feverCombo == 2)
-        {
-            return "피버";
-        }
-        return $"피버{gm.feverCombo}";
-    }
-
     public void UpdateUI()
     {
         if (gm.mainResultText != null)
         {
-            // 윷 결과 이름만 표시 — Start/TargetSelection에서는 오브젝트 자체를 숨긴다
+            // 윷 결과 이름만 표시 — Start에서는 오브젝트 자체를 숨긴다
             bool showResult = gm.currentState == GameState.Playing
                 || gm.currentState == GameState.Cleared
                 || gm.currentState == GameState.GameOver;
@@ -100,6 +83,12 @@ public class GameUIManager
         {
             gm.goalScoreText.text = gm.goalScore.ToString();
         }
+        // 보스 현재 체력 = Max(0, 최대 체력 - 누적 피해). 연출 중에는 표시값 displayTotal을 사용해
+        // '토탈 합산' 단계에서 totalScoreText와 동시에 갱신되고, 종료·스킵 후 실제 체력과 일치한다
+        if (gm.bossCurrentHPText != null)
+        {
+            gm.bossCurrentHPText.text = Mathf.Max(0, gm.goalScore - gm.displayTotal).ToString();
+        }
         if (gm.remainText != null)
         {
             gm.remainText.text = (gm.maxThrows - gm.currentThrows).ToString();
@@ -112,22 +101,13 @@ public class GameUIManager
         {
             gm.throwScoreText.text = gm.throwScore.ToString();
         }
-        if (gm.feverText != null)
-        {
-            gm.feverText.text = FeverLabel();
-        }
-        if (gm.targetYutText != null)
-        {
-            bool targetConfirmed = gm.currentState != GameState.Start && gm.currentState != GameState.TargetSelection;
-            gm.targetYutText.text = targetConfirmed ? YutGameManager.ToKorean(gm.selectedTarget) : "";
-        }
         // 판 진행도 — Start 화면에서는 빈칸, 보스전 진행 중에는 실제 판 번호 표시
         if (gm.roundProgressText != null)
         {
             gm.roundProgressText.text = gm.currentState == GameState.Start ? "" : $"{gm.roundIndex} / {gm.roundsPerBoss}";
         }
 
-        // 말판 UI — 칸 점수·방울 아이콘·완주 횟수 (Start/TargetSelection에서는 갱신 생략)
+        // 말판 UI — 칸 점수·방울 아이콘·완주 횟수 (Start에서는 갱신 생략)
         bool boardActive = gm.currentState == GameState.Playing
             || gm.currentState == GameState.Cleared
             || gm.currentState == GameState.GameOver;

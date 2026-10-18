@@ -6,9 +6,35 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ## [2026-10-18 오전 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-18 오전 변경사항 요약 - GPT 기획 / Devin 구현]
+[2026-10-18 오전 (2차) 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — YutGameManager 책임별 분리 리팩터링 + 1단계 안정화:
+★ 최신 — 보스 현재 체력 표시 + 타겟·피버 시스템 전체 제거 (사용자 승인):
+- 보스 현재 체력: YutGameManager에 `public Text bossCurrentHPText` 추가.
+  표시값 = Max(0, goalScore - displayTotal) — 별도 HP 필드 없이 계산값만 사용.
+  totalScoreText=누적 피해, goalScoreText=최대 체력 유지. 연출 중엔
+  displayTotal 기준이라 '토탈 합산' 단계에서 총점과 동시 갱신 → 정상 연출과
+  스킵의 최종 체력 동일. 새 보스전=최대 체력, 처치 시 0. null-safe.
+  클리어 판정 totalScore >= goalScore 유지
+  ⚠ 사용자 Inspector 연결 필요: Boss Current HP Text (숫자만 출력됨)
+- 타겟·피버 제거: GameState.TargetSelection 삭제 → 보스전 진입·다음 판 시작 시
+  바로 Playing. 삭제된 멤버: selectedTarget, feverCombo, feverCap, feverText,
+  targetYutText, targetSelectOverlay, targetSelectPanel, SelectTargetAndStart,
+  SelectTargetDo~Mo, ConfirmTargetSelection, ThrowSettlement.isTargetHit/
+  feverComboAtRoll, 피버 ScoreEffectStep 기록
+- SelectableTargets → NormalResults 개칭 (YutRollManager의 보스 낙 보정
+  비례 차감 대상 목록 — 타겟과 무관)
+- 모든 결과(일반·저주) 투척 1회 소모. EnterPlaying() 신규 (구 EnterTargetSelection)
+- ResetRound/RetryBoss 유지 (보스전 재시작 — 타겟 함수 아님)
+- 씬 정리: SelectTarget* OnClick 5개 제거 + 삭제 필드의 직렬화 키 정리.
+  TargetSelectOverlay/TargetSelectPanel 오브젝트는 비활성으로 씬에 잔존
+  (사용자가 삭제 여부 결정). 해당 Text/TargetYut 오브젝트도 잔존
+- ⚠ 보고(미수정): 백도 차감 = totalScore 감소 → 보스 체력이 회복처럼 표시됨.
+  규칙 임의 변경 없음
+- 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
+- 스페이스바: Start→StartGame(패널 있으면 EnterBossBattle) / Cleared+패널→진입
+  / 그 외→RollYut
+
+[이전] 2026-10-18 오전(1차) 변경사항 — YutGameManager 책임별 분리 리팩터링 + 1단계 안정화:
 - 스크립트 6개 신설 (전부 일반 C# 클래스, YutGameManager.Awake에서 생성 —
   Inspector/OnClick 연결 영향 없음):
   * Scripts/Core/YutRollManager.cs — 추첨·확률 가중치·보스 낙+2%p·윷 스탯
@@ -238,6 +264,15 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - 현재 브랜치: `develop` (origin: https://github.com/Lee-jinuk/Ryy.git)
 - 코드 구조: `YutGameManager` 총괄 + 책임별 POJO 매니저 6개 — `docs/ARCHITECTURE.md` 참조
 
+### [2026-10-18 오전 (2차) - GPT 기획 / Devin 구현]
+
+- `bossCurrentHPText` 신규 — `Max(0, goalScore - displayTotal)` 계산값 표시 (숫자만, null-safe, 별도 HP 상태 없음)
+- 타겟·피버 시스템 전체 제거: `GameState.TargetSelection`·관련 필드/메서드 삭제, `EnterTargetSelection` → `EnterPlaying`. 모든 결과 투척 1회 소모. `SelectableTargets`→`NormalResults` 개칭
+- 씬: `SelectTarget*` OnClick 5개·삭제 필드 직렬화 키 정리. `TargetSelectOverlay`/`TargetSelectPanel` 오브젝트 비활성 잔존
+- ⚠ 신규 Inspector 연결 필요: `Boss Current HP Text` 필드에 Text 오브젝트 연결
+- 보고(미수정): 백도 차감이 보스 체력 회복처럼 표시됨 — 규칙 미변경
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기
+
 ### [2026-10-18 오전 - GPT 기획 / Devin 구현]
 
 - `YutGameManager` 책임별 분리 리팩터링: `YutRollManager`/`BoardManager`/`ScoreManager`/`BossManager`/`BellManager`/`GameUIManager` 신설 (일반 C# 클래스 — 직렬화 필드·public 메서드는 `YutGameManager`에 유지해 Inspector·OnClick 보존). 규칙 변경 없음
@@ -292,35 +327,34 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 ## 현재 문제점
 
 - ~~`maxThrows = 7` ↔ 확정 규칙 5회 불일치~~ → 해결
-- ~~피버 시스템 채택 여부 미결~~ → 해결 (상한 8 포함 채택, 밸런스 수치는 계속 검토)
+- ~~피버 시스템 채택 여부 미결~~ → 해결 후 **폐기** (2026-10-18 오전, 타겟·피버 전체 제거)
 - ~~`Input.GetKeyDown` 런타임 예외~~ → 해결 (Both 입력 핸들러)
 - ~~`YutGameManager` 씬 미배치 / UI 미연결~~ → 해결 (씬 배치 확인 + 텍스트 필드 연결 유지)
 - **UI 수동 연결 대기 (사용자 작업)** — 2026-10-18 씬 검사 기준 미연결: `bossSelectPanel` + `bossSelectNameText`/`bossSelectGoalText`/`bossSelectAbilityText`(오브젝트 자체가 없음), `roundProgressText`, `lapCountText`, `clearMessageText`, `nextBossButton`, `bellChoicePanel`/`bellOptionNameTexts`/`bellOptionDescTexts`/`bellSlots`/`talismanSlots`(방울 칸 0이라 현재 무관). `EnterBossBattle`/`GoToNextBoss`/`RetryBoss`/`SelectBoss1~5`/`ConfirmTargetSelection`/`ResetRound`/`SkipPresentation`/방울 선택 버튼 OnClick도 없음 — bossSelectPanel 미연결 시 바로 진입 폴백으로 플레이는 가능하지만, 보스 소개·다음 관문 진행·보스 선택은 연결 후에만 사용 가능
-- **블러 미구현**: 타겟 선택 모달 배경은 반투명 딤(Image 알파)만 적용. 실제 블러는 셰이더/패키지 필요로 추후 작업.
+- **블러 미구현**: 타겟 선택 모달 폐기와 함께 해당 UI는 비활성 잔존 — 씬의 `TargetSelectOverlay`/`TargetSelectPanel`/`TargetYut`/`FeverPanel` 오브젝트는 사용자가 삭제 여부 결정
 - **Unity Play 테스트 미수행**: Devin은 에디터 미실행 — dotnet build(0 오류)까지만 검증. 사용자가 Unity에서 컴파일·Play 확인 필요
+- **백도 ↔ 보스 체력 표시 (보고)**: 백도 점수 차감 → `totalScore` 감소 → `bossCurrentHPText`가 체력 회복처럼 표시됨 — 규칙 미변경
 
 ## 미확정 결정 사항 (사용자 승인 필요)
 
-- **피버 적용 수식**: 투척 정산 구조로 "이번 투척 멀티플 ×Min(콤보, 8)"로 이식됨 — 구 기준(전체 누적 배율)과 산출 차이 있음. 확정 또는 대안 수치 필요 (GPT 예시의 '+증가' 방식도 구조는 지원됨)
+- ~~피버 적용 수식~~ → 무효 (2026-10-18 오전 피버 시스템 폐기)
 - 보스 이름·HP(1000~5000)·특수능력 수치(낙 +2%p) — 전부 임시 테스트값, 밸런스 검토 필요. 말판 도입으로 판당 점수 상승 → 목표 점수 밸런스 조정 대상 (임의 변경 안 함)
 - **백도·낙 말 이동 규칙** — 현재 이동 없음으로 구현, 규칙 확정 필요 (역방향 이동·고정 등 기획 대기)
 - **방울 실제 효과·사용 방식** — 현재 획득·표시만 (bellPool은 테스트 더미). 12장 덱 구상과의 통합 규칙 미확정
 - `effectStepDelay` 연출 간격 (테스트값 0.35초), `moveStepDelay` 말 이동 간격 (0.15초), `bellEventTileCount` (프로토타입 2)
-- 비타겟/백도 페널티 수치 감각 (`GAME_RULES.md` 7절 '검토 중')
+- 백도 페널티 수치 감각 (차감량 `backDoPenalty`는 테스트값)
 - 윷 확률 테스트값 확정 여부: 개 32.5%/낙 5% (낙 추가 조정분), `backDoPenalty` 차감량, `bossIndex` 분기 기준 — 전부 테스트값
-- 저주 발생 시 피버 콤보 리셋 여부 (구현은 리셋 — 기획 미명시라 확인 필요)
+- ~~저주 발생 시 피버 콤보 리셋 여부~~ → 무효 (피버 폐기)
 - 방울 개별 능력, 부적 능력, 중단 시스템 상세 — `GAME_RULES.md` 미확정 목록 참조
 
 ## 다음 작업 목표 (제안)
 
 1. **GPT 6단계 지시서의 2단계 착수 전 선행 질문 답 필요** (사용자 승인 대기): 윷 4면↔결과 대응 규칙, 개별 윷 면 확률(최초 투척·재투척 동일 여부), 백도·낙 프로토타입 포함 여부. 3~6단계 질문도 지시서 표 참조
-2. 사용자가 에디터에서 신규 UI 제작·연결: `bossSelectPanel` + 소개 텍스트 3종 + '진입' 버튼(→`EnterBossBattle`), '다음 관문' 버튼(→`GoToNextBoss`)을 `nextBossButton`에 연결, `roundProgressText`, `lapCountText`, 보스 선택 버튼(→`SelectBoss1~5`) → Play 테스트
-3. 피버 적용 수식 확정 (×콤보 vs +증가 등) → 확정 시 `ScoreManager.SettleNormalThrow` 피버 단계 한 곳만 수정
-4. 백도·낙 말 이동 규칙 확정 → 확정 시 `SettleThrow` 저주 분기에 추가
-5. 방울 실제 효과 기획 확정 → `BellData`에 효과 필드 추가 + 사용 버튼/`ScoreEffectStep` 연동
-6. 타겟 선택 오버레이 블러 효과 적용 여부 검토 (현재 반투명 딤)
-7. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기존 12장 덱 구상과 이벤트 방울 통합 규칙 확정 후 착수
-8. 보스 잠금/해금·클리어 보상·다음 보스 자동 이동·판 결과 화면 — 기획 확정 후 착수
+2. 사용자가 에디터에서 신규 UI 제작·연결: `bossSelectPanel` + 소개 텍스트 3종 + '진입' 버튼(→`EnterBossBattle`), '다음 관문' 버튼(→`GoToNextBoss`)을 `nextBossButton`에 연결, `bossCurrentHPText`(보스 현재 체력 Text), `roundProgressText`, `lapCountText`, 보스 선택 버튼(→`SelectBoss1~5`) → Play 테스트. 잔존 오브젝트 정리 선택: `TargetSelectOverlay`/`TargetSelectPanel`/`TargetYut` 텍스트/`FeverPanel`은 삭제해도 무방(코드 미사용)
+3. 백도·낙 말 이동 규칙 확정 → 확정 시 `SettleThrow` 저주 분기에 추가
+4. 방울 실제 효과 기획 확정 → `BellData`에 효과 필드 추가 + 사용 버튼/`ScoreEffectStep` 연동
+5. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기존 12장 덱 구상과 이벤트 방울 통합 규칙 확정 후 착수
+6. 보스 잠금/해금·클리어 보상·다음 보스 자동 이동·판 결과 화면 — 기획 확정 후 착수
 
 ## 관련 파일
 

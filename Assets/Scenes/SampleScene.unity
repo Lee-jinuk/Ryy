@@ -1171,18 +1171,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 856251960}
-        m_TargetAssemblyTypeName: YutGameManager, Assembly-CSharp
-        m_MethodName: SelectTargetDo
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
 --- !u!114 &324959974
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2518,18 +2506,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 856251960}
-        m_TargetAssemblyTypeName: YutGameManager, Assembly-CSharp
-        m_MethodName: SelectTargetGeol
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
 --- !u!114 &537913089
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2727,18 +2703,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 856251960}
-        m_TargetAssemblyTypeName: YutGameManager, Assembly-CSharp
-        m_MethodName: SelectTargetMo
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
 --- !u!114 &566358128
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4126,15 +4090,11 @@ MonoBehaviour:
   goalScoreText: {fileID: 913332287}
   remainText: {fileID: 524216510}
   throwDataText: {fileID: 198260459}
-  targetYutText: {fileID: 833229350}
   throwScoreText: {fileID: 1749334504}
-  feverText: {fileID: 1328682833}
   bossNameText: {fileID: 352799124}
   bossAbilityText: {fileID: 648367525}
   startPanel: {fileID: 254270859}
   gamePanel: {fileID: 768529017}
-  targetSelectOverlay: {fileID: 386738983}
-  targetSelectPanel: {fileID: 164921476}
   clearPanel: {fileID: 681076857}
   gameOverPanel: {fileID: 403242671}
   clearBossNameText: {fileID: 333973519}
@@ -4225,8 +4185,6 @@ MonoBehaviour:
   currentThrows: 0
   roundsPerBoss: 3
   roundIndex: 1
-  feverCombo: 0
-  feverCap: 8
   goalScore: 1000
   roundScore: 0
   basicScore: 0
@@ -4271,17 +4229,14 @@ MonoBehaviour:
     totalMoved: 0
     pieceIndex: -1
     lapCount: 0
-  selectedTarget: 2
   currentState: 0
   currentSettlement:
     result: 0
-    isTargetHit: 0
     baseBasic: 0
     baseMult: 0
     finalBasic: 0
     finalMult: 0
     throwScore: 0
-    feverComboAtRoll: 0
     landingTileIndex: -1
     tileScore: 0
     lapBonus: 0
@@ -6898,18 +6853,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 856251960}
-        m_TargetAssemblyTypeName: YutGameManager, Assembly-CSharp
-        m_MethodName: SelectTargetGae
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
 --- !u!114 &1537465021
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8102,18 +8045,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 856251960}
-        m_TargetAssemblyTypeName: YutGameManager, Assembly-CSharp
-        m_MethodName: SelectTargetYut
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
 --- !u!114 &1834039634
 MonoBehaviour:
   m_ObjectHideFlags: 0

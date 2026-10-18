@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum EffectSourceType { YutResult, Talisman, Bell, Spell, Fever }
+public enum EffectSourceType { YutResult, Talisman, Bell, Spell }
 public enum EffectTarget { Basic, Multiplier }
 public enum EffectOp { Add, Multiply }
 
@@ -26,13 +26,11 @@ public class ScoreEffectStep
 public class ThrowSettlement
 {
     public YutResult result;
-    public bool isTargetHit;
     public int baseBasic;            // 효과 적용 전 초기 베이직 (윷 스탯 기준)
     public int baseMult;             // 효과 적용 전 초기 멀티플
     public int finalBasic;           // 모든 효과 적용 후 베이직
     public int finalMult;            // 모든 효과 적용 후 멀티플
     public int throwScore;           // finalBasic × finalMult — TotalScore에 1회만 합산
-    public int feverComboAtRoll;     // 이 투척 시점의 콤보 횟수
     public int landingTileIndex = -1;    // 말판 도착 칸 (-1 = 이동 없음 — 저주)
     public int tileScore;                // 도착 칸의 점수 (칸 강화 포함)
     public int lapBonus;                 // 이 투척에 적용된 완주 보너스
@@ -57,8 +55,9 @@ public class ScoreManager
         this.gm = gm;
     }
 
-    // 일반 결과(도~모) 투척 정산: 말 이동 → 초기 베이직·멀티플 → 피버 효과 기록 → 점수 확정 → 총점 합산
-    public void SettleNormalThrow(ThrowSettlement settlement, YutResult selected, bool isTarget)
+    // 일반 결과(도~모) 투척 정산: 말 이동 → 초기 베이직·멀티플 → 효과 기록 → 점수 확정 → 총점 합산
+    // 모든 결과(일반·저주)는 투척 1회를 정확히 소모한다
+    public void SettleNormalThrow(ThrowSettlement settlement, YutResult selected)
     {
         // 1) 말 이동 → 도착 칸 점수 + 완주 보너스 + 윷 강화치 = 이번 투척 베이직
         int steps = BoardManager.MoveSteps(selected);
@@ -75,42 +74,22 @@ public class ScoreManager
         settlement.finalBasic = settlement.baseBasic;
         settlement.finalMult = stat.mult;
 
-        // 2) 타겟 적중: 보너스 턴(횟수 차감 없음) + 콤보 증가. 2연속 적중부터 피버 효과 기록
-        if (isTarget)
-        {
-            gm.feverCombo++;
-            settlement.feverComboAtRoll = gm.feverCombo;
-            if (gm.feverCombo >= 2)
-            {
-                int appliedFever = Mathf.Min(gm.feverCombo, gm.feverCap);
-                int before = settlement.finalMult;
-                settlement.finalMult *= appliedFever;
-                AddStep(settlement.steps, EffectSourceType.Fever, "fever",
-                    $"피버 x{appliedFever}", EffectTarget.Multiplier, EffectOp.Multiply,
-                    appliedFever, before, settlement.finalMult);
-            }
-        }
-        else
-        {
-            gm.feverCombo = 0;
-            gm.currentThrows++;
-        }
+        gm.currentThrows++;   // 일반 결과도 투척 1회 소모
 
-        // 3) 향후 부적·방울·주술 효과는 이 지점에서 settlement.steps에 순차 추가된다
+        // 2) 향후 부적·방울·주술 효과는 이 지점에서 settlement.steps에 순차 추가된다
 
-        // 4) 이번 투척 점수 확정 + 이번 판 점수·보스전 총점 1회 합산
+        // 3) 이번 투척 점수 확정 + 이번 판 점수·보스전 총점 1회 합산
         //    표시용 throwScore 필드는 여기서 갱신하지 않는다 — '투척 점수 표시' 단계에서만 보인다
         settlement.throwScore = settlement.finalBasic * settlement.finalMult;
         gm.roundScore += settlement.throwScore;
         gm.totalScore += settlement.throwScore;
 
-        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | Target: {isTarget} | {settlement.finalBasic} x {settlement.finalMult} = {settlement.throwScore} | Fever: {gm.feverCombo} | Throws: {gm.currentThrows}/{gm.maxThrows} | Round: {gm.roundScore} | Total: {gm.totalScore}");
+        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x {settlement.finalMult} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Round: {gm.roundScore} | Total: {gm.totalScore}");
     }
 
-    // 저주 계열 결과 처리: 백도와 낙은 별개 결과이며 둘 다 투척 1회 소모 + 콤보 단절
+    // 저주 계열 결과 처리: 백도와 낙은 별개 결과이며 둘 다 투척 1회 소모
     public void HandleCurseResult(YutResult result)
     {
-        gm.feverCombo = 0;
         gm.currentThrows++;
 
         if (result == YutResult.BackDo)

@@ -24,6 +24,17 @@
 - OnClick 검증: `SelectTarget*` 5종·`RollYut`·`StartGame`·`BackToBossSelect`×2 연결 확인 — 리팩터링 후에도 호환. `EnterBossBattle`/`GoToNextBoss`/`RetryBoss`/`SelectBoss*`를 호출하는 버튼은 씬에 아직 없음 → 다음 관문 수동 진행·보스 선택은 UI 연결 후 사용 가능 (폴백으로 플레이 진입은 가능)
 - 검증: `dotnet build Assembly-CSharp.csproj` 오류 0·경고 0. Devin 에디터 미실행 — Play 테스트는 사용자 확인 필요
 
+### [2026-10-18 오전 (2차) - GPT 기획 / Devin 구현]
+
+**보스 현재 체력 표시 + 타겟·피버 시스템 제거** (사용자 승인 변경):
+
+- `bossCurrentHPText` 신규 필드 — 보스 현재 체력 = `Max(0, goalScore - displayTotal)` (숫자만, null-safe). 별도 HP 상태 필드 없이 계산값만 표시. `goalScoreText`=최대 체력, `totalScoreText`=누적 피해 유지. 연출 중엔 `displayTotal` 기준이라 '토탈 합산' 단계에서 총점과 동시 갱신 → 정상 연출과 스킵의 최종 체력 동일. 새 보스전 시작 시 최대 체력, 처치 시 0. 클리어 판정 `totalScore >= goalScore` 유지
+- 타겟·피버 제거: `GameState.TargetSelection` 삭제 — 보스전 진입·다음 판 시작 시 바로 `Playing` (`EnterTargetSelection` → `EnterPlaying`). `selectedTarget`/`feverCombo`/`feverCap`/`feverText`/`targetYutText`/`targetSelectOverlay`/`targetSelectPanel` 필드와 `SelectTargetAndStart`/`SelectTargetDo~Mo`/`ConfirmTargetSelection` 메서드 제거. `SelectableTargets` → `NormalResults` 개칭(`YutRollManager` 보스 낙 보정의 비례 차감 대상으로 계속 사용). `ThrowSettlement.isTargetHit`/`feverComboAtRoll` 및 피버 `ScoreEffectStep` 제거. 일반·저주 결과 모두 투척 1회 소모
+- `ResetRound`/`RetryBoss`는 보스전 재시작 기능으로 유지 (타겟 함수 아님)
+- 씬 정리: `SelectTarget*` OnClick 5개 제거 + 삭제된 필드의 직렬화 키 정리. `TargetSelectOverlay`/`TargetSelectPanel` 오브젝트는 비활성 상태로 씬에 남아 있음 (삭제 여부 사용자 결정)
+- **보고(미수정)**: 백도 점수 차감 → `totalScore` 감소 → 보스 현재 체력이 회복처럼 표시됨. 규칙 임의 변경 없음
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기
+
 ### [2026-10-14 오전 - Gemini & Devin 작업분]
 
 - `ProjectSettings/ProjectSettings.asset`: `activeInputHandler` 1→2 (Both) 변경 — `Input.GetKeyDown` 런타임 예외 해결
@@ -179,13 +190,14 @@
 - 책임별 매니저 분리 (2026-10-18): `YutGameManager`(총괄·OnClick·직렬화 필드) + POJO 매니저 `YutRollManager`/`BoardManager`/`ScoreManager`/`BossManager`/`BellManager`/`GameUIManager` — 역할·데이터 소유권은 `docs/ARCHITECTURE.md`
 - `YutResult` enum 7종 (BackDo + Nak 포함, 2026-10-14 오후 확장)
 - 인스펙터 편집 확률 리스트 `baseProbabilities` → 런타임 `runtimeWeights` 분리 구조 (테스트값: 백도 6.25 / 도 18.75 / 개 32.5 / 걸 25 / 윷 6.25 / 모 6.25 / 낙 5 %)
-- 단일 타겟 선택: `selectedTarget`, `GameState { TargetSelection, Playing, RoundEnd }`
+- 보스 현재 체력 표시: `bossCurrentHPText` = `Max(0, goalScore - displayTotal)` (2026-10-18)
+- ~~단일 타겟 선택·피버 콤보~~ → 폐기 (2026-10-18 오전, 사용자 승인으로 타겟·피버 시스템 전체 제거 — `GameState.TargetSelection` 삭제, 모든 결과 투척 1회 소모)
 - 18칸 원형 말판(`YutBoard`/`BoardTile` — `YutBoard.cs` 분리): 10~180 무작위 배치(보스전 시작 시), 윷별 1~5칸 이동, 도착 칸 점수=베이직, 완주 ×10 보너스, 말 이동 연출(`moveStepDelay`)
 - 방울 이벤트: 방울 칸 착지 → 3개 제시 → 1개 선택 → 판 한정 `ownedBells` + `bellSlots` 표시 (실제 효과 미구현)
 - 투척별 독립 정산: `ThrowScore = BasicScore × Multiplier` → `TotalScore` 1회 합산 (투척 임시값 매 투척 초기화)
 - 윷 스탯: 멀티플 도×2~모×6 + `basicBonus`(칸 점수에 가산되는 윷별 강화치, 기본 0) — `baseYutStats` → 런타임 `yutStats` + `UpgradeYutStat()` 영구 강화 API
 - 효과 단계 기록·재생: `ScoreEffectStep`/`ThrowSettlement` — 부적·방울·주술·피버 순차 발동 연출 구조 (정산 확정 후 코루틴 재생, 스킵 가능)
-- 피버 콤보: 타겟 적중 시 `feverCombo++`, 2연속부터 이번 투척 멀티플 ×Min(콤보, 8) — 피버 단계로 기록 (이식 수식, 확정 검토 필요)
+- ~~피버 콤보: 타겟 적중 시 `feverCombo++`, 2연속부터 이번 투척 멀티플 ×Min(콤보, 8)~~ → 폐기 (2026-10-18 오전)
 - 보스전 구조: `BossData` 5명(임시)/보스 선택(`SelectBoss1~5`)/목표=보스 HP/낙 +2%p 특수능력(비례 차감·백도 불변·중복 없음)/관문당 3판(`roundsPerBoss`)×판당 5회/`roundScore` 판별 누적(백도 범위)/`Cleared`·`GameOver` 상태 + 클리어·게임오버 패널 + `RetryBoss`/`BackToBossSelect`
 - 보스 UI 연결 필드: `bossNameText`/`bossAbilityText` (HP 텍스트·체력바 필드는 목표 점수 관문 전환으로 제거됨)
 - 관문 진행: `GoToNextBoss()`(클리어 패널 '다음 관문' 버튼) → 보스 소개 패널 → `EnterBossBattle()`('진입' 버튼)으로 보스 1→5 수동 진행, 보스 5 클리어 시 `nextBossButton` 숨김 + `clearMessageText` "최종 클리어"
@@ -203,9 +215,10 @@
 `GAME_RULES.md` 기준으로 코드와 충돌하는 항목. 규칙상 임의로 수정하지 않고 보고한다.
 
 - **투척 횟수**: ~~코드 `maxThrows = 7` ↔ 확정 규칙 5회~~ → 해결 (2026-10-14 오전, 코드·씬 모두 5로 수정). ~~씬 직렬화값이 테스트용 3으로 되돌아가 있던 것~~ → 해결 (2026-10-18 오전, 씬 3→5)
-- **타겟/피버 시스템**: 사용자 승인으로 채택 확정 + 피버 배수 상한 8 적용 (2026-10-14 오전). 밸런스 수치는 계속 검토 대상.
+- **타겟/피버 시스템**: ~~채택 확정 (2026-10-14 오전)~~ → **폐기** (2026-10-18 오전, 사용자 승인으로 코드·규칙에서 전체 제거)
 - **점수·배율·목표 점수**: ~~전부 미확정 규칙이나 코드에 임의값으로 구현됨 (도10~모50, 배수+1~+5, 목표 1000)~~ → 투척 정산 구조·윷 스탯 확정 (2026-10-14 오후, GPT 기획). 목표 1000은 여전히 테스트값.
-- **피버 적용식**: 구 기준 '전체 누적 배율 ×콤보' → 투척 정산 구조로 '이번 투척 멀티플 ×Min(콤보,8)' 이식 — 산출 차이 있어 확정 필요.
+- **피버 적용식**: ~~이식식 산출 차이 — 확정 필요~~ → 무효 (2026-10-18 오전, 피버 시스템 폐기)
+- **백도 ↔ 보스 체력 표시**: 백도 차감은 `totalScore` 감소로 이어져 `bossCurrentHPText`상 체력 회복처럼 표시됨 — 규칙 미변경, 보고만 (2026-10-18 오전)
 - **`Update()` 입력**: ~~`activeInputHandler: 1` 환경에서 `Input.GetKeyDown` 런타임 예외~~ → 해결 (2026-10-14 오전, `activeInputHandler: 2` Both로 변경)
 
 ## 미구현 기능
@@ -234,3 +247,4 @@
 | 2026-10-15 | 보스 클리어 후 다음 관문 진행 — `GoToNextBoss()` + `nextBossButton`/`clearMessageText` 필드, 보스 5 클리어 = 최종 클리어 | GPT 기획 / Devin 구현. 초기화는 기존 BeginBossFight 재사용 |
 | 2026-10-16 오후 | 보스 소개 화면(`bossSelectPanel`+텍스트 3종, `EnterBossBattle`), 게임오버 런 전체 초기화(`ResetRunState`/`RestartRun`), 판 번호 표시(`roundProgressText`) | GPT 기획 / Devin 구현. `StartGame`은 소개 화면 표시로 변경, `RetryBoss` 직행 유지 |
 | 2026-10-18 오전 | `YutGameManager` 책임별 분리 — POJO 매니저 6개(`YutRollManager`/`BoardManager`/`ScoreManager`/`BossManager`/`BellManager`/`GameUIManager`), 직렬화 필드·public 메서드 전부 유지. `BuildYutStats` 원본 공유 버그 수정, 씬 `maxThrows` 3→5, 보스 소개 패널 미연결 시 바로 진입 폴백 | GPT 기획 / Devin 구현. 규칙 변경 없음, dotnet build 0오류. 매니저 구조는 `docs/ARCHITECTURE.md` |
+| 2026-10-18 오전 | 보스 현재 체력 표시(`bossCurrentHPText` = 목표−누적 피해 계산값), 타겟·피버 시스템 전체 제거(타겟 선택 단계 폐지, 모든 결과 투척 1회 소모), 씬 OnClick·직렬화 키 정리 | GPT 기획 / Devin 구현. dotnet build 0오류, Unity Play 검증 대기 |

@@ -80,7 +80,7 @@ public class YutRollManager
         runtimeWeights[YutResult.Nak] += bonus;
 
         float normalSum = 0f;
-        foreach (YutResult result in YutGameManager.SelectableTargets)
+        foreach (YutResult result in YutGameManager.NormalResults)
         {
             normalSum += runtimeWeights[result];
         }
@@ -88,7 +88,7 @@ public class YutRollManager
         {
             return;
         }
-        foreach (YutResult result in YutGameManager.SelectableTargets)
+        foreach (YutResult result in YutGameManager.NormalResults)
         {
             float share = runtimeWeights[result] / normalSum;
             runtimeWeights[result] = Mathf.Max(0f, runtimeWeights[result] - bonus * share);

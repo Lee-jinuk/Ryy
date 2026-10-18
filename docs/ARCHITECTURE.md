@@ -17,7 +17,7 @@
 | `YutRollManager.cs` | Scripts/Core | 윷 추첨·확률·윷 스탯 (`YutProbabilityEntry`, `YutStatEntry` 타입 정의 포함) |
 | `BoardManager.cs` | Scripts/Core | 말판 배치·말 이동 연출·말판 UI 갱신 |
 | `YutBoard.cs` | Scripts/Core | 말판 데이터 (`YutBoard`, `BoardTile`, `BellData` — UI 참조 없는 순수 데이터) |
-| `ScoreManager.cs` | Scripts/Core | 점수 정산·피버·저주 처리 (`ScoreEffectStep`, `ThrowSettlement`, `EffectSourceType/Target/Op` 타입 정의 포함) |
+| `ScoreManager.cs` | Scripts/Core | 점수 정산·저주 처리 (`ScoreEffectStep`, `ThrowSettlement`, `EffectSourceType/Target/Op` 타입 정의 포함) |
 | `BossManager.cs` | Scripts/Core | 보스 데이터 접근·보스 선택·보스 소개 화면 정보 (`BossData` 타입 정의 포함) |
 | `BellManager.cs` | Scripts/Core | 방울 이벤트 — 후보 3개 제시·선택·보유·초기화 |
 | `GameUIManager.cs` | Scripts/UI | 텍스트 갱신·패널 토글·정산 연출 코루틴 (규칙 계산 없음) |
@@ -29,7 +29,7 @@
 | 런타임 확률 가중치 `runtimeWeights` | YutRollManager | YutRollManager (`BuildWeights`/`ApplyBossAbility`/`ModifyProbability`) |
 | 런타임 윷 스탯 `yutStats` | YutRollManager | YutRollManager (`BuildYutStats` — 기본값을 **새 객체로 복사**, `UpgradeYutStat`) |
 | 말 위치·완주·칸 데이터 `board` | YutGameManager.board (Inspector 노출) | YutBoard.MovePiece(데이터 이동) / BoardManager(배치·초기화·시각 위치) |
-| 점수 상태 `roundScore`/`totalScore`/`feverCombo`/`currentThrows` | YutGameManager (Inspector 노출) | ScoreManager만 |
+| 점수 상태 `roundScore`/`totalScore`/`currentThrows` | YutGameManager (Inspector 노출) | ScoreManager만 |
 | 표시용 임시값 `basicScore`/`multiplier`/`throwScore`/`displayTotal` | YutGameManager | YutGameManager(투척 시작 초기화) / GameUIManager(연출 재생) |
 | 보스 선택 `selectedBossIndex`/`pendingBossIndex` | gm 필드 / BossManager | BossManager |
 | 방울 상태 `isChoosingBell`/`currentBellOptions`/`ownedBells` | BellManager / gm(ownedBells) | BellManager |
@@ -38,7 +38,7 @@
 
 ## 상태·흐름 요약
 
-`Start → (StartGame → 보스 소개) → EnterBossBattle → TargetSelection → Playing → Cleared/GameOver`
+`Start → (StartGame → 보스 소개) → EnterBossBattle → Playing → Cleared/GameOver`
 
 - `RollYut()` = `DrawYut`(Roll) → `SettleNormalThrow`/`HandleCurseResult`(Score) → `ThrowSettlement` 확정 → `PresentSettlement`(UI) → `FinishSettlement`에서 판/보스 판정
 - 클리어 판정 `totalScore >= goalScore` / 3판 소진 미달 `EnterGameOver` / 다음 판 `AdvanceToNextRound`
@@ -46,7 +46,7 @@
 
 ## 버튼 OnClick 공용 메서드 (전부 `YutGameManager`에 유지)
 
-`StartGame`, `SelectBoss1~5`/`SelectBoss(int)`, `EnterBossBattle`, `RetryBoss`, `GoToNextBoss`, `RestartRun`, `BackToBossSelect`, `ResetRound`, `SelectTargetDo~Mo`/`SelectTargetAndStart(int)`, `ConfirmTargetSelection`, `RollYut`, `SkipPresentation`, `SelectBellOption(1~3)`, `ConfirmBellChoice`, `SelectBellAndConfirm(1~3)`, `ModifyProbability`, `ResetProbabilities`, `UpgradeYutStat`
+`StartGame`, `SelectBoss1~5`/`SelectBoss(int)`, `EnterBossBattle`, `RetryBoss`, `GoToNextBoss`, `RestartRun`, `BackToBossSelect`, `ResetRound`, `RollYut`, `SkipPresentation`, `SelectBellOption(1~3)`, `ConfirmBellChoice`, `SelectBellAndConfirm(1~3)`, `ModifyProbability`, `ResetProbabilities`, `UpgradeYutStat`
 
 ## 새 기능 추가 시 배치 기준
 

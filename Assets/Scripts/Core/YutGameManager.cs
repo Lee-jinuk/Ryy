@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 public enum YutResult { BackDo, Do, Gae, Geol, Yut, Mo, Nak }
 
-public enum GameState { Start, TargetSelection, Playing, Cleared, GameOver }
+public enum GameState { Start, Playing, Cleared, GameOver }
 
 // 게임 총괄 — 게임 시작/종료, 전체 상태 전환, 시스템 간 실행 순서 조정,
 // 투척부터 점수 정산까지의 흐름 제어, Unity Button OnClick 진입점 유지
@@ -22,22 +22,19 @@ public class YutGameManager : MonoBehaviour
     public Text goalScoreText;     // 목표 점수 = 보스 최대 HP (숫자만 출력)
     public Text remainText;        // 남은 투척 기회 (숫자만 출력)
     public Text throwDataText;     // 전체 투척 기회 (숫자만 출력)
-    public Text targetYutText;     // 선택된 타겟 윷 이름 (선택 전 빈 문자열)
     public Text throwScoreText;    // 이번 투척 확정 점수 (숫자만 출력)
-    public Text feverText;         // 피버 상태 (빈칸 / Hit / 피버 / 피버N)
     public Text roundProgressText; // 판 진행도 "현재 판 / 전체 판" (예: 1 / 3)
 
     [Header("Boss UI")]
     public Text bossNameText;        // 보스 이름
     public Text bossAbilityText;     // 보스 특수능력 설명
-    // 보스는 HP를 깎는 적이 아니라 목표 점수 관문 — 체력바/HP 텍스트는 사용하지 않음
-    // (잔여 수치는 goalScoreText(목표)와 totalScoreText(누적)로 확인)
+    public Text bossCurrentHPText;   // 보스 현재 체력 = Max(0, goalScore - 누적 피해) (숫자만 출력)
+    // 보스 체력은 별도 HP 필드를 두지 않고 goalScore - totalScore로 계산한다.
+    // totalScoreText = 보스에게 준 누적 피해, goalScoreText = 보스 최대 체력.
 
     [Header("Panels")]
     public GameObject startPanel;            // '게임 시작' + 보스 선택이 있는 첫 화면
-    public GameObject gamePanel;             // 메인 게임 화면 (타겟 선택 모달 뒤에 표시)
-    public GameObject targetSelectOverlay;   // 딤 배경 + 뒤쪽 입력 차단 오버레이 (TargetSelectPanel의 부모 권장)
-    public GameObject targetSelectPanel;     // 중앙 타겟 선택 팝업 (overlay 자식 — 미연결도 동작)
+    public GameObject gamePanel;             // 메인 게임 화면
     public GameObject clearPanel;            // 보스 클리어 패널
     public GameObject gameOverPanel;         // 게임오버 패널
     public GameObject bossSelectPanel;       // 보스 소개/진입 패널 — 최초 선택과 클리어 후 다음 보스 소개에 공용 사용
@@ -102,8 +99,6 @@ public class YutGameManager : MonoBehaviour
     public int currentThrows = 0;
     public int roundsPerBoss = 3;    // 관문(보스전)당 판 수 — 3판 내 목표 미달 시 게임오버
     public int roundIndex = 1;       // 현재 판 (1부터 시작)
-    public int feverCombo = 0;
-    public int feverCap = 8;
     public int goalScore = 1000;     // 현재 보스 목표 점수 = 보스 최대 HP
     public int roundScore = 0;       // 이번 판 누적 점수 — 백도 차감 범위 (이전 판 확정분 불침범)
 
@@ -146,9 +141,6 @@ public class YutGameManager : MonoBehaviour
     // 원형 말판 — 보스전 시작 시 재구축, 같은 보스전 3판 동안 유지
     public YutBoard board = new YutBoard();
 
-    [Header("Target")]
-    public YutResult selectedTarget = YutResult.Gae;
-
     public GameState currentState = GameState.Start;
 
     // 최근 투척 정산 데이터 — 디버그 인스펙터 노출 + 향후 연출/UI 코드가 읽는다
@@ -169,9 +161,8 @@ public class YutGameManager : MonoBehaviour
     internal bool isPresenting;
     internal Coroutine activePresentation;
 
-    // SelectTargetAndStart(int) 인덱스 ↔ 결과 매핑: 0=도 1=개 2=걸 3=윷 4=모
-    // 타겟 선택은 일반 결과 5종만 허용 (백도·낙 등 저주 계열 제외)
-    internal static readonly YutResult[] SelectableTargets =
+    // 일반 결과 5종 — 저주(백도·낙) 제외. 보스 특수능력의 비례 차감 대상 등에 사용
+    internal static readonly YutResult[] NormalResults =
         { YutResult.Do, YutResult.Gae, YutResult.Geol, YutResult.Yut, YutResult.Mo };
 
     // 저주(Curse) 계열 판별 — 부적/방울/주술이 이 함수로 저주 결과를 구분한다
@@ -233,7 +224,7 @@ public class YutGameManager : MonoBehaviour
     private void StartBossBattle()
     {
         BeginBossFight();
-        EnterTargetSelection();
+        EnterPlaying();
     }
 
     // 클리어·게임오버 화면의 '다시 도전' 버튼 — 소개 없이 같은 보스로 즉시 재시작
@@ -267,8 +258,6 @@ public class YutGameManager : MonoBehaviour
         GameUIManager.SetPanel(gameOverPanel, false);
         GameUIManager.SetPanel(bellChoicePanel, false);
         GameUIManager.SetPanel(bossSelectPanel, false);
-        GameUIManager.SetPanel(targetSelectOverlay, false);
-        GameUIManager.SetPanel(targetSelectPanel, false);
         GameUIManager.SetPanel(gamePanel, false);
         GameUIManager.SetPanel(startPanel, true);
         currentState = GameState.Start;
@@ -277,40 +266,6 @@ public class YutGameManager : MonoBehaviour
 
     // 라운드 리셋 버튼: 현재 보스전을 처음(1판)부터 다시 시작한다
     public void ResetRound() => RetryBoss();
-
-    // 타겟 선택 버튼(int): yutIndex 0=도 1=개 2=걸 3=윷 4=모
-    public void SelectTargetAndStart(int yutIndex)
-    {
-        if (yutIndex < 0 || yutIndex >= SelectableTargets.Length)
-        {
-            Debug.LogWarning($"SelectTargetAndStart: 잘못된 인덱스 {yutIndex} (0~4)");
-            return;
-        }
-        selectedTarget = SelectableTargets[yutIndex];
-        ConfirmTargetSelection();
-    }
-
-    // 타겟 선택 버튼(개별): 인스펙터에서 파라미터 없이 바로 연결 가능
-    public void SelectTargetDo() => SelectTargetAndStart(0);
-    public void SelectTargetGae() => SelectTargetAndStart(1);
-    public void SelectTargetGeol() => SelectTargetAndStart(2);
-    public void SelectTargetYut() => SelectTargetAndStart(3);
-    public void SelectTargetMo() => SelectTargetAndStart(4);
-
-    // 타겟 선택 확정: 타겟 선택 화면을 끄고 본 게임 시작
-    public void ConfirmTargetSelection()
-    {
-        if (currentState != GameState.TargetSelection)
-        {
-            return;
-        }
-        GameUIManager.SetPanel(targetSelectOverlay, false);
-        GameUIManager.SetPanel(targetSelectPanel, false);
-        hasRolled = false;
-        currentState = GameState.Playing;
-        Debug.Log($"--- 타겟 선택: {ToKorean(selectedTarget)} ---");
-        uiManager.UpdateUI();
-    }
 
     // '윷 던지기' 버튼 — 정산은 즉시 확정되고, 화면 연출은 정산 데이터를 그대로 재생한다
     public void RollYut()
@@ -399,8 +354,6 @@ public class YutGameManager : MonoBehaviour
         WarnIfPanelNested();
         GameUIManager.SetPanel(startPanel, true);
         GameUIManager.SetPanel(gamePanel, false);
-        GameUIManager.SetPanel(targetSelectOverlay, false);
-        GameUIManager.SetPanel(targetSelectPanel, false);
         GameUIManager.SetPanel(clearPanel, false);
         GameUIManager.SetPanel(gameOverPanel, false);
         GameUIManager.SetPanel(bossSelectPanel, false);
@@ -420,7 +373,6 @@ public class YutGameManager : MonoBehaviour
         basicScore = 0;
         multiplier = 0;
         throwScore = 0;
-        feverCombo = 0;
         hasRolled = false;
         currentSettlement = null;
         bellManager.ResetForNewRun();
@@ -434,36 +386,33 @@ public class YutGameManager : MonoBehaviour
         Debug.Log($"--- 보스전 시작: {boss?.bossName} | 목표 {goalScore} | {roundsPerBoss}판 x {maxThrows}회 ---");
     }
 
-    // 타겟 선택 화면 진입 — 패널 전환 공통 처리
-    private void EnterTargetSelection()
+    // 본 게임 진입 — 패널 전환 공통 처리 (보스전 진입·다음 판 공용)
+    private void EnterPlaying()
     {
         GameUIManager.SetPanel(gamePanel, true);
-        GameUIManager.ActivatePanel(targetSelectOverlay, nameof(targetSelectOverlay));
-        GameUIManager.SetPanel(targetSelectPanel, true);
         GameUIManager.SetPanel(startPanel, false);
         GameUIManager.SetPanel(clearPanel, false);
         GameUIManager.SetPanel(gameOverPanel, false);
         GameUIManager.SetPanel(bossSelectPanel, false);
         GameUIManager.SetPanel(bellChoicePanel, false);
         bellManager.isChoosingBell = false;
-        currentState = GameState.TargetSelection;
+        hasRolled = false;
+        currentState = GameState.Playing;
         uiManager.UpdateUI();
     }
 
-    // 다음 판 진행 — 누적 총점은 유지, 판 단위 카운터만 초기화 후 타겟 재선택
+    // 다음 판 진행 — 누적 총점은 유지, 판 단위 카운터만 초기화 후 바로 투척 가능 상태로
     private void AdvanceToNextRound()
     {
         roundIndex++;
         currentThrows = 0;
         roundScore = 0;
-        feverCombo = 0;
-        hasRolled = false;
         basicScore = 0;
         multiplier = 0;
         throwScore = 0;
         bellManager.ResetForNextRound();   // 임시 방울 소멸 + 방울 칸 판당 발동 제한 리셋
         Debug.Log($"--- {roundIndex}판 시작 | 누적 총점 {totalScore} / 목표 {goalScore} ---");
-        EnterTargetSelection();
+        EnterPlaying();
     }
 
     // 보스 클리어: TotalScore >= GoalScore
@@ -472,8 +421,6 @@ public class YutGameManager : MonoBehaviour
         currentState = GameState.Cleared;
         bellManager.isChoosingBell = false;
         GameUIManager.SetPanel(gameOverPanel, false);            // 클리어/게임오버 동시 표시 방지
-        GameUIManager.SetPanel(targetSelectOverlay, false);
-        GameUIManager.SetPanel(targetSelectPanel, false);
         GameUIManager.SetPanel(bellChoicePanel, false);
         GameUIManager.ActivatePanel(clearPanel, nameof(clearPanel));
         // 다음 관문 버튼: 마지막 보스 클리어(최종 클리어)면 숨기고 메시지 표시
@@ -493,8 +440,6 @@ public class YutGameManager : MonoBehaviour
         currentState = GameState.GameOver;
         bellManager.isChoosingBell = false;
         GameUIManager.SetPanel(clearPanel, false);
-        GameUIManager.SetPanel(targetSelectOverlay, false);
-        GameUIManager.SetPanel(targetSelectPanel, false);
         GameUIManager.SetPanel(bellChoicePanel, false);
         GameUIManager.ActivatePanel(gameOverPanel, nameof(gameOverPanel));
         uiManager.UpdateUI();
@@ -521,13 +466,10 @@ public class YutGameManager : MonoBehaviour
         throwScore = 0;
 
         YutResult selected = rollManager.DrawYut();
-        bool isTarget = selected == selectedTarget;
 
         ThrowSettlement settlement = new ThrowSettlement
         {
             result = selected,
-            isTargetHit = isTarget,
-            feverComboAtRoll = feverCombo,
         };
 
         if (IsCurse(selected))
@@ -538,7 +480,7 @@ public class YutGameManager : MonoBehaviour
             return settlement;
         }
 
-        scoreManager.SettleNormalThrow(settlement, selected, isTarget);
+        scoreManager.SettleNormalThrow(settlement, selected);
         return settlement;
     }
 
@@ -596,7 +538,6 @@ public class YutGameManager : MonoBehaviour
         hasRolled = false;                   // 이전 윷 결과 표시용 데이터
         currentSettlement = null;
         scoreManager.lastBackDoLoss = 0;
-        feverCombo = 0;
         currentThrows = 0;
         roundIndex = 1;
         roundScore = 0;
@@ -618,14 +559,6 @@ public class YutGameManager : MonoBehaviour
         if (startPanel == null)
         {
             return;
-        }
-        if (targetSelectOverlay != null && targetSelectOverlay.transform.IsChildOf(startPanel.transform))
-        {
-            Debug.LogWarning("[YutGameManager] targetSelectOverlay가 startPanel의 자식(또는 같은 오브젝트)입니다. startPanel이 꺼지면 함께 숨겨지니 Canvas 바로 아래로 분리하세요.", targetSelectOverlay);
-        }
-        if (targetSelectPanel != null && targetSelectPanel.transform.IsChildOf(startPanel.transform))
-        {
-            Debug.LogWarning("[YutGameManager] targetSelectPanel이 startPanel의 자식(또는 같은 오브젝트)입니다. startPanel이 꺼지면 함께 숨겨지니 Canvas 바로 아래로 분리하세요.", targetSelectPanel);
         }
         if (bossSelectPanel != null && clearPanel != null && bossSelectPanel.transform.IsChildOf(clearPanel.transform))
         {
@@ -658,10 +591,6 @@ public class YutGameManager : MonoBehaviour
             else if (currentState == GameState.Cleared && bossSelectPanel != null && bossSelectPanel.activeSelf)
             {
                 EnterBossBattle();
-            }
-            else if (currentState == GameState.TargetSelection)
-            {
-                ConfirmTargetSelection();
             }
             else
             {
