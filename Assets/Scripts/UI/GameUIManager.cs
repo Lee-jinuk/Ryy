@@ -53,6 +53,11 @@ public class GameUIManager
         {
             gm.bossSelectAbilityText.text = boss.abilityDescription;
         }
+        // 소개 중인 보스(pendingBossIndex) 상성 — 이미 생성된 런 고정 데이터 재사용, 건너뛰기 시 다음 보스 값으로 갱신
+        if (gm.bossSelectAffinityText != null)
+        {
+            gm.bossSelectAffinityText.text = gm.bossManager.BuildAffinityText(gm.bossManager.pendingBossIndex);
+        }
     }
 
     public void UpdateUI()
@@ -101,11 +106,48 @@ public class GameUIManager
         {
             gm.throwScoreText.text = gm.throwScore.ToString();
         }
-        // 판 진행도 — Start 화면에서는 빈칸, 보스전 진행 중에는 실제 판 번호 표시
-        if (gm.roundProgressText != null)
+
+        // 윷 4개 투척 세션 UI — 면 표시, 재투척 버튼 활성, 상태창, 남은 재투척, 확정 버튼
+        YutThrowSession session = gm.rollManager.session;
+        bool sessionActive = session != null && session.Active;
+        bool throwInputOpen = sessionActive && !gm.isPresenting && !gm.bellManager.isChoosingBell;
+        for (int i = 0; i < YutThrowSession.StickCount; i++)
         {
-            gm.roundProgressText.text = gm.currentState == GameState.Start ? "" : $"{gm.roundIndex} / {gm.roundsPerBoss}";
+            if (i < gm.stickFaceTexts.Length && gm.stickFaceTexts[i] != null)
+            {
+                gm.stickFaceTexts[i].text = session != null
+                    ? (session.frontUp[i] ? "앞" : "뒤")
+                    : "";
+            }
+            if (i < gm.rerollButtons.Length && gm.rerollButtons[i] != null)
+            {
+                gm.rerollButtons[i].interactable = throwInputOpen && session.CanReroll(i);
+            }
         }
+        if (gm.throwStatusText != null)
+        {
+            if (session == null)
+            {
+                gm.throwStatusText.text = "";
+            }
+            else if (session.Active)
+            {
+                gm.throwStatusText.text = $"현재 결과: {YutGameManager.ToKorean(session.CurrentResult)} / 재투척 가능: {session.RemainingRerolls}";
+            }
+            else
+            {
+                gm.throwStatusText.text = $"확정 결과: {YutGameManager.ToKorean(session.CurrentResult)}";
+            }
+        }
+        if (gm.rerollRemainText != null)
+        {
+            gm.rerollRemainText.text = session != null ? session.RemainingRerolls.ToString() : "";
+        }
+        if (gm.confirmThrowButton != null)
+        {
+            gm.confirmThrowButton.interactable = throwInputOpen;
+        }
+        // 판 진행도 표시는 라운드 구조 폐지와 함께 제거됨
 
         // 말판 UI — 칸 점수·방울 아이콘·완주 횟수 (Start에서는 갱신 생략)
         bool boardActive = gm.currentState == GameState.Playing
@@ -152,6 +194,12 @@ public class GameUIManager
             }
         }
 
+        // 착지 칸 정보 — "불 - 50점" (상성·윷 배율 적용 전 칸 기본점수). 새 보스전·새 런에서 비워진다
+        if (gm.landingTileText != null)
+        {
+            gm.landingTileText.text = gm.landingTileInfo;
+        }
+
         // 보스 정보 — 이름·특수능력만 표시 (HP 바 없음: 보스는 목표 점수 관문)
         BossData boss = gm.bossManager.CurrentBoss;
         if (boss != null)
@@ -188,8 +236,17 @@ public class GameUIManager
             }
         }
 
-        // 던지기 버튼은 Playing 상태에서만, 그리고 연출·방울 선택 중에는 숨긴다
-        SetPanel(gm.rollButton, gm.currentState == GameState.Playing && !gm.isPresenting && !gm.bellManager.isChoosingBell);
+        // 보스 상성 정보창 — 전투 중인 보스 기준 (첫 소개 시점에 생성된 런 고정값 표시)
+        if (gm.bossAffinityText != null)
+        {
+            gm.bossAffinityText.text = boardActive && boss != null
+                ? gm.bossManager.BuildAffinityText(gm.selectedBossIndex)
+                : "";
+        }
+
+        // 건너뛰기 버튼은 소개 화면이 열려 있고 다음 보스가 남아 있을 때만 표시 (마지막 보스 소개 시 숨김)
+        SetPanel(gm.skipBossButton,
+            gm.bossSelectPanel != null && gm.bossSelectPanel.activeSelf && gm.bossManager.CanSkipPending);
     }
 
     // 정산 데이터를 화면에 순서대로 재생 — 점수 계산과 분리되어 스킵해도 같은 결과
@@ -208,6 +265,7 @@ public class GameUIManager
             gm.boardManager.MovePieceVisual(tileIndex);
             yield return new WaitForSeconds(gm.moveStepDelay);
         }
+        ShowLandingInfo(settlement);   // 최종 착지 후 칸 정보 표시 ("불 - 50점")
 
         // 3) 도착 칸 베이직 → 윷 멀티플 순서로 표시
         gm.basicScore = settlement.baseBasic;
@@ -216,19 +274,22 @@ public class GameUIManager
         gm.multiplier = settlement.baseMult;
         UpdateUI();
 
-        // 4) 발동 효과를 기록 순서대로 재생
+        // 4) 발동 효과를 기록 순서대로 재생 (소수 배율 단계는 float 필드 사용 — 보스 상성 ×0.5 등)
         foreach (ScoreEffectStep step in settlement.steps)
         {
             yield return new WaitForSeconds(gm.effectStepDelay);
+            bool hasFloat = step.opValueF != 0f || step.afterValueF != 0f;
             if (step.target == EffectTarget.Basic)
             {
                 gm.basicScore = step.afterValue;
             }
             else
             {
-                gm.multiplier = step.afterValue;
+                gm.multiplier = hasFloat ? step.afterValueF : step.afterValue;
             }
-            Debug.Log($"[효과 {step.order + 1}] {step.displayName} — {step.target} {step.beforeValue} → {step.afterValue} ({step.op} {step.opValue}, 증가량 {(step.delta >= 0 ? "+" : "")}{step.delta})");
+            float opShown = hasFloat ? step.opValueF : step.opValue;
+            float afterShown = hasFloat ? step.afterValueF : step.afterValue;
+            Debug.Log($"[효과 {step.order + 1}] {step.displayName} — {step.target} {step.beforeValue} → {afterShown} ({step.op} {opShown})");
             UpdateUI();
         }
 
@@ -237,8 +298,18 @@ public class GameUIManager
         gm.throwScore = settlement.throwScore;
         UpdateUI();
 
-        // 6) 토탈 합산 표시 + 판 진행/클리어/게임오버 판정은 게임 흐름이므로 YutGameManager에 위임
+        // 6) 토탈 합산 표시 + 클리어/게임오버 판정은 게임 흐름이므로 YutGameManager에 위임
         yield return new WaitForSeconds(gm.effectStepDelay);
         gm.FinishPresentation(settlement);
+    }
+
+    // 착지 칸 정보 문자열 설정 — "불 - 50점" (칸 기본점수, 상성·윷 배율 미적용)
+    // 연출의 이동 완료 시점과 스킵 경로(FinishPresentation) 양쪽에서 호출 — 같은 값이라 중복 호출 안전
+    public void ShowLandingInfo(ThrowSettlement settlement)
+    {
+        gm.landingTileInfo = settlement.landingTileIndex >= 0
+            ? $"{BoardManager.AttributeName(gm.board.tiles[settlement.landingTileIndex].attribute)} - {settlement.tileScore}점"
+            : "";
+        UpdateUI();
     }
 }

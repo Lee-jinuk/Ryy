@@ -4122,10 +4122,21 @@ MonoBehaviour:
   - {fileID: 1122845509}
   - {fileID: 1770155939}
   - {fileID: 1506596321}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   playerPiece: {fileID: 1960040893}
   lapCountText: {fileID: 0}
   moveStepDelay: 0.15
-  bellEventTileCount: 0
   bellPool:
   - bellName: "\uD14C\uC2A4\uD2B8 \uBC29\uC6B8 1"
     description: "\uD6A8\uACFC \uBBF8\uAD6C\uD604 (\uD14C\uC2A4\uD2B8\uC6A9)"
@@ -4149,7 +4160,7 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   ownedBells: []
-  rollButton: {fileID: 483877274}
+  nextBossButton: {fileID: 0}
   bellSlots:
   - {fileID: 0}
   - {fileID: 0}
@@ -4183,10 +4194,7 @@ MonoBehaviour:
   selectedBossIndex: 0
   maxThrows: 5
   currentThrows: 0
-  roundsPerBoss: 3
-  roundIndex: 1
   goalScore: 1000
-  roundScore: 0
   basicScore: 0
   multiplier: 0
   throwScore: 0
@@ -4239,7 +4247,6 @@ MonoBehaviour:
     throwScore: 0
     landingTileIndex: -1
     tileScore: 0
-    lapBonus: 0
     landedOnBellTile: 0
     movePath: 
     steps: []
@@ -5893,7 +5900,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 856251960}
         m_TargetAssemblyTypeName: YutGameManager, Assembly-CSharp
-        m_MethodName: BackToBossSelect
+        m_MethodName: RestartRun
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -6976,7 +6983,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 856251960}
         m_TargetAssemblyTypeName: YutGameManager, Assembly-CSharp
-        m_MethodName: BackToBossSelect
+        m_MethodName: RestartRun
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

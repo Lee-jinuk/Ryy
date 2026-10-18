@@ -6,33 +6,122 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ## [2026-10-18 오전 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-18 오전 (2차) 변경사항 요약 - GPT 기획 / Devin 구현]
+[2026-10-18 오전 (6차) 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — 보스 현재 체력 표시 + 타겟·피버 시스템 전체 제거 (사용자 승인):
-- 보스 현재 체력: YutGameManager에 `public Text bossCurrentHPText` 추가.
-  표시값 = Max(0, goalScore - displayTotal) — 별도 HP 필드 없이 계산값만 사용.
-  totalScoreText=누적 피해, goalScoreText=최대 체력 유지. 연출 중엔
-  displayTotal 기준이라 '토탈 합산' 단계에서 총점과 동시 갱신 → 정상 연출과
-  스킵의 최종 체력 동일. 새 보스전=최대 체력, 처치 시 0. null-safe.
+★ 최신 — 착지 정보 + 보스 상성 + 윷 4개 재투척 세션 (사용자 승인):
+- 신규 `YutThrowSession.cs` (Core, POJO): 윷 4개 각 앞·뒤 50%,
+  앞면 개수 → 결과 (0=모 1=도 2=개 3=걸 4=윷). 재투척 = 서로 다른 윷
+  최대 2개·같은 윷 1회·0/1/2회 후 확정 가능. 확정 전 이동·득점 없음
+- 버튼 흐름 변경: `RollYut()` = 최초 4개 투척(세션 시작, 점수 없음)
+  → `RerollStick(int)` + `RerollStick1~4()` = 윷별 재투척
+  → `ConfirmThrow()` = 결과 확정 → 이동·공격 정산 + 투척 1회 소모
+- 신규 Inspector 필드: `stickFaceTexts[4]`(앞/뒤 표시),
+  `rerollButtons[4]`(interactable 제어), `throwStatusText`
+  ("현재 결과: 개 / 재투척 가능: 2"), `rerollRemainText`,
+  `confirmThrowButton`, `landingTileText`("불 - 50점"), `bossAffinityText`
+- 보스 상성: `BossAffinity`(기본100/약점200/강점50%에 불·물·풀 셔플 배정)
+  — BossManager의 `runAffinities`에 보스별 1회 생성·런 유지, 새 런 재생성.
+  공식: `칸 공격점수 × 상성 배율 × 윷 배율` (×0.5는 float 곱셈 후 반올림)
+- 상성 표시 2곳: `bossAffinityText`=전투 화면(selectedBossIndex),
+  `bossSelectAffinityText`=소개 화면(pendingBossIndex) — 같은 데이터,
+  건너뛰기 시 갱신, 미연결 무시
+- `rollButton` 필드·자동 표시 제거 (던지기 버튼은 OnClick만으로 동작).
+  `숲` 표시명 → `풀` (enum Forest 유지). `multiplier` int→float (실효 배율 표시)
+- 가중치 추첨(`DrawYut`/`runtimeWeights`/`baseProbabilities`)은 신규 투척에
+  미사용 — API 호환용 유지. 백도·낙은 면 조합에서 발생 불가 (발생 조건 미확정)
+- 보스 낙 +2%p 능력: 신규 방식에 적용 불가 → ApplyBossAbility 호출 제거,
+  발동 안 함을 로그 안내 (대체 능력 미확정 — 임의 생성 안 함)
+- 스페이스바: 세션 진행 중 = ConfirmThrow, 세션 없음 = RollYut
+- ⚠ 미확정 보고 유지: 마지막 투척 땅 착지 방울/게임오버 우선순위,
+  백도·낙 발생 조건, 낙 능력 대체, 최종 데미지 반올림 규칙(RoundToInt 사용)
+- ⚠ 사용자 작업: Test.unity는 소개 패널·30칸 연결 완료 — 재투척 버튼 4개
+  (RerollStick1~4)·확정 버튼(ConfirmThrow)·세션 텍스트 6종 연결 필요.
+  SampleScene은 boardTiles 18개만 연결 상태
+- 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
+
+[이전] 2026-10-18 오전(5차) 변경사항 — 30칸 속성 말판 전환 + 공격 공식 변경:
+- YutBoard: TileAttribute enum(Start/Fire/Water/Forest/Earth/Metal),
+  TileCount 18→30. BoardTile = index + attribute + AttackScore
+  (불·물·숲 50 / START·땅·쇠 0). layoutGenerated 플래그 추가
+- BoardManager: 1~29칸 독립 추첨(불25/물25/숲25/땅15/쇠10%,
+  최소 개수 보장 없음). 배치는 런당 1회 생성 → 게임오버까지 유지
+  (보스 처치·다음 보스·건너뛰기 재추첨 없음). 말 위치·완주는 보스전마다
+  START 초기화 (기존 동작). 칸 UI = 속성명 텍스트, BellIcon 자식 = 땅 칸 표시
+- ScoreManager: 데미지 = 도착 칸 공격점수 × 윷 배율 — 완주×10·윷 기본점수·
+  basicBonus 가산 제거. ThrowSettlement.lapBonus 삭제.
+  basicBonus/UpgradeYutStat API는 예약 필드로 유지(공격 미적용)
+- 땅 착지 = 데미지 0 + 방울 뽑기 화면 (기존 3택1 재사용).
+  bellEventTileCount·별도 방울 칸 지정·bellUsedThisRound 제한 폐기.
+  bellChoicePanel 미연결 시 경고 후 이벤트 건너뜀 (보이지 않는 소프트락 방지)
+- 씬: boardTiles 30칸으로 확장 (기존 18개 연결 유지 + 빈 슬롯 12개 —
+  사용자가 칸 오브젝트 12개 추가·연결 필요). bellEventTileCount/lapBonus
+  키 제거. Test.unity도 동일 정리
+- ⚠ 미확정 보고: 마지막(5회째) 투척이 땅에 착지하면 소진 판정이 먼저라
+  방울 화면 없이 게임오버 — 우선순위 확정 필요
+- ⚠ 사용자 작업: 칸 오브젝트 12개 추가 + boardTiles[18~29] 연결,
+  칸 자식 Text는 속성명(START/불/물/숲/땅/쇠)이 표시됨
+- 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
+
+[이전] 2026-10-18 오전(4차) 변경사항 — 보스 선택 → 순차 소개 + 건너뛰기 전환:
+- 5명 직접 선택 폐지: SelectBoss(int)/SelectBoss1~5 제거 (씬에 연결된
+  이벤트 없음 확인). 소개 화면에 진행 순서 보스 한 명만 표시
+- 버튼: '다음' = EnterBossBattle 재사용 / '건너뛰기' = 신규 SkipBoss()
+  → BossManager가 판별: 소개 패널 열림 + Start/Cleared + 다음 보스 존재
+  시에만 pendingBossIndex 전진. 전투·보상·처치 기록 없음, 마지막 보스 불가
+- 신규 필드 skipBossButton (GameObject, null-safe) — UpdateUI에서
+  소개 화면 열림 + CanSkipPending일 때만 표시 (마지막 보스 자동 숨김)
+- 소개 화면 필수화: bossSelectPanel 미연결 시 자동 전투 진입 폐기 →
+  경고 후 대기
+- ResetRunState에 selectedBossIndex=0, pendingBossIndex=0 추가 —
+  새 런은 첫 번째 보스부터
+- 인덱스 의미: pendingBossIndex=소개 중(건너뛰기 대상) / selectedBossIndex=
+  전투 중(EnterBossBattle이 pending 복사). 건너뛰어도 클리어 후
+  GoToNextBoss 계산 유지
+- ⚠ 사용자 Inspector 연결 필요: Boss Select Panel + 소개 텍스트 3종 +
+  '다음' 버튼(→EnterBossBattle) + '건너뛰기' 버튼(→SkipBoss, 필드를
+  skipBossButton에도 연결) + '다음 관문' 버튼(→GoToNextBoss,
+  nextBossButton에 연결). 패널 미연결 시 게임 진행 불가(대기) — 필수
+- 미확정 유지: 보스 수·반복 등장·HP 증가 규칙 미확정. 마지막 보스 이후
+  반복·자동 생성 없음, 최종 클리어 유지
+- 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
+
+[이전] 2026-10-18 오전(3차) 변경사항 — 라운드·판 구조 폐지 + 재시작 함수 제거:
+- 보스전 = 기본 투척 5회의 단일 구간. 중간에 다음 판·투척 재충전 없음.
+  판정(연출 종료·스킵 동일): totalScore>=goalScore → 클리어(마지막 투척
+  처치도 클리어 우선) → currentThrows>=maxThrows → 게임오버 → 방울 이벤트
+- 제거: roundIndex/roundsPerBoss/roundScore 필드, roundProgressText,
+  AdvanceToNextRound(), BellManager.ResetForNextRound().
+  방울 칸은 보스전당 1회 발동(bellUsedThisRound, SetupBoard 시 리셋),
+  ownedBells는 보스전 한정 임시 방울
+- 백도 차감 기준: min(totalScore, backDoPenalty) — 구 roundScore는
+  totalScore와 항상 동치라 삭제. ⚠보고: 구 '판 시작 직후 차감 상한'
+  (그 판 누적까지)은 소실 — 차감량 이내에서 보스전 누적 전체가 대상.
+  규칙상 차감량·방식은 미변경
+- 함수 제거: RetryBoss(같은 보스 재도전 폐지)·ResetRound·BackToBossSelect.
+  RestartRun이 런 초기화+패널 정리+시작 화면 복귀를 직접 수행.
+  씬 복귀 버튼 OnClick 2개는 BackToBossSelect → RestartRun으로 재연결됨
+- 최종 버튼 역할: StartGame/EnterBossBattle/RollYut/GoToNextBoss/
+  RestartRun/SkipPresentation (+SelectBoss1~5, 방울 관련)
+- ⚠ 사용자 Inspector 연결 필요: Boss Current HP Text (숫자만 출력됨)
+- ⚠ 씬 잔존 오브젝트: TargetSelectOverlay/Panel·TargetYut·FeverPanel은
+  비활성 미사용 — 삭제해도 무방 (사용자 결정)
+- 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
+
+[이전] 2026-10-18 오전(2차) 변경사항 — 보스 현재 체력 표시 + 타겟·피버 시스템 전체 제거:
+- bossCurrentHPText = Max(0, goalScore - displayTotal) — 별도 HP 필드 없이
+  계산값만. totalScoreText=누적 피해, goalScoreText=최대 체력.
+  연출 중 displayTotal 기준 → 정상/스킵 최종 체력 동일. null-safe.
   클리어 판정 totalScore >= goalScore 유지
-  ⚠ 사용자 Inspector 연결 필요: Boss Current HP Text (숫자만 출력됨)
-- 타겟·피버 제거: GameState.TargetSelection 삭제 → 보스전 진입·다음 판 시작 시
-  바로 Playing. 삭제된 멤버: selectedTarget, feverCombo, feverCap, feverText,
-  targetYutText, targetSelectOverlay, targetSelectPanel, SelectTargetAndStart,
-  SelectTargetDo~Mo, ConfirmTargetSelection, ThrowSettlement.isTargetHit/
-  feverComboAtRoll, 피버 ScoreEffectStep 기록
-- SelectableTargets → NormalResults 개칭 (YutRollManager의 보스 낙 보정
-  비례 차감 대상 목록 — 타겟과 무관)
-- 모든 결과(일반·저주) 투척 1회 소모. EnterPlaying() 신규 (구 EnterTargetSelection)
-- ResetRound/RetryBoss 유지 (보스전 재시작 — 타겟 함수 아님)
-- 씬 정리: SelectTarget* OnClick 5개 제거 + 삭제 필드의 직렬화 키 정리.
-  TargetSelectOverlay/TargetSelectPanel 오브젝트는 비활성으로 씬에 잔존
-  (사용자가 삭제 여부 결정). 해당 Text/TargetYut 오브젝트도 잔존
+- 타겟·피버 제거: GameState.TargetSelection 삭제 → 보스전 진입 시 바로
+  Playing. 삭제: selectedTarget, feverCombo, feverCap, feverText,
+  targetYutText, targetSelectOverlay/Panel, SelectTarget*/ConfirmTargetSelection,
+  ThrowSettlement.isTargetHit/feverComboAtRoll, 피버 ScoreEffectStep,
+  EffectSourceType.Fever
+- SelectableTargets → NormalResults 개칭 (YutRollManager 보스 낙 보정
+  비례 차감 대상 — 타겟과 무관). 모든 결과 투척 1회 소모
+- 씬 정리: SelectTarget* OnClick 5개 제거 + 삭제 필드 직렬화 키 정리
 - ⚠ 보고(미수정): 백도 차감 = totalScore 감소 → 보스 체력이 회복처럼 표시됨.
   규칙 임의 변경 없음
-- 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
-- 스페이스바: Start→StartGame(패널 있으면 EnterBossBattle) / Cleared+패널→진입
-  / 그 외→RollYut
 
 [이전] 2026-10-18 오전(1차) 변경사항 — YutGameManager 책임별 분리 리팩터링 + 1단계 안정화:
 - 스크립트 6개 신설 (전부 일반 C# 클래스, YutGameManager.Awake에서 생성 —
@@ -264,6 +353,37 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - 현재 브랜치: `develop` (origin: https://github.com/Lee-jinuk/Ryy.git)
 - 코드 구조: `YutGameManager` 총괄 + 책임별 POJO 매니저 6개 — `docs/ARCHITECTURE.md` 참조
 
+### [2026-10-18 오전 (6차) - GPT 기획 / Devin 구현]
+
+- 착지 정보·보스 상성·윷 4개 재투척 세션 구현 (상세는 요약 블록·GAME_RULES 6차 참조): `YutThrowSession.cs` 신설, `RollYut`/`RerollStick(1~4)`/`ConfirmThrow` 버튼 흐름, `BossAffinity` 런타임 상성(런당 보스별 1회 생성), 데미지 = 칸 점수 × 상성 × 윷 배율, `landingTileText`/`bossAffinityText`/세션 UI 필드 5종 추가, `rollButton` 제거, `숲`→`풀` 표시, `multiplier` float화
+- 보고(미확정): 백도·낙 발생 조건 미확정으로 신규 경로 미발생(저주 처리 API는 유지), 보스 낙 +2%p 능력 미발동(대체 미확정), 마지막 투척 땅 착지 우선순위 미확정 유지
+- 사용자가 `Test.unity`에 보스 소개 패널·30칸·텍스트 대부분 연결 완료 — 이번 세션 신규 UI 필드(`stickFaceTexts`/`rerollButtons`/`throwStatusText`/`rerollRemainText`/`confirmThrowButton`/`landingTileText`/`bossAffinityText`)는 미연결
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기
+
+### [2026-10-18 오전 (5차) - GPT 기획 / Devin 구현]
+
+- 30칸 속성 말판 전환: `TileAttribute`(START/불/물/풀/땅/쇠) + 독립 추첨(25/25/25/15/10%), 런당 1회 생성·게임오버까지 유지. `BoardTile` 속성 기반 재작성, `lapBonus`/`bonusScore`/`hasBellEvent`/`bellUsedThisRound`/`bellEventTileCount` 삭제
+- 공격 = 도착 칸 공격점수(50/0) × 윷 배율 — 완주·`basicBonus` 가산 폐기. 땅 착지 = 방울 뽑기 화면(기존 UI 재사용, 미연결 시 경고 후 건너뜀)
+- 씬: `boardTiles` 30칸 확장(18개 연결 유지 + 빈 슬롯 12 — 사용자가 칸 오브젝트 추가 필요)
+- 보고: 마지막 투척 땅 착지 시 방울 없이 게임오버(소진 판정 우선) — 미확정
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기
+
+### [2026-10-18 오전 (4차) - GPT 기획 / Devin 구현]
+
+- 보스 선택 → 순차 소개 전환: `SelectBoss(int)`/`SelectBoss1~5` 제거. 소개 화면 = 진행 순서 보스 한 명 + '다음'(`EnterBossBattle`) / '건너뛰기'(신규 `SkipBoss`) 버튼
+- `SkipBoss`: 소개 패널 열림 + Start/Cleared + 다음 보스 존재 시에만 `pendingBossIndex` 전진 — 전투·보상·처치 기록 없음. 신규 `skipBossButton` 필드는 마지막 보스 소개 시 자동 숨김
+- `bossSelectPanel` 미연결 폴백(자동 전투 진입) 폐기 → 경고 후 대기. `ResetRunState`에 인덱스 초기화 추가 (새 런 = 첫 보스부터)
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기
+
+### [2026-10-18 오전 (3차) - GPT 기획 / Devin 구현]
+
+- 라운드·판 구조 폐지: 보스전 = 기본 투척 5회 단일 구간. `FinishPresentation` 판정: 클리어(`totalScore >= goalScore`, 마지막 투척 처치 우선) → 게임오버(5회 소진 미처치) → 방울 이벤트
+- 제거: `roundIndex`/`roundsPerBoss`/`roundScore`/`roundProgressText`, `AdvanceToNextRound()`, `BellManager.ResetForNextRound()`. 방울 칸 = 보스전당 1회, 임시 방울 = 보스전 한정
+- 백도 차감 기준 `min(totalScore, backDoPenalty)` (구 `roundScore`는 `totalScore`와 동치라 삭제 — 수치 동일). 보고: 구 '판 누적 상한' 소실
+- 함수 제거: `RetryBoss`/`ResetRound`/`BackToBossSelect`. `RestartRun`이 런 초기화·패널 정리·시작 화면 복귀를 직접 수행. 씬 복귀 버튼 2개 OnClick → `RestartRun`으로 재연결 완료
+- 씬 직렬화 키 `roundsPerBoss`/`roundIndex`/`roundScore` 제거
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기
+
 ### [2026-10-18 오전 (2차) - GPT 기획 / Devin 구현]
 
 - `bossCurrentHPText` 신규 — `Max(0, goalScore - displayTotal)` 계산값 표시 (숫자만, null-safe, 별도 HP 상태 없음)
@@ -330,7 +450,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - ~~피버 시스템 채택 여부 미결~~ → 해결 후 **폐기** (2026-10-18 오전, 타겟·피버 전체 제거)
 - ~~`Input.GetKeyDown` 런타임 예외~~ → 해결 (Both 입력 핸들러)
 - ~~`YutGameManager` 씬 미배치 / UI 미연결~~ → 해결 (씬 배치 확인 + 텍스트 필드 연결 유지)
-- **UI 수동 연결 대기 (사용자 작업)** — 2026-10-18 씬 검사 기준 미연결: `bossSelectPanel` + `bossSelectNameText`/`bossSelectGoalText`/`bossSelectAbilityText`(오브젝트 자체가 없음), `roundProgressText`, `lapCountText`, `clearMessageText`, `nextBossButton`, `bellChoicePanel`/`bellOptionNameTexts`/`bellOptionDescTexts`/`bellSlots`/`talismanSlots`(방울 칸 0이라 현재 무관). `EnterBossBattle`/`GoToNextBoss`/`RetryBoss`/`SelectBoss1~5`/`ConfirmTargetSelection`/`ResetRound`/`SkipPresentation`/방울 선택 버튼 OnClick도 없음 — bossSelectPanel 미연결 시 바로 진입 폴백으로 플레이는 가능하지만, 보스 소개·다음 관문 진행·보스 선택은 연결 후에만 사용 가능
+- **UI 수동 연결 대기 (사용자 작업)** — 2026-10-18 `Test.unity` 검사 기준: 보스 소개 패널·소개 텍스트 3종·`skipBossButton`·30칸 `boardTiles`·`playerPiece`·주요 텍스트·OnClick(`StartGame`/`EnterBossBattle`/`SkipBoss`/`GoToNextBoss`/`RestartRun`/`RollYut`)은 **사용자가 연결 완료**. **미연결 = 투척 세션 UI 7종(`stickFaceTexts[4]`/`rerollButtons[4]`/`throwStatusText`/`rerollRemainText`/`confirmThrowButton`), `landingTileText`, `bossAffinityText`, `bossSelectAffinityText`, `bellChoicePanel`+옵션 텍스트·슬롯(땅 칸 착지 시 경고 후 건너뜀), `lapCountText`, `nextBossButton`** + `RerollStick1~4`/`ConfirmThrow`/`SkipPresentation`/방울 선택 버튼 OnClick. SampleScene은 구버전 — boardTiles 18개만 연결됨, 나머지 미정리 (테스트는 Test.unity 기준)
 - **블러 미구현**: 타겟 선택 모달 폐기와 함께 해당 UI는 비활성 잔존 — 씬의 `TargetSelectOverlay`/`TargetSelectPanel`/`TargetYut`/`FeverPanel` 오브젝트는 사용자가 삭제 여부 결정
 - **Unity Play 테스트 미수행**: Devin은 에디터 미실행 — dotnet build(0 오류)까지만 검증. 사용자가 Unity에서 컴파일·Play 확인 필요
 - **백도 ↔ 보스 체력 표시 (보고)**: 백도 점수 차감 → `totalScore` 감소 → `bossCurrentHPText`가 체력 회복처럼 표시됨 — 규칙 미변경
@@ -350,7 +470,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 ## 다음 작업 목표 (제안)
 
 1. **GPT 6단계 지시서의 2단계 착수 전 선행 질문 답 필요** (사용자 승인 대기): 윷 4면↔결과 대응 규칙, 개별 윷 면 확률(최초 투척·재투척 동일 여부), 백도·낙 프로토타입 포함 여부. 3~6단계 질문도 지시서 표 참조
-2. 사용자가 에디터에서 신규 UI 제작·연결: `bossSelectPanel` + 소개 텍스트 3종 + '진입' 버튼(→`EnterBossBattle`), '다음 관문' 버튼(→`GoToNextBoss`)을 `nextBossButton`에 연결, `bossCurrentHPText`(보스 현재 체력 Text), `roundProgressText`, `lapCountText`, 보스 선택 버튼(→`SelectBoss1~5`) → Play 테스트. 잔존 오브젝트 정리 선택: `TargetSelectOverlay`/`TargetSelectPanel`/`TargetYut` 텍스트/`FeverPanel`은 삭제해도 무방(코드 미사용)
+2. 사용자가 에디터에서 신규 UI 제작·연결: `bossSelectPanel` + 소개 텍스트 3종 + '진입' 버튼(→`EnterBossBattle`), '다음 관문' 버튼(→`GoToNextBoss`)을 `nextBossButton`에 연결, `bossCurrentHPText`(보스 현재 체력 Text), `lapCountText`, 보스 선택 버튼(→`SelectBoss1~5`) → Play 테스트. 잔존 오브젝트 정리 선택: `TargetSelectOverlay`/`TargetSelectPanel`/`TargetYut` 텍스트/`FeverPanel`은 삭제해도 무방(코드 미사용)
 3. 백도·낙 말 이동 규칙 확정 → 확정 시 `SettleThrow` 저주 분기에 추가
 4. 방울 실제 효과 기획 확정 → `BellData`에 효과 필드 추가 + 사용 버튼/`ScoreEffectStep` 연동
 5. 방울 덱 데이터 구조 설계 (`ScriptableObject` 후보) — 기존 12장 덱 구상과 이벤트 방울 통합 규칙 확정 후 착수

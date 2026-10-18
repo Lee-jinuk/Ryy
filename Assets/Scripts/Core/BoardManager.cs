@@ -2,8 +2,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-// 말판과 말 이동 담당 — 18칸 점수 무작위 배치, 말 이동, 완주 판정 보조, 말판 UI 갱신
+// 말판과 말 이동 담당 — 30칸 속성 말판 생성, 말 이동, 완주 판정 보조, 말판 UI 갱신
 // 말판 데이터 원본은 YutGameManager.board (Inspector 노출 유지) — 이 클래스가 유일한 쓰기 경로
+// 배치(layoutGenerated)와 말 위치(pieceIndex/totalMoved/lapCount) 초기화는 분리한다
 // 일반 C# 클래스 (MonoBehaviour 아님) — Inspector 연결에 영향 없음
 public class BoardManager
 {
@@ -25,51 +26,77 @@ public class BoardManager
         _ => 0,
     };
 
-    // 보스전 시작 시 말판 재구축: 10~180 중복 없는 무작위 배치 + 방울 칸 무작위 지정 + 말 위치·완주 초기화
-    public void SetupBoard()
+    // 속성별 독립 추첨 확률 (START 제외 29칸 각각에 적용 — 고정 칸 수 비율이 아니며 최소 개수 보장 없음)
+    private static readonly (TileAttribute attribute, float percent)[] AttributeWeights =
     {
-        List<int> scorePool = new List<int>();
-        for (int s = 10; s <= 180; s += 10)
-        {
-            scorePool.Add(s);
-        }
-        for (int i = scorePool.Count - 1; i > 0; i--)
-        {
-            int j = Random.Range(0, i + 1);
-            (scorePool[i], scorePool[j]) = (scorePool[j], scorePool[i]);
-        }
+        (TileAttribute.Fire, 25f),
+        (TileAttribute.Water, 25f),
+        (TileAttribute.Forest, 25f),
+        (TileAttribute.Earth, 15f),
+        (TileAttribute.Metal, 10f),
+    };
 
-        gm.board.tiles.Clear();
-        for (int i = 0; i < YutBoard.TileCount; i++)
-        {
-            gm.board.tiles.Add(new BoardTile { index = i, baseScore = scorePool[i] });
-        }
-        gm.board.pieceIndex = 0;   // 시작점 = BoardTile_01 (인덱스 0)
-        gm.board.totalMoved = 0;
-        gm.board.lapCount = 0;
+    public static string AttributeName(TileAttribute attribute) => attribute switch
+    {
+        TileAttribute.Start => "START",
+        TileAttribute.Fire => "불",
+        TileAttribute.Water => "물",
+        TileAttribute.Forest => "풀",
+        TileAttribute.Earth => "땅",
+        TileAttribute.Metal => "쇠",
+        _ => attribute.ToString(),
+    };
 
-        // 방울 이벤트 칸 무작위 지정 (개수는 Inspector 설정값)
-        List<int> indices = new List<int>();
-        for (int i = 0; i < YutBoard.TileCount; i++)
+    // 속성 칸 1개 독립 추첨 — 불25 물25 풀25 땅15 쇠10 (%)
+    private static TileAttribute DrawAttribute()
+    {
+        float roll = Random.Range(0f, 100f);
+        float acc = 0f;
+        foreach ((TileAttribute attribute, float percent) in AttributeWeights)
         {
-            indices.Add(i);
+            acc += percent;
+            if (roll < acc)
+            {
+                return attribute;
+            }
         }
-        for (int i = indices.Count - 1; i > 0; i--)
-        {
-            int j = Random.Range(0, i + 1);
-            (indices[i], indices[j]) = (indices[j], indices[i]);
-        }
-        int bellCount = Mathf.Clamp(gm.bellEventTileCount, 0, YutBoard.TileCount);
-        for (int i = 0; i < bellCount; i++)
-        {
-            gm.board.tiles[indices[i]].hasBellEvent = true;
-        }
-
-        UpdateBoardUI();
-        Debug.Log($"--- 말판 배치 완료 | 방울 칸: {bellCount}개 ---");
+        return TileAttribute.Metal;
     }
 
-    // 말판 UI 갱신 — 칸의 자식 Text에 점수 표시, 'BellIcon' 이름의 자식으로 방울 칸 표시
+    // 보스전 진입 시 호출 — 배치는 런당 1회만 생성하고 게임오버까지 유지한다
+    // (보스 처치·다음 보스 진입·건너뛰기에서 재추첨하지 않음). 말 위치·완주는 매 보스전 초기화 (기존 동작 유지)
+    public void SetupBoard()
+    {
+        if (!gm.board.layoutGenerated)
+        {
+            GenerateLayout();
+        }
+        gm.board.pieceIndex = 0;   // 시작점 = START (인덱스 0)
+        gm.board.totalMoved = 0;
+        gm.board.lapCount = 0;
+        UpdateBoardUI();
+    }
+
+    // 30칸 배치 생성: 인덱스 0 = START 고정, 1~29 = 속성 독립 추첨
+    private void GenerateLayout()
+    {
+        gm.board.tiles.Clear();
+        gm.board.tiles.Add(new BoardTile { index = 0, attribute = TileAttribute.Start });
+        for (int i = 1; i < YutBoard.TileCount; i++)
+        {
+            gm.board.tiles.Add(new BoardTile { index = i, attribute = DrawAttribute() });
+        }
+        gm.board.layoutGenerated = true;
+
+        int[] counts = new int[6];
+        foreach (BoardTile tile in gm.board.tiles)
+        {
+            counts[(int)tile.attribute]++;
+        }
+        Debug.Log($"--- 말판 배치 완료 (30칸, 런 고정) | 불 {counts[1]} 물 {counts[2]} 풀 {counts[3]} 땅 {counts[4]} 쇠 {counts[5]} ---");
+    }
+
+    // 말판 UI 갱신 — 칸의 자식 Text에 속성 이름 표시, 'BellIcon' 이름의 자식은 땅 칸(방울 뽑기) 표시
     public void UpdateBoardUI()
     {
         for (int i = 0; i < gm.boardTiles.Length && i < gm.board.tiles.Count; i++)
@@ -82,12 +109,12 @@ public class BoardManager
             Text tileText = tileObj.GetComponentInChildren<Text>(true);
             if (tileText != null)
             {
-                tileText.text = gm.board.tiles[i].Score.ToString();
+                tileText.text = AttributeName(gm.board.tiles[i].attribute);
             }
             Transform bellIcon = tileObj.transform.Find("BellIcon");
             if (bellIcon != null)
             {
-                bellIcon.gameObject.SetActive(gm.board.tiles[i].hasBellEvent && !gm.board.tiles[i].bellUsedThisRound);
+                bellIcon.gameObject.SetActive(gm.board.tiles[i].attribute == TileAttribute.Earth);
             }
         }
         if (gm.lapCountText != null)
@@ -110,15 +137,11 @@ public class BoardManager
         }
     }
 
-    // 런 종료 시 말판·말·완주 초기화 — 다음 보스전에서 SetupBoard로 재배치된다
+    // 런 종료 시 말판 배치·말·완주 초기화 — 다음 런의 첫 보스전에서 새 배치를 생성한다
     public void ResetForNewRun()
     {
-        foreach (BoardTile tile in gm.board.tiles)
-        {
-            tile.bonusScore = 0;
-            tile.hasBellEvent = false;
-            tile.bellUsedThisRound = false;
-        }
+        gm.board.tiles.Clear();
+        gm.board.layoutGenerated = false;
         gm.board.pieceIndex = 0;
         gm.board.totalMoved = 0;
         gm.board.lapCount = 0;

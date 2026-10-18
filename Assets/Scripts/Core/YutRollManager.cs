@@ -10,7 +10,7 @@ public class YutProbabilityEntry
 }
 
 // 윷 결과별 영구 스탯 — 주술 등으로 런타임에 강화하면 다음 투척부터 적용
-// basicBonus: 말판 도착 칸 점수에 더해지는 윷별 베이직 강화치 (기본 0 — 칸 점수가 베이직의 기준)
+// basicBonus: 윷별 베이직 강화치 — 현재 공격 공식(칸 공격점수 × 윷 배율)에는 미적용, 강화 API 예약용
 [System.Serializable]
 public class YutStatEntry
 {
@@ -19,14 +19,18 @@ public class YutStatEntry
     public int mult;
 }
 
-// 윷 투척과 확률 담당 — 결과 추첨, 기본/런타임 확률 관리, 보스 특수능력 확률 보정,
+// 윷 투척과 확률 담당 — 윷 4개 투척 세션(면 조합·재투척), 기본/런타임 확률 관리(예약 API),
 // 윷별 기본 능력치 및 강화값 관리. 게임 상태와 UI 표시는 다루지 않는다.
 // 일반 C# 클래스 (MonoBehaviour 아님) — Inspector 연결에 영향 없음
 public class YutRollManager
 {
     private readonly YutGameManager gm;
 
+    // 진행 중인 투척 세션 — null이면 세션 없음. 최초 투척/재투척/확정은 YutGameManager 버튼 경유
+    public YutThrowSession session;
+
     // 런타임 추첨용 가중치 — 보스 특수능력·방울·주술의 확률 조작은 여기만 적용해 기본 데이터 오염 방지
+    // 참고: 신규 윷 4개 면 조합 투척 경로는 가중치 추첨을 사용하지 않는다 (DrawYut는 API 호환용으로 유지)
     public readonly Dictionary<YutResult, float> runtimeWeights = new Dictionary<YutResult, float>();
 
     // 런타임 윷 스탯 — 주술 등의 영구 강화는 여기만 적용해 기본 데이터 오염 방지
@@ -35,6 +39,13 @@ public class YutRollManager
     public YutRollManager(YutGameManager gm)
     {
         this.gm = gm;
+    }
+
+    // 새 투척 세션 시작 — 윷 4개 최초 투척. 호출 전 가드(상태·연출·방울 선택·진행 중 세션)는 YutGameManager가 처리
+    public void StartSession()
+    {
+        session = new YutThrowSession();
+        session.InitialRoll();
     }
 
     // 기본 확률 → 런타임 가중치 복사. 누락 결과는 0, 음수는 0으로 보정
@@ -129,7 +140,7 @@ public class YutRollManager
     }
 
     // 주술 등 영구 강화용 API — 다음 투척부터 적용. baseYutStats는 오염되지 않음
-    // basicBonus는 도착 칸 점수에 더해지는 강화치, mult는 해당 윷의 멀티플
+    // basicBonus는 예약 필드(현재 미적용), mult는 해당 윷의 멀티플
     public void UpgradeYutStat(YutResult result, int newBasicBonus, int newMult)
     {
         yutStats[result].basicBonus = Mathf.Max(0, newBasicBonus);

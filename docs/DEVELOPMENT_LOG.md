@@ -4,12 +4,29 @@
 
 ## 파일 구조 (2026-10-18 검사)
 
-- `Assets/Scripts/Core/` — `YutGameManager.cs`(게임 총괄) + 책임별 매니저 `YutRollManager.cs`, `BoardManager.cs`, `ScoreManager.cs`, `BossManager.cs`, `BellManager.cs` + 데이터 `YutBoard.cs`
+- `Assets/Scripts/Core/` — `YutGameManager.cs`(게임 총괄) + 책임별 매니저 `YutRollManager.cs`, `BoardManager.cs`, `ScoreManager.cs`, `BossManager.cs`, `BellManager.cs` + 데이터 `YutBoard.cs`, `YutThrowSession.cs`(윷 4개 투척 세션)
 - `Assets/Scripts/UI/` — `GameUIManager.cs` (UI 표시·연출)
 - `Assets/Scripts/Data/` — `.gitkeep`만 존재 (빈 폴더)
 - `Assets/Prefabs/`, `Assets/ScriptableObjects/` — `.gitkeep`만 존재
 - `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
 - 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
+
+### [2026-10-18 오전 (6차) - GPT 기획 / Devin 구현]
+
+**착지 정보 표시 + 보스 상성 + 윷 4개 재투척 세션** (사용자 승인 변경):
+
+- `YutThrowSession.cs` 신설 (Core, POJO): 윷 4개 `frontUp[4]`/`rerolled[4]`/`rerollUsed`/`confirmed`. 앞면 개수 → 결과(0=모 1=도 2=개 3=걸 4=윷), 재투척 = 서로 다른 윷 최대 2개·같은 윷 1회. `DrawYut` 가중치 추첨은 신규 투척 경로에서 미사용 (API 유지)
+- `YutRollManager`: `session` 필드 + `StartSession()` 소유
+- `YutGameManager`: `RollYut()`=최초 투척(진행 중 세션 덮어쓰기 차단), `RerollStick(int)`+래퍼1~4, `ConfirmThrow()`=확정→`SettleThrow(result)`→정산 연출 (투척 1회 소모는 확정에서만). 신규 필드 `stickFaceTexts[4]`/`rerollButtons[4]`/`throwStatusText`/`rerollRemainText`/`confirmThrowButton`/`landingTileText`/`bossAffinityText`. `rollButton` 필드·자동 표시 제거. `multiplier` int→float. `ApplyBossAbility` 호출 제거(낙 능력 미적용 안내 로그). 스페이스바: 세션 중=확정, 없음=최초 투척
+- `BossManager`: `BossAffinity`(normal/weak/strong) 런타임 데이터 — `runAffinities` 딕셔너리에 보스별 1회 생성·저장(`EnsureAffinity`, `ShowBossSelect`에서 첫 소개 시 생성). `AffinityMultiplier`(약점×2/강점×0.5/기본×1, 비공격 속성은 ×1), `BuildAffinityText`, `ResetAffinities`(새 런)
+- `ScoreManager`: `최종 데미지 = 칸 공격점수 × 상성 배율 × 윷 배율` — float 곱셈 후 `RoundToInt`(×0.5 정수화 0 방지). 공격 속성 칸 착지 시 상성 단계를 `steps`에 기록(신규 `EffectSourceType.Boss` — enum 끝에 추가해 기존 값 유지, `opValueF`/`afterValueF` 소수 기록 필드 추가). `ThrowSettlement.affinityMult` 추가
+- `GameUIManager`: 세션 UI(면 `앞/뒤`만 표시 — 재투척 여부 미표기, 제한은 `rerolled[]`가 판별, 재투척 버튼 `interactable`, 상태창 `현재 결과: 개 / 재투척 가능: 2`→`확정 결과`, 남은 재투척, 확정 버튼 `interactable`), `bossAffinityText` 표시(기본/약점/강점 3행), `ShowLandingInfo`(착지 후 `불 - 50점`, 스킵 경로에서도 호출). `rollButton` 표시 로직 제거
+- `BoardManager`: `숲` 표시명 → `풀` (enum·값·순서 유지 — `TileAttribute.Forest` 그대로)
+- 씬: `rollButton` 직렬화 키 제거(SampleScene/Test). `Assembly-CSharp.csproj`에 신규 파일 등록(유니티 재생성 전 임시). **사용자가 Test.unity에 보스 소개 패널·30칸 전체·텍스트 대부분 연결 완료 확인** — 신규 세션 UI 필드는 미연결
+- **보고(미확정)**: 백도·낙은 면 조합에서 발생 불가 — `HandleCurseResult`·`IsCurse`는 API로 유지하되 도달 불가. 보스 낙 +2%p 능력은 발동하지 않음(표시는 데이터 그대로 — 임의 대체 안 함)
+- 후속 추가: `bossSelectAffinityText` 필드 — `FillBossSelectInfo`에서 `pendingBossIndex` 상성 표시 (`BuildAffinityText`가 `EnsureAffinity`의 저장값 재사용 — 재추첨 없음). 건너뛰기→`ShowBossSelect` 재호출로 자동 갱신. 미연결 null-safe
+- 후속 수정: `stickFaceTexts`의 `(재)` 접미사 제거 — `앞`/`뒤`만 표시 (재투척 제한·버튼 활성화 로직은 `rerolled[]` 기준으로 유지)
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — 재투척 버튼 4개·확정 버튼·세션 텍스트·소개 화면 상성 텍스트 연결 필요
 
 ### [2026-10-18 오전 - GPT 기획 / Devin 구현]
 
@@ -23,6 +40,46 @@
 - 씬 연결 검증 결과: 연결됨 = 텍스트 12종(mainResult~feverText, bossName/Ability, 결과 텍스트 5종), 패널 6종(start/game/targetSelectOverlay/targetSelectPanel/clear/gameOver/board), boardTiles 18개 + playerPiece, rollButton. **미연결 = `bossSelectPanel` + 소개 텍스트 3종(오브젝트 자체가 없음), `roundProgressText`, `lapCountText`, `clearMessageText`, `nextBossButton`, bellChoicePanel·옵션 텍스트·슬롯(bellEventTileCount=0이라 현재 무관)**
 - OnClick 검증: `SelectTarget*` 5종·`RollYut`·`StartGame`·`BackToBossSelect`×2 연결 확인 — 리팩터링 후에도 호환. `EnterBossBattle`/`GoToNextBoss`/`RetryBoss`/`SelectBoss*`를 호출하는 버튼은 씬에 아직 없음 → 다음 관문 수동 진행·보스 선택은 UI 연결 후 사용 가능 (폴백으로 플레이 진입은 가능)
 - 검증: `dotnet build Assembly-CSharp.csproj` 오류 0·경고 0. Devin 에디터 미실행 — Play 테스트는 사용자 확인 필요
+
+### [2026-10-18 오전 (5차) - GPT 기획 / Devin 구현]
+
+**30칸 속성 말판 전환 + 공격 공식 변경** (사용자 승인 변경):
+
+- `YutBoard.cs` 재작성: `TileAttribute` enum(Start/Fire/Water/Forest/Earth/Metal) 추가, `TileCount` 18→30, `BoardTile`을 속성 기반으로 변경 — `baseScore`/`bonusScore`/`hasBellEvent`/`bellUsedThisRound` 삭제, `AttackScore` 속성(불·물·숲 50 / 나머지 0). `layoutGenerated` 플래그 추가
+- `BoardManager`: 1~29칸 독립 추첨(불25/물25/숲25/땅15/쇠10%)로 런당 1회 생성(`SetupBoard`가 `layoutGenerated` 확인 — 보스 전환·건너뛰기에서 재추첨 없음), 말 위치·완주는 보스전마다 START로 초기화(기존 동작). `UpdateBoardUI`는 속성명(START/불/물/숲/땅/쇠) 표시 + 'BellIcon' 자식 = 땅 칸 표시
+- `ScoreManager`: 공격 데미지 = `도착 칸 공격점수 × 윷 배율` — 완주×10·윷 기본점수·`basicBonus` 가산 제거. `ThrowSettlement.lapBonus` 필드 삭제. `basicBonus`/`UpgradeYutStat` API는 예약 필드로 유지(공격 미적용 — 보고)
+- `BellManager`: 땅 칸 착지 → 방울 뽑기 화면(기존 3택1 재사용). 별도 방울 칸 무작위 지정·칸별 발동 제한 폐기. `bellChoicePanel` 미연결 시 `isChoosingBell`로 멈추지 않도록 경고 후 건너뜀
+- `YutGameManager`: `bellEventTileCount` 필드 삭제, `boardTiles` 18→30, 땅 착지 발동 단순화
+- 씬: `boardTiles` 배열 30칸으로 확장(기존 연결 유지 + 빈 슬롯 12개), `bellEventTileCount`·`lapBonus` 직렬화 키 제거 (두 씬 모두)
+- **보고(미확정)**: 마지막(5회째) 투척이 땅에 착지해도 투척 소진 판정이 먼저라 방울 화면 없이 게임오버 — 우선순위 결정 필요
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — `boardTiles` 빈 슬롯 12개에 칸 오브젝트 추가·연결 필요
+
+### [2026-10-18 오전 (4차) - GPT 기획 / Devin 구현]
+
+**보스 선택 → 순차 소개 + 건너뛰기 전환** (사용자 승인 변경):
+
+- 5명 직접 선택 UI 폐지: `SelectBoss(int)`/`SelectBoss1~5` 제거 — 두 씬·코드에 연결된 OnClick 없음 확인 후 삭제 (끊어진 이벤트 없음)
+- 소개 화면은 진행 순서의 보스 한 명만 표시: '다음' = `EnterBossBattle` 재사용, '건너뛰기' = 신규 `SkipBoss()`(BossManager 판별)
+- `SkipBoss` 규칙: `bossSelectPanel` 열림 + Start/Cleared 상태 + 다음 보스 존재 시에만 `ShowBossSelect(pendingBossIndex + 1)` — 전투·보상·처치 기록 없음, 연속 사용 시 순서대로 전진, 마지막 보스 불가
+- 신규 필드 `skipBossButton` (GameObject, null-safe) — `UpdateUI`에서 소개 화면 열림 + `CanSkipPending`일 때만 표시 → 마지막 보스 소개 시 자동 숨김
+- 소개 화면 필수화: `bossSelectPanel` 미연결 시 자동 전투 진입 폴백 폐기 → 경고 후 대기
+- 새 런 첫 보스부터: `ResetRunState`에 `selectedBossIndex = 0`/`pendingBossIndex = 0` 추가
+- 인덱스 분리 유지: `pendingBossIndex` = 소개 중(건너뛰기가 전진), `selectedBossIndex` = 전투 중(`EnterBossBattle`에서 pending을 복사) — 건너뛰어도 클리어 후 `GoToNextBoss`의 다음 보스 계산은 유지
+- 스페이스바 흐름 유지: Start + 소개 패널 열림 → `EnterBossBattle` / Cleared + 패널 → `EnterBossBattle` / 그 외 → `RollYut`
+- 씬 변경 없음 (신규 버튼·필드는 사용자가 에디터에서 연결)
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기
+
+### [2026-10-18 오전 (3차) - GPT 기획 / Devin 구현]
+
+**라운드·판 구조 폐지 + 미사용 재시작 함수 제거** (사용자 승인 변경):
+
+- 새 진행 규칙: 보스전 = 기본 투척 5회의 단일 구간 — 중간에 다음 판 진행·투척 재충전 없음. `FinishPresentation` 판정 순서: `totalScore >= goalScore` → `EnterClear`(마지막 투척 처치 포함, 클리어 우선) → `currentThrows >= maxThrows` → `EnterGameOver` → 방울 이벤트. 스킵(`FinishPresentation` 경유)도 동일 판정
+- 제거: `roundIndex`/`roundsPerBoss`/`roundScore` 필드와 `roundProgressText`, `AdvanceToNextRound()`, `BellManager.ResetForNextRound()`(판별 임시 방울 소멸·방울 칸 판당 리셋). 방울 칸 `bellUsedThisRound`는 보스전당 1회 발동 플래그로 의미 조정(`SetupBoard` 칸 재생성 시 리셋), `ownedBells`는 보스전 한정 임시 방울이 됨
+- 백도 차감 기준: `min(roundScore, backDoPenalty)` → `min(totalScore, backDoPenalty)`. 라운드 폐지 후 `roundScore`는 `totalScore`와 보스전 내 항상 동치라 삭제해도 수치 동일. 보고: 구 '판 시작 직후 차감 상한'(그 판 누적까지)은 소실 — 차감량 이내에서 보스전 누적 전체가 대상이 됨 (규칙상 차감량·방식은 미변경)
+- 함수 제거: `RetryBoss()`(같은 보스 재도전 폐지)·`ResetRound()`(별칭)·`BackToBossSelect()`. `RestartRun()`이 `ResetRunState` + 패널 정리 + `GameState.Start` 복귀를 직접 수행. 씬의 복귀 버튼 OnClick 2개는 `BackToBossSelect` → `RestartRun`으로 재연결 (버튼 오브젝트·타겟 유지, 메서드명만 교체)
+- 최종 버튼 역할: `StartGame`/`EnterBossBattle`/`RollYut`/`GoToNextBoss`/`RestartRun`/`SkipPresentation` (+보스 선택 `SelectBoss1~5`, 방울 관련)
+- 씬 직렬화 키 정리: `roundsPerBoss`/`roundIndex`/`roundScore` 제거 (`roundProgressText`는 씬에 키가 없었음 — 미연결 상태였음)
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기
 
 ### [2026-10-18 오전 (2차) - GPT 기획 / Devin 구현]
 

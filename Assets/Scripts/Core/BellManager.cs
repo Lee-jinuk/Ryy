@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// 방울 시스템 담당 — 방울 이벤트 칸 발동, 후보 3개 제시·1개 선택, 보유 방울 상태, 판/런 초기화
+// 방울 시스템 담당 — 방울 이벤트 칸 발동, 후보 3개 제시·1개 선택, 보유 방울 상태, 보스전/런 초기화
 // 방울 후보 풀(bellPool)과 보유 목록(ownedBells)의 저장소는 Inspector 노출을 위해 YutGameManager에 유지
 // 방울 실제 효과는 미구현 — 임의로 추가하지 않는다
 // 일반 C# 클래스 (MonoBehaviour 아님) — Inspector 연결에 영향 없음
@@ -18,9 +18,15 @@ public class BellManager
         this.gm = gm;
     }
 
-    // 방울 이벤트 칸 착지 → 정산 연출 종료 후 선택창 표시 (판이 계속될 때만)
+    // 땅 칸 착지 → 정산 연출 종료 후 방울 뽑기 선택창 표시 (보스전이 계속될 때만)
     public void OpenBellChoice()
     {
+        if (gm.bellChoicePanel == null)
+        {
+            // 선택창 미연결이면 보이지 않는 선택 상태(isChoosingBell)로 멈추지 않도록 이벤트를 건너뛴다
+            Debug.LogWarning("[YutGameManager] bellChoicePanel 미연결 — 방울 뽑기 화면을 표시할 수 없어 이벤트를 건너뜁니다. 씬에 Bell Choice Panel을 만들어 연결하세요.", gm);
+            return;
+        }
         if (gm.bellPool == null || gm.bellPool.Count < 3)
         {
             Debug.LogWarning("[YutGameManager] bellPool이 3개 미만입니다 — 방울 이벤트를 건너뜁니다.", gm);
@@ -61,7 +67,7 @@ public class BellManager
         gm.uiManager.UpdateUI();
     }
 
-    // 방울 선택 확정 버튼 — 선택한 방울을 이번 판 임시 보유에 추가하고 창 닫기
+    // 방울 선택 확정 버튼 — 선택한 방울을 보스전 임시 보유에 추가하고 창 닫기
     public void ConfirmBellChoice()
     {
         if (!isChoosingBell || selectedBellOption < 0)
@@ -72,7 +78,7 @@ public class BellManager
         gm.ownedBells.Add(chosen);
         isChoosingBell = false;
         GameUIManager.SetPanel(gm.bellChoicePanel, false);
-        Debug.Log($"--- 방울 획득: {chosen.bellName} (이번 판 한정) ---");
+        Debug.Log($"--- 방울 획득: {chosen.bellName} (이번 보스전 한정) ---");
         gm.uiManager.UpdateUI();
     }
 
@@ -83,17 +89,7 @@ public class BellManager
         ConfirmBellChoice();
     }
 
-    // 다음 판 진행 — 임시 방울 소멸 + 방울 칸 판당 발동 제한 리셋 (말판 배치·말 위치·완주는 유지)
-    public void ResetForNextRound()
-    {
-        gm.ownedBells.Clear();
-        foreach (BoardTile tile in gm.board.tiles)
-        {
-            tile.bellUsedThisRound = false;
-        }
-    }
-
-    // 런 종료 시 방울 이벤트 상태 초기화
+    // 런 종료·새 보스전 시작 시 방울 이벤트 상태 초기화
     public void ResetForNewRun()
     {
         isChoosingBell = false;

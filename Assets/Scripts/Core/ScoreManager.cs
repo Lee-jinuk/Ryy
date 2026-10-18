@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum EffectSourceType { YutResult, Talisman, Bell, Spell }
+public enum EffectSourceType { YutResult, Talisman, Bell, Spell, Boss }
 public enum EffectTarget { Basic, Multiplier }
 public enum EffectOp { Add, Multiply }
 
@@ -19,6 +19,9 @@ public class ScoreEffectStep
     public int afterValue;           // 적용 후 수치
     public int delta;                // 실제 증가량 (after - before)
     public int order;                // 연출 재생 순서
+    // 소수 배율 단계(보스 상성 ×0.5 등)용 float 필드 — 0이 아니면 int 필드 대신 사용
+    public float opValueF;           // 실제 적용 배율 (0.5/2 등) — int로 표현 불가한 소수 배율 기록용
+    public float afterValueF;        // 적용 후 소수 수치 — 상성 반영 멀티플 등
 }
 
 // 한 번의 투척에 대한 확정 정산 — 점수는 여기서 계산되고, 연출은 이 데이터만 재생한다
@@ -32,16 +35,16 @@ public class ThrowSettlement
     public int finalMult;            // 모든 효과 적용 후 멀티플
     public int throwScore;           // finalBasic × finalMult — TotalScore에 1회만 합산
     public int landingTileIndex = -1;    // 말판 도착 칸 (-1 = 이동 없음 — 저주)
-    public int tileScore;                // 도착 칸의 점수 (칸 강화 포함)
-    public int lapBonus;                 // 이 투척에 적용된 완주 보너스
-    public bool landedOnBellTile;        // 방울 이벤트 칸에 정확히 착지했는지
+    public int tileScore;                // 도착 칸의 기본 공격점수 (불·물·풀 50 / START·땅·쇠 0)
+    public float affinityMult = 1f;      // 도착 칸 속성에 대한 보스 상성 배율 (약점 2 / 강점 0.5 / 기본 1)
+    public bool landedOnBellTile;        // 땅 칸에 정확히 착지했는지 — 방울 뽑기 화면 발동 조건
     public List<int> movePath = new List<int>();  // 경유 칸 인덱스 — 이동 연출 재생용
     public List<ScoreEffectStep> steps = new List<ScoreEffectStep>();
 }
 
-// 점수와 피버 담당 — 투척별 정산 계산, 피버 콤보·보너스, 저주 결과 처리, 효과 단계 기록
+// 점수 정산 담당 — 투척별 정산 계산, 저주 결과 처리, 효과 단계 기록
 // 점수 계산의 유일한 경로 (다른 Manager가 독립적으로 점수를 복제·누적하지 않는다)
-// 표시용 필드(basicScore 등)와 누적 필드(roundScore/totalScore)의 저장소는 Inspector 노출을
+// 표시용 필드(basicScore 등)와 누적 필드(totalScore)의 저장소는 Inspector 노출을
 // 위해 YutGameManager에 유지하고, 쓰기는 이 클래스만 수행한다.
 // 일반 C# 클래스 (MonoBehaviour 아님) — Inspector 연결에 영향 없음
 public class ScoreManager
@@ -55,36 +58,42 @@ public class ScoreManager
         this.gm = gm;
     }
 
-    // 일반 결과(도~모) 투척 정산: 말 이동 → 초기 베이직·멀티플 → 효과 기록 → 점수 확정 → 총점 합산
-    // 모든 결과(일반·저주)는 투척 1회를 정확히 소모한다
+    // 확정 결과(도~모) 투척 정산: 말 이동 → 도착 칸 공격점수 × 보스 상성 × 윷 배율 → 점수 확정 → 총점 합산
+    // 공식: 최종 데미지 = 도착 칸 기본 공격점수 × 상성 배율 × 윷 결과 배율 (완주·윷 기본점수 가산 없음)
+    // START·땅·쇠는 상성과 무관하게 공격점수 0 → 데미지 0. 모든 결과는 투척 1회를 정확히 소모한다
     public void SettleNormalThrow(ThrowSettlement settlement, YutResult selected)
     {
-        // 1) 말 이동 → 도착 칸 점수 + 완주 보너스 + 윷 강화치 = 이번 투척 베이직
+        // 1) 말 이동 → 도착 칸의 속성과 기본 공격점수 확정
         int steps = BoardManager.MoveSteps(selected);
         int landing = gm.board.MovePiece(steps, settlement.movePath);
         BoardTile tile = gm.board.tiles[landing];
         settlement.landingTileIndex = landing;
-        settlement.tileScore = tile.Score;
-        settlement.lapBonus = gm.board.lapCount * 10;   // 완주 보너스 = 완주 횟수 × 10 (도착 칸에 적용)
-        settlement.landedOnBellTile = tile.hasBellEvent;
+        settlement.tileScore = tile.AttackScore;
+        settlement.landedOnBellTile = tile.attribute == TileAttribute.Earth;
 
         YutStatEntry stat = gm.rollManager.GetStat(selected);
-        settlement.baseBasic = tile.Score + settlement.lapBonus + stat.basicBonus;
+        settlement.affinityMult = gm.bossManager.AffinityMultiplier(tile.attribute);
+        settlement.baseBasic = tile.AttackScore;
         settlement.baseMult = stat.mult;
         settlement.finalBasic = settlement.baseBasic;
         settlement.finalMult = stat.mult;
 
-        gm.currentThrows++;   // 일반 결과도 투척 1회 소모
+        gm.currentThrows++;   // 확정 투척은 기본 투척 기회 정확히 1회 소모 (재투척은 별도 소모 없음)
 
-        // 2) 향후 부적·방울·주술 효과는 이 지점에서 settlement.steps에 순차 추가된다
+        // 2) 보스 상성 적용 기록 — 공격 속성 칸(불·물·풀) 착지 시에만. 소수 배율은 float 필드에 기록
+        if (tile.AttackScore > 0)
+        {
+            AddAffinityStep(settlement.steps, tile, stat.mult, settlement.affinityMult);
+        }
+        // 향후 부적·방울·주술 효과는 이 지점에서 settlement.steps에 순차 추가된다
 
-        // 3) 이번 투척 점수 확정 + 이번 판 점수·보스전 총점 1회 합산
+        // 3) 이번 투척 점수 확정 + 보스전 총점 1회 합산
+        //    소수 상성 배율(×0.5)을 정수 나눗셈으로 0 처리하지 않기 위해 float 곱셈 후 반올림
         //    표시용 throwScore 필드는 여기서 갱신하지 않는다 — '투척 점수 표시' 단계에서만 보인다
-        settlement.throwScore = settlement.finalBasic * settlement.finalMult;
-        gm.roundScore += settlement.throwScore;
+        settlement.throwScore = Mathf.RoundToInt(settlement.finalBasic * settlement.affinityMult * settlement.finalMult);
         gm.totalScore += settlement.throwScore;
 
-        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x {settlement.finalMult} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Round: {gm.roundScore} | Total: {gm.totalScore}");
+        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x 상성{settlement.affinityMult} x {settlement.finalMult} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Total: {gm.totalScore}");
     }
 
     // 저주 계열 결과 처리: 백도와 낙은 별개 결과이며 둘 다 투척 1회 소모
@@ -94,24 +103,44 @@ public class ScoreManager
 
         if (result == YutResult.BackDo)
         {
-            // 보스 번호 = 선택 순번 + 1 (1~5: 이번 판 점수 차감 / 6~10: 이번 판 점수 초기화)
+            // 보스 번호 = 선택 순번 + 1 (1~5: 누적 점수 차감 / 6~10: 누적 점수 초기화)
+            // 라운드 폐지 후 차감 기준은 보스전 누적 총점(totalScore) — 구 판별 누적 roundScore와 동치였다
             int bossNumber = gm.selectedBossIndex + 1;
             if (bossNumber <= 5)
             {
-                // 이번 판 누적 점수에서만 차감 — 이전 판 확정분은 불침범
-                lastBackDoLoss = Mathf.Min(gm.roundScore, gm.backDoPenalty);
-                gm.roundScore -= lastBackDoLoss;
+                lastBackDoLoss = Mathf.Min(gm.totalScore, gm.backDoPenalty);
                 gm.totalScore -= lastBackDoLoss;
             }
             else
             {
-                lastBackDoLoss = gm.roundScore;
-                gm.totalScore -= gm.roundScore;
-                gm.roundScore = 0;
+                lastBackDoLoss = gm.totalScore;
+                gm.totalScore = 0;
             }
             gm.totalScore = Mathf.Max(0, gm.totalScore);
         }
         // 낙: 획득 점수 0 + 누적 점수 유지 — 추가 처리 없음 (투척 소모·콤보 단절은 위 공통 처리)
+    }
+
+    // 보스 상성 단계 기록 — 배율 적용 과정을 정산 기록에 남겨 연출·디버깅에 사용한다
+    private void AddAffinityStep(List<ScoreEffectStep> steps, BoardTile tile, int yutMult, float affinityMult)
+    {
+        string attrName = BoardManager.AttributeName(tile.attribute);
+        string role = gm.bossManager.AffinityRoleName(tile.attribute);
+        steps.Add(new ScoreEffectStep
+        {
+            source = EffectSourceType.Boss,
+            sourceId = $"boss{gm.selectedBossIndex}_affinity",
+            displayName = $"보스 상성 — {attrName} {role}",
+            target = EffectTarget.Multiplier,
+            op = EffectOp.Multiply,
+            opValue = 0,                    // 소수 배율은 opValueF에 기록
+            opValueF = affinityMult,
+            beforeValue = yutMult,
+            afterValue = 0,
+            afterValueF = yutMult * affinityMult,   // 상성 반영 실효 멀티플 (예: 3×0.5=1.5)
+            delta = 0,
+            order = steps.Count,
+        });
     }
 
     private static void AddStep(List<ScoreEffectStep> steps, EffectSourceType source, string sourceId,
