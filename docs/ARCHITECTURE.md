@@ -19,7 +19,7 @@
 | `BoardManager.cs` | Scripts/Core | 30칸 속성 말판 생성(런당 1회)·말 이동 연출·말판 UI 갱신 |
 | `YutBoard.cs` | Scripts/Core | 말판 데이터 (`YutBoard`, `BoardTile`, `TileAttribute`, `BellData` — UI 참조 없는 순수 데이터) |
 | `ScoreManager.cs` | Scripts/Core | 점수 정산·저주 처리 (`ScoreEffectStep`, `ThrowSettlement`, `EffectSourceType/Target/Op` 타입 정의 포함) |
-| `BossManager.cs` | Scripts/Core | 보스 데이터 접근·순차 소개·건너뛰기 판별·런타임 보스 상성 (`BossData`, `BossAffinity` 타입 정의 포함) |
+| `BossManager.cs` | Scripts/Core | 보스 데이터 접근·순차 소개·건너뛰기 판별·런타임 보스 상성·보스 말 위치·피해 단계별 이동 (`BossData`, `BossAffinity` 타입 정의 포함) |
 | `BellManager.cs` | Scripts/Core | 방울 이벤트 — 후보 3개 제시·선택·보유·초기화 |
 | `GameUIManager.cs` | Scripts/UI | 텍스트 갱신·패널 토글·정산 연출 코루틴 (규칙 계산 없음) |
 
@@ -29,6 +29,8 @@
 |---|---|---|
 | 투척 세션 `session` (면·재투척·확정) | YutRollManager | YutThrowSession(면 판정) / YutGameManager(세션 시작·재투척·확정 진입점 가드) |
 | 보스 상성 `runAffinities` | BossManager | BossManager (`EnsureAffinity` 1회 생성 / `ResetAffinities` 런 리셋) |
+| 보스 말 위치 `bossPieceIndex` | BossManager | BossManager (`MoveBossPiece` — 최초 투척 성공 시만 호출, 피해 단계별 `bossMoveStageMin/Max` 추첨 / `ResetBossPiece` 런 리셋). 시각 위치는 BoardManager.MoveBossPieceVisual |
+| 잡기 판정 `caught`/`catchMult` | ThrowSettlement | ScoreManager (확정 정산에서 도착 칸 = bossPieceIndex 비교, ×2 1회 계산 — 연출은 기록 재생) |
 | 런타임 확률 가중치 `runtimeWeights` | YutRollManager | YutRollManager (`BuildWeights`/`ModifyProbability`) — 신규 면 조합 투척은 미사용, API 호환용 |
 | 런타임 윷 스탯 `yutStats` | YutRollManager | YutRollManager (`BuildYutStats` — 기본값을 **새 객체로 복사**, `UpgradeYutStat`) |
 | 말 위치·완주·칸 배치 `board` | YutGameManager.board (Inspector 노출) | YutBoard.MovePiece(데이터 이동) / BoardManager(배치 생성·말 위치 초기화·시각 위치) — 배치(`layoutGenerated`)와 말 위치 초기화 분리 |
@@ -43,7 +45,7 @@
 
 `Start → (StartGame → 보스 소개) → EnterBossBattle → Playing → Cleared/GameOver`
 
-- `RollYut()` = 세션 시작(윷 4개 최초 투척) → `RerollStick(0~3)` 0~2회 → `ConfirmThrow()` = 확정 → `SettleNormalThrow`(Score: 칸 공격점수 × 보스 상성 × 윷 배율) → `ThrowSettlement` 확정 → `PresentSettlement`(UI) → `FinishPresentation`에서 클리어/게임오버 판정
+- `RollYut()` = 세션 시작(윷 4개 최초 투척) + 보스 말 1회 이동(누적 피해 단계 범위) → `RerollStick(0~3)` 0~2회 → `ConfirmThrow()` = 확정 → `SettleNormalThrow`(Score: 칸 공격점수 × 상성 × 윷 배율 × 잡기 배율) → `ThrowSettlement` 확정 → `PresentSettlement`(UI) → `FinishPresentation`에서 클리어/게임오버 판정
 - 세션은 일반 결과 5종만 생성 — 저주 경로(`HandleCurseResult`)는 API로 유지하되 현재 도달 불가 (백도·낙 발생 조건 미확정)
 - 클리어 판정 `totalScore >= goalScore`(마지막 투척 처치 포함 우선) / 5회 소진 미달 `EnterGameOver` — 라운드·판 구조 폐지 (2026-10-18)
 - 저주(백도·낙)는 말 이동·점수 계산 없이 `HandleCurseResult` 고정 처리

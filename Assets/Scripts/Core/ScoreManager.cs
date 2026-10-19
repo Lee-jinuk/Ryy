@@ -21,6 +21,7 @@ public class ScoreEffectStep
     public int order;                // 연출 재생 순서
     // 소수 배율 단계(보스 상성 ×0.5 등)용 float 필드 — 0이 아니면 int 필드 대신 사용
     public float opValueF;           // 실제 적용 배율 (0.5/2 등) — int로 표현 불가한 소수 배율 기록용
+    public float beforeValueF;       // 적용 전 소수 수치 — 상성 반영 멀티플 등
     public float afterValueF;        // 적용 후 소수 수치 — 상성 반영 멀티플 등
 }
 
@@ -37,6 +38,8 @@ public class ThrowSettlement
     public int landingTileIndex = -1;    // 말판 도착 칸 (-1 = 이동 없음 — 저주)
     public int tileScore;                // 도착 칸의 기본 공격점수 (불·물·풀 50 / START·땅·쇠 0)
     public float affinityMult = 1f;      // 도착 칸 속성에 대한 보스 상성 배율 (약점 2 / 강점 0.5 / 기본 1)
+    public bool caught;                  // 잡기 성공 — 최종 도착 칸 = 보스 말 위치 (통과는 미발동)
+    public float catchMult = 1f;         // 잡기 배율 (성공 ×2 / 실패 ×1)
     public bool landedOnBellTile;        // 땅 칸에 정확히 착지했는지 — 방울 뽑기 화면 발동 조건
     public List<int> movePath = new List<int>();  // 경유 칸 인덱스 — 이동 연출 재생용
     public List<ScoreEffectStep> steps = new List<ScoreEffectStep>();
@@ -85,15 +88,23 @@ public class ScoreManager
         {
             AddAffinityStep(settlement.steps, tile, stat.mult, settlement.affinityMult);
         }
+
+        // 3) 보스 말 잡기 판정 — 최종 도착 칸 = 보스 말 현재 칸이면 성공 (통과만으론 미발동, 칸 인덱스 비교)
+        //    성공 시 최종 피해 ×2 — 칸 점수·윷 배율·상성을 모두 계산한 뒤 적용. 0점 칸은 잡아도 0
+        settlement.caught = landing == gm.bossManager.bossPieceIndex;
+        settlement.catchMult = settlement.caught ? 2f : 1f;
+        if (settlement.caught)
+        {
+            AddCatchStep(settlement.steps, stat.mult * settlement.affinityMult, settlement.catchMult);
+        }
         // 향후 부적·방울·주술 효과는 이 지점에서 settlement.steps에 순차 추가된다
 
-        // 3) 이번 투척 점수 확정 + 보스전 총점 1회 합산
-        //    소수 상성 배율(×0.5)을 정수 나눗셈으로 0 처리하지 않기 위해 float 곱셈 후 반올림
+        // 4) 이번 투척 점수 확정 + 보스전 총점 1회 합산 — 곱셈(상성·잡기 소수 포함)을 모두 마친 뒤 정수화
         //    표시용 throwScore 필드는 여기서 갱신하지 않는다 — '투척 점수 표시' 단계에서만 보인다
-        settlement.throwScore = Mathf.RoundToInt(settlement.finalBasic * settlement.affinityMult * settlement.finalMult);
+        settlement.throwScore = Mathf.RoundToInt(settlement.finalBasic * settlement.affinityMult * settlement.finalMult * settlement.catchMult);
         gm.totalScore += settlement.throwScore;
 
-        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x 상성{settlement.affinityMult} x {settlement.finalMult} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Total: {gm.totalScore}");
+        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x 상성{settlement.affinityMult} x {settlement.finalMult}{(settlement.caught ? " x 잡기2" : "")} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Total: {gm.totalScore}");
     }
 
     // 저주 계열 결과 처리: 백도와 낙은 별개 결과이며 둘 다 투척 1회 소모
@@ -136,8 +147,30 @@ public class ScoreManager
             opValue = 0,                    // 소수 배율은 opValueF에 기록
             opValueF = affinityMult,
             beforeValue = yutMult,
+            beforeValueF = yutMult,
             afterValue = 0,
             afterValueF = yutMult * affinityMult,   // 상성 반영 실효 멀티플 (예: 3×0.5=1.5)
+            delta = 0,
+            order = steps.Count,
+        });
+    }
+
+    // 보스 말 잡기 단계 기록 — 성공 시에만 기록 (실패는 ×1이라 단계 없음)
+    private void AddCatchStep(List<ScoreEffectStep> steps, float effectiveMultBefore, float catchMult)
+    {
+        steps.Add(new ScoreEffectStep
+        {
+            source = EffectSourceType.Boss,
+            sourceId = $"boss{gm.selectedBossIndex}_catch",
+            displayName = "보스 말 잡기",
+            target = EffectTarget.Multiplier,
+            op = EffectOp.Multiply,
+            opValue = (int)catchMult,
+            opValueF = catchMult,
+            beforeValue = 0,
+            beforeValueF = effectiveMultBefore,                  // 윷 배율 × 상성까지 반영된 멀티플
+            afterValue = 0,
+            afterValueF = effectiveMultBefore * catchMult,       // 잡기 ×2 반영 최종 실효 멀티플
             delta = 0,
             order = steps.Count,
         });

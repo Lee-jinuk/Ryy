@@ -32,6 +32,12 @@ public class BossManager
     // 보스 소개 화면에 표시 중인 보스 — '다음' 버튼(EnterBossBattle)이 이 보스전을 시작
     public int pendingBossIndex;
 
+    // 보스 말 위치 — 플레이어 말(board.pieceIndex)과 독립 관리. 같은 30칸 말판 사용
+    // 임시 동작 (미확정 — 확정 대기): 시작 칸 = START(0), 이동 방향 = 플레이어와 동일(인덱스 증가·순환),
+    // 보스 전환 시 위치 유지(배치 유지 규칙과 동일 방향). 새 런에서만 초기화
+    public int bossPieceIndex;
+    public int lastBossMoveSteps;   // 직전 추첨 이동 거리 (디버그·검증용)
+
     // 상성 대상이 되는 공격 속성 — START·땅·쇠는 상성 없이 공격점수 0 유지
     private static readonly TileAttribute[] CombatAttributes =
         { TileAttribute.Fire, TileAttribute.Water, TileAttribute.Forest };
@@ -167,4 +173,68 @@ public class BossManager
 
     // 런 종료 시 상성 전부 폐기 — 새 런에서 첫 소개/사용 시 새로 생성한다
     public void ResetAffinities() => runAffinities.Clear();
+
+    // ============ 보스 말 (표시·이동 전용 — 칸 효과·공격·방울 발동 없음) ============
+
+    // 현재 누적 피해 비율이 적용되는 이동 단계 — 실제 누적 피해 totalScore 기준 (연출용 displayTotal 아님)
+    // 단계 i는 누적 피해 ≥ 최대 HP의 i/N 에서 적용 (N = 단계 수, 기본 3단계: <1/3 → 4~7, ≥1/3 → 3~6, ≥2/3 → 2~5)
+    // 정수 곱셈 비교로 HP가 나누어떨어지지 않아도 경계 오류 없음. 변경분은 다음 최초 투척 추첨부터 적용
+    public int BossMoveStage
+    {
+        get
+        {
+            int stages = Mathf.Min(gm.bossMoveStageMin?.Length ?? 0, gm.bossMoveStageMax?.Length ?? 0);
+            if (stages <= 1 || gm.goalScore <= 0)
+            {
+                return 0;
+            }
+            int stage = 0;
+            for (int i = 1; i < stages; i++)
+            {
+                if (gm.totalScore * stages >= i * gm.goalScore)
+                {
+                    stage = i;   // 경계값 도달 시 해당 단계 적용 — 두 경계를 한 번에 넘어도 최종 단계 선택
+                }
+            }
+            return stage;
+        }
+    }
+
+    // 보스 이동 거리 추첨 — 현재 피해 단계의 최소~최대 정수 균등 (상한 포함). 잘못된 설정은 보정 후 경고
+    private int DrawBossMoveSteps()
+    {
+        int stage = BossMoveStage;
+        int min = gm.bossMoveStageMin[stage];
+        int max = gm.bossMoveStageMax[stage];
+        if (min > max)
+        {
+            Debug.LogWarning($"[YutGameManager] 보스 이동 {stage}단계 최소값({min}) > 최대값({max}) — 순서를 바꿔 적용합니다.", gm);
+            (min, max) = (max, min);
+        }
+        if (min < 1)
+        {
+            Debug.LogWarning($"[YutGameManager] 보스 이동 {stage}단계 최소값이 {min}칸 — 1칸 미만은 허용하지 않아 1로 보정합니다.", gm);
+            min = 1;
+        }
+        return Random.Range(min, max + 1);   // Random.Range(int)는 상한 미포함 → max 포함을 위해 +1
+    }
+
+    // 보스 말 1회 이동 — 새 투척 세션의 최초 RollYut() 성공 시에만 호출 (재투척·확정·거부된 입력에서는 호출 금지)
+    // 플레이어 위치·누적 이동·완주와 무관하며, 도착·경유 칸의 효과를 발동시키지 않는다
+    public void MoveBossPiece()
+    {
+        int steps = DrawBossMoveSteps();
+        lastBossMoveSteps = steps;
+        bossPieceIndex = (bossPieceIndex + steps) % YutBoard.TileCount;   // 끝 칸 넘으면 START로 순환
+        gm.boardManager.MoveBossPieceVisual(bossPieceIndex);
+        Debug.Log($"--- 보스 말 이동: +{steps}칸 → 칸 {bossPieceIndex} (이동 단계 {BossMoveStage}) ---");
+    }
+
+    // 런 초기화 — 이전 런의 보스 말 위치가 남지 않도록 시작 칸으로 되돌린다 (미확정: 시작 칸 규칙 — 임시 START)
+    public void ResetBossPiece()
+    {
+        bossPieceIndex = 0;
+        lastBossMoveSteps = 0;
+        gm.boardManager.MoveBossPieceVisual(0);
+    }
 }

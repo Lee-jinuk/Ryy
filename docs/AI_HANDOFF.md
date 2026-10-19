@@ -6,9 +6,26 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ## [2026-10-18 오전 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-18 오전 (6차) 변경사항 요약 - GPT 기획 / Devin 구현]
+[2026-10-19 오전 (7차) 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — 착지 정보 + 보스 상성 + 윷 4개 재투척 세션 (사용자 승인):
+★ 최신 — 보스 말 + 잡기 ×2 + 누적 피해별 이동 단계 (사용자 승인):
+- `bossPiece`(RectTransform) 신설 — 플레이어와 별도 보스 말, 같은 30칸
+  사용, 위치 독립 (`BossManager.bossPieceIndex`). 미연결 시 1회 경고 후 생략
+- 보스 말 이동 = 새 세션 최초 `RollYut()` 성공 시에만 1회 — 재투척·확정·
+  거부 입력 이동 없음. 칸 효과 미발동, 즉시 위치 변경 (연출 없음)
+- 이동 거리 = 누적 피해 3단계: <1/3 → 4~7 / ≥1/3 → 3~6 / ≥2/3 → 2~5
+  (정수 균등·상한 포함, `totalScore×N ≥ i×goalScore` 정수 비교).
+  `bossMoveStageMin`/`bossMoveStageMax` 배열 필드. 새 보스전은 0단계
+- 잡기: 확정 정산에서 최종 도착 칸 = 보스 말 칸 → ×2
+  (통과 미발동, 0점 칸은 잡아도 0, 보스 말 위치 미변경).
+  `settlement.caught`/`catchMult` + 잡기 ScoreEffectStep 기록,
+  mult 표시의 실효 배율에 포함 (개·약점·잡기 → 3×2×2=12)
+- ⚠ 미확정(임시 구현): 보스 말 시작 칸·방향·보스 전환 위치 —
+  임시로 START 시작·플레이어 방향·전환 유지, 확정 대기
+- ⚠ 사용자 작업: 보스 말 오브젝트 생성 → `bossPiece` 필드 연결
+- 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
+
+[이전] 2026-10-18 오전(6차) 변경사항 — 착지 정보 + 보스 상성 + 윷 4개 재투척 세션:
 - 신규 `YutThrowSession.cs` (Core, POJO): 윷 4개 각 앞·뒤 50%,
   앞면 개수 → 결과 (0=모 1=도 2=개 3=걸 4=윷). 재투척 = 서로 다른 윷
   최대 2개·같은 윷 1회·0/1/2회 후 확정 가능. 확정 전 이동·득점 없음
@@ -353,6 +370,12 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - 현재 브랜치: `develop` (origin: https://github.com/Lee-jinuk/Ryy.git)
 - 코드 구조: `YutGameManager` 총괄 + 책임별 POJO 매니저 6개 — `docs/ARCHITECTURE.md` 참조
 
+### [2026-10-19 오전 (7차) - GPT 기획 / Devin 구현]
+
+- 보스 말 + 잡기 ×2 + 이동 단계 구현 (상세는 요약 블록·GAME_RULES 7차 참조): `bossPiece` 필드, `BossManager.bossPieceIndex`·`BossMoveStage`·`MoveBossPiece`·`ResetBossPiece`, `bossMoveStageMin/Max` 배열, 잡기 판정·`caught`/`catchMult`·잡기 step, 실효 배율에 잡기 포함
+- 미확정 임시 구현: 보스 말 시작 칸(START)·방향(플레이어 동일)·보스 전환 위치(유지) — 확정 대기
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기 — `bossPiece` 연결 필요
+
 ### [2026-10-18 오전 (6차) - GPT 기획 / Devin 구현]
 
 - 착지 정보·보스 상성·윷 4개 재투척 세션 구현 (상세는 요약 블록·GAME_RULES 6차 참조): `YutThrowSession.cs` 신설, `RollYut`/`RerollStick(1~4)`/`ConfirmThrow` 버튼 흐름, `BossAffinity` 런타임 상성(런당 보스별 1회 생성), 데미지 = 칸 점수 × 상성 × 윷 배율, `landingTileText`/`bossAffinityText`/세션 UI 필드 5종 추가, `rollButton` 제거, `숲`→`풀` 표시, `multiplier` float화
@@ -450,7 +473,7 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - ~~피버 시스템 채택 여부 미결~~ → 해결 후 **폐기** (2026-10-18 오전, 타겟·피버 전체 제거)
 - ~~`Input.GetKeyDown` 런타임 예외~~ → 해결 (Both 입력 핸들러)
 - ~~`YutGameManager` 씬 미배치 / UI 미연결~~ → 해결 (씬 배치 확인 + 텍스트 필드 연결 유지)
-- **UI 수동 연결 대기 (사용자 작업)** — 2026-10-18 `Test.unity` 검사 기준: 보스 소개 패널·소개 텍스트 3종·`skipBossButton`·30칸 `boardTiles`·`playerPiece`·주요 텍스트·OnClick(`StartGame`/`EnterBossBattle`/`SkipBoss`/`GoToNextBoss`/`RestartRun`/`RollYut`)은 **사용자가 연결 완료**. **미연결 = 투척 세션 UI 7종(`stickFaceTexts[4]`/`rerollButtons[4]`/`throwStatusText`/`rerollRemainText`/`confirmThrowButton`), `landingTileText`, `bossAffinityText`, `bossSelectAffinityText`, `bellChoicePanel`+옵션 텍스트·슬롯(땅 칸 착지 시 경고 후 건너뜀), `lapCountText`, `nextBossButton`** + `RerollStick1~4`/`ConfirmThrow`/`SkipPresentation`/방울 선택 버튼 OnClick. SampleScene은 구버전 — boardTiles 18개만 연결됨, 나머지 미정리 (테스트는 Test.unity 기준)
+- **UI 수동 연결 대기 (사용자 작업)** — 2026-10-18 `Test.unity` 검사 기준: 보스 소개 패널·소개 텍스트 3종·`skipBossButton`·30칸 `boardTiles`·`playerPiece`·주요 텍스트·OnClick(`StartGame`/`EnterBossBattle`/`SkipBoss`/`GoToNextBoss`/`RestartRun`/`RollYut`)은 **사용자가 연결 완료**. **미연결 = `bossPiece`(보스 말 오브젝트 생성 필요), 투척 세션 UI 7종(`stickFaceTexts[4]`/`rerollButtons[4]`/`throwStatusText`/`rerollRemainText`/`confirmThrowButton`), `landingTileText`, `bossAffinityText`, `bossSelectAffinityText`, `bellChoicePanel`+옵션 텍스트·슬롯(땅 칸 착지 시 경고 후 건너뜀), `lapCountText`, `nextBossButton`** + `RerollStick1~4`/`ConfirmThrow`/`SkipPresentation`/방울 선택 버튼 OnClick. SampleScene은 구버전 — boardTiles 18개만 연결됨, 나머지 미정리 (테스트는 Test.unity 기준)
 - **블러 미구현**: 타겟 선택 모달 폐기와 함께 해당 UI는 비활성 잔존 — 씬의 `TargetSelectOverlay`/`TargetSelectPanel`/`TargetYut`/`FeverPanel` 오브젝트는 사용자가 삭제 여부 결정
 - **Unity Play 테스트 미수행**: Devin은 에디터 미실행 — dotnet build(0 오류)까지만 검증. 사용자가 Unity에서 컴파일·Play 확인 필요
 - **백도 ↔ 보스 체력 표시 (보고)**: 백도 점수 차감 → `totalScore` 감소 → `bossCurrentHPText`가 체력 회복처럼 표시됨 — 규칙 미변경

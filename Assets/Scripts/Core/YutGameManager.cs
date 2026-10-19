@@ -58,6 +58,7 @@ public class YutGameManager : MonoBehaviour
     public GameObject boardPanel;                    // 원형 말판 부모 (있으면 상태에 맞춰 표시)
     public GameObject[] boardTiles = new GameObject[30];  // 칸 오브젝트 30개 — START → 이동 방향 29칸 순서. 자식의 Text가 속성명 표시, 'BellIcon' 이름의 자식은 땅(방울) 칸 표시
     public RectTransform playerPiece;                // 플레이어 말 — 도착 칸 위치로 이동
+    public RectTransform bossPiece;                  // 보스 말 — 플레이어와 별개, 최초 투척 성공 시마다 이동 (미연결 시 경고 후 표시만 생략)
     public Text lapCountText;                        // 완주 횟수 (숫자만 출력, 미연결 시 무시)
     public Text landingTileText;                     // 착지 칸 정보 — "불 - 50점" 형식 (상성·윷 배율 적용 전 칸 기본점수, 미연결 시 무시)
     public float moveStepDelay = 0.15f;              // 말 이동 1칸당 딜레이(초) — Inspector 조절
@@ -112,6 +113,12 @@ public class YutGameManager : MonoBehaviour
     public float multiplier = 0f;   // 이번 투척 계산의 멀티플 — 윷 배율에 보스 상성까지 반영된 실효 배율 표시 (소수 가능)
     public int throwScore = 0;    // 이번 투척 확정 점수
     public int totalScore = 0;    // 보스전 전체 누적 총점 (보스 HP와 대응 — 백도 차감 기준이기도 함)
+
+    [Header("Boss Move — 보스 말 이동 거리 (밸런스 조절값)")]
+    // 누적 피해 비율 단계별 이동 범위 — 단계 i는 피해 ≥ 최대 HP의 i/N 에서 적용 (기본 3단계: <1/3 → 4~7 / ≥1/3 → 3~6 / ≥2/3 → 2~5)
+    // 배열 길이 = 단계 수. 변경된 범위는 다음 투척 세션의 최초 던지기부터 적용. 새 보스전(피해 0)은 0단계
+    public int[] bossMoveStageMin = { 4, 3, 2 };   // 단계별 이동 최소 칸 수
+    public int[] bossMoveStageMax = { 7, 6, 5 };   // 단계별 이동 최대 칸 수 (최소~최대 정수 균등 추첨, 상한 포함)
 
     [Header("Boss / Curse (임시 테스트값)")]
     public int backDoPenalty = 30;   // 보스 1~5 백도 차감량 (미확정 수치 — 테스트값)
@@ -272,6 +279,7 @@ public class YutGameManager : MonoBehaviour
             return;   // 진행 중 세션 덮어쓰기 차단 — 재투척 선택 또는 '결과 확정' 필요
         }
         rollManager.StartSession();
+        bossManager.MoveBossPiece();   // 최초 투척 성공 시 보스 말 1회 이동 (재투척·확정에서는 이동 없음)
         hasRolled = false;   // 이전 확정 결과 표시 지우기 — 새 세션은 확정 전까지 결과 미표시
         uiManager.UpdateUI();
     }
@@ -489,7 +497,7 @@ public class YutGameManager : MonoBehaviour
     internal void FinishPresentation(ThrowSettlement settlement)
     {
         basicScore = settlement.finalBasic;
-        multiplier = settlement.finalMult * settlement.affinityMult;   // 실효 배율 (윷 배율 × 보스 상성)
+        multiplier = settlement.finalMult * settlement.affinityMult * settlement.catchMult;   // 실효 배율 (윷 × 상성 × 잡기)
         throwScore = settlement.throwScore;
         displayTotal = totalScore;
         isPresenting = false;
@@ -532,6 +540,7 @@ public class YutGameManager : MonoBehaviour
         selectedBossIndex = 0;                 // 새 런은 첫 번째 보스부터 — 전투·소개 인덱스 모두 초기화
         bossManager.pendingBossIndex = 0;
         bossManager.ResetAffinities();       // 보스 상성은 런 단위 — 새 런에서 새로 생성
+        bossManager.ResetBossPiece();        // 보스 말 위치 초기화 — 이전 런 상태 잔존 방지
         currentThrows = 0;
         totalScore = 0;
         displayTotal = 0;

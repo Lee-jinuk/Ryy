@@ -11,6 +11,17 @@
 - `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
 - 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
 
+### [2026-10-19 오전 (7차) - GPT 기획 / Devin 구현]
+
+**보스 말 + 잡기 ×2 + 누적 피해별 이동 단계** (사용자 승인 변경):
+
+- `YutGameManager`: `bossPiece`(RectTransform), `bossMoveStageMin[3]={4,3,2}`/`bossMoveStageMax[3]={7,6,5}` 필드. `RollYut()` 가드 통과 후 `bossManager.MoveBossPiece()` 1회 호출. `ResetRunState`에 `ResetBossPiece()` 추가
+- `BossManager`: `bossPieceIndex`/`lastBossMoveSteps` — 플레이어 말과 독립, `%30` 순환. `BossMoveStage` — `totalScore×N ≥ i×goalScore` 정수 비교로 단계 판정(displayTotal 아닌 실제 누적). `DrawBossMoveSteps` — 단계 배열에서 최소~최대 정수 균등(상한 포함), min>max·min<1 보정 경고. `ResetBossPiece`(새 런 초기화)
+- `BoardManager`: `MoveBossPieceVisual` — 즉시 위치 변경(연출 없음), `bossPiece` 미연결 시 1회 경고 후 생략
+- 잡기: `SettleNormalThrow`에서 `landing == bossPieceIndex` 판정(칸 인덱스, 통과 미발동) → `settlement.caught`/`catchMult`(×2/×1) + 잡기 `ScoreEffectStep` 기록. 최종식 `RoundToInt(칸 점수 × 상성 × 윷 배율 × 잡기)` — 곱셈 완료 후 정수화. `FinishPresentation`의 `multiplier` 실효 배율에 잡기 포함. `ScoreEffectStep.beforeValueF` 추가
+- 미확정 임시 구현: 보스 말 START 시작·플레이어 방향·보스 전환 시 위치 유지 — 확정 대기로 문서에 명시
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — `bossPiece` 오브젝트 생성·연결 필요
+
 ### [2026-10-18 오전 (6차) - GPT 기획 / Devin 구현]
 
 **착지 정보 표시 + 보스 상성 + 윷 4개 재투척 세션** (사용자 승인 변경):

@@ -137,6 +137,32 @@ public class BoardManager
         }
     }
 
+    // 보스 말 UI를 해당 칸 위치로 즉시 이동 — 플레이어 말 상태와 완전히 분리 (이번 단계는 즉시 위치 변경, 이동 연출 없음)
+    // 보스 말이 도착·통과한 칸의 공격·방울·상성 효과는 발동하지 않는다 (순수 표시)
+    private bool bossPieceWarned;
+
+    public void MoveBossPieceVisual(int tileIndex)
+    {
+        if (gm.bossPiece == null)
+        {
+            if (!bossPieceWarned)
+            {
+                bossPieceWarned = true;
+                Debug.LogWarning("[YutGameManager] bossPiece 미연결 — 보스 말 위치는 갱신되지만 화면에 표시되지 않습니다. 말판에 보스 말 오브젝트를 만들어 연결하세요.", gm);
+            }
+            return;
+        }
+        if (tileIndex < 0 || tileIndex >= gm.boardTiles.Length)
+        {
+            return;
+        }
+        GameObject tileObj = gm.boardTiles[tileIndex];
+        if (tileObj != null)
+        {
+            gm.bossPiece.position = tileObj.transform.position;
+        }
+    }
+
     // 런 종료 시 말판 배치·말·완주 초기화 — 다음 런의 첫 보스전에서 새 배치를 생성한다
     public void ResetForNewRun()
     {
