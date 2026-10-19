@@ -124,6 +124,10 @@ public class YutRollManager
         {
             yutStats[result] = new YutStatEntry { result = result };
         }
+        if (gm.baseYutStats == null)
+        {
+            return;   // balanceConfig 미연결 — 경고는 ValidateDataAssets가 출력
+        }
         foreach (YutStatEntry entry in gm.baseYutStats)
         {
             if (entry != null)

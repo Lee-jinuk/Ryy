@@ -33,10 +33,14 @@ public class BossManager
     public int pendingBossIndex;
 
     // 보스 말 위치 — 플레이어 말(board.pieceIndex)과 독립 관리. 같은 30칸 말판 사용
-    // 임시 동작 (미확정 — 확정 대기): 시작 칸 = START(0), 이동 방향 = 플레이어와 동일(인덱스 증가·순환),
-    // 보스 전환 시 위치 유지(배치 유지 규칙과 동일 방향). 새 런에서만 초기화
+    // 시작 칸 = START(0)이며 모든 보스전 시작 시 START로 초기화 (소개·건너뛰기에서는 변경 없음)
+    // 임시 동작 (미확정 — 확정 대기): 이동 방향 = 플레이어와 동일(인덱스 증가·순환)
     public int bossPieceIndex;
     public int lastBossMoveSteps;   // 직전 추첨 이동 거리 (디버그·검증용)
+
+    // 봉쇄부 — 다음 최초 던지기의 보스 이동을 1회 금지 (미확정 임시 규칙: 중복 사용 중첩 없음,
+    // 보스 전환 시 해제). 이미 완료된 이번 이동은 되돌리지 않고 다음 MoveBossPiece에서 소모된다
+    public bool pendingMoveSeal;
 
     // 상성 대상이 되는 공격 속성 — START·땅·쇠는 상성 없이 공격점수 0 유지
     private static readonly TileAttribute[] CombatAttributes =
@@ -223,6 +227,14 @@ public class BossManager
     // 플레이어 위치·누적 이동·완주와 무관하며, 도착·경유 칸의 효과를 발동시키지 않는다
     public void MoveBossPiece()
     {
+        if (pendingMoveSeal)
+        {
+            // 봉쇄부 — 이번 보스 이동 생략하고 상태 소모. 실제 이동거리 0으로 기록
+            pendingMoveSeal = false;
+            lastBossMoveSteps = 0;
+            Debug.Log($"봉쇄부 적용: 보스 이동 0칸 — 칸 {bossPieceIndex} 유지");
+            return;
+        }
         int steps = DrawBossMoveSteps();
         lastBossMoveSteps = steps;
         bossPieceIndex = (bossPieceIndex + steps) % YutBoard.TileCount;   // 끝 칸 넘으면 START로 순환
@@ -230,7 +242,8 @@ public class BossManager
         Debug.Log($"--- 보스 말 이동: +{steps}칸 → 칸 {bossPieceIndex} (이동 단계 {BossMoveStage}) ---");
     }
 
-    // 런 초기화 — 이전 런의 보스 말 위치가 남지 않도록 시작 칸으로 되돌린다 (미확정: 시작 칸 규칙 — 임시 START)
+    // 보스 말 초기화 — 논리 위치와 화면 위치를 함께 START(인덱스 0)로 되돌린다
+    // 호출 시점: 모든 보스전 시작(BeginBossFight) + 런 초기화. 소개 화면·건너뛰기에서는 호출되지 않는다
     public void ResetBossPiece()
     {
         bossPieceIndex = 0;

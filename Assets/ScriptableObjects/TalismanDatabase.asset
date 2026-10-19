@@ -1,0 +1,85 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 543bbd4191f48d583aa867b4c1fe8254, type: 3}
+  m_Name: TalismanDatabase
+  m_EditorClassIdentifier: 
+  cards:
+  - cardId: t_fire
+    talismanName: "화염부"
+    description: "이번 투척에서 불 칸 착지 시 최종 피해 ×2.5"
+    rarity: 4
+    effect: 0
+    value: 2.5
+    attribute: 1
+  - cardId: t_water
+    talismanName: "수룡부"
+    description: "이번 투척에서 물 칸 착지 시 최종 피해 ×2.5"
+    rarity: 4
+    effect: 1
+    value: 2.5
+    attribute: 2
+  - cardId: t_forest
+    talismanName: "초목부"
+    description: "이번 투척에서 풀 칸 착지 시 최종 피해 ×2.5"
+    rarity: 4
+    effect: 2
+    value: 2.5
+    attribute: 3
+  - cardId: t_pursuit
+    talismanName: "추혼부"
+    description: "이번 투척에서 보스말 잡기 성공 시 잡기 배율이 ×4로 변경"
+    rarity: 4
+    effect: 3
+    value: 4
+    attribute: 0
+  - cardId: t_greed
+    talismanName: "탐욕부"
+    description: "이번 투척 최종 피해 ×1.5. 단, 보스말 잡기 성공 시 최종 피해 0"
+    rarity: 4
+    effect: 4
+    value: 1.5
+    attribute: 0
+  - cardId: t_retry
+    talismanName: "재기부"
+    description: "이번 투척의 개별 윷 재투척 기회 1회 추가 (같은 윷 1회 제한 유지)"
+    rarity: 4
+    effect: 5
+    value: 1
+    attribute: 0
+  - cardId: t_bond
+    talismanName: "인연부"
+    description: "사용 즉시 부적 덱에서 카드 2장 획득"
+    rarity: 4
+    effect: 6
+    value: 2
+    attribute: 0
+  - cardId: t_seal
+    talismanName: "봉쇄부"
+    description: "다음 최초 던지기 시 보스 이동을 1회 막는다"
+    rarity: 4
+    effect: 7
+    value: 0
+    attribute: 0
+  - cardId: t_fortune
+    talismanName: "천운부"
+    description: "이번 투척에서 보스 약점 속성 칸 착지 시 최종 피해 ×3"
+    rarity: 4
+    effect: 8
+    value: 3
+    attribute: 0
+  - cardId: t_allinnothing
+    talismanName: "승부부"
+    description: "사용 후 남은 재투척을 전부 포기하면 이번 투척 최종 피해 ×1.5"
+    rarity: 4
+    effect: 9
+    value: 1.5
+    attribute: 0

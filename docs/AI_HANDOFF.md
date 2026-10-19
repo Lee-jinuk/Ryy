@@ -3,27 +3,101 @@
 AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 갱신 시 `### [날짜 오전/오후 - 담당 AI]` 세션 헤더로 구분하고, 최상단 요약 블록을 최신 작업으로 교체한다.
 
-## [2026-10-18 오전 작업 요약 (다음 AI 전달용)]
+## [2026-10-19 오후 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-19 오전 (7차) 변경사항 요약 - GPT 기획 / Devin 구현]
+[2026-10-19 오후 (11차) 변경사항 요약 - GPT 기획 / Devin 구현]
 
-★ 최신 — 보스 말 + 잡기 ×2 + 누적 피해별 이동 단계 (사용자 승인):
-- `bossPiece`(RectTransform) 신설 — 플레이어와 별도 보스 말, 같은 30칸
-  사용, 위치 독립 (`BossManager.bossPieceIndex`). 미연결 시 1회 경고 후 생략
-- 보스 말 이동 = 새 세션 최초 `RollYut()` 성공 시에만 1회 — 재투척·확정·
-  거부 입력 이동 없음. 칸 효과 미발동, 즉시 위치 변경 (연출 없음)
-- 이동 거리 = 누적 피해 3단계: <1/3 → 4~7 / ≥1/3 → 3~6 / ≥2/3 → 2~5
-  (정수 균등·상한 포함, `totalScore×N ≥ i×goalScore` 정수 비교).
-  `bossMoveStageMin`/`bossMoveStageMax` 배열 필드. 새 보스전은 0단계
-- 잡기: 확정 정산에서 최종 도착 칸 = 보스 말 칸 → ×2
-  (통과 미발동, 0점 칸은 잡아도 0, 보스 말 위치 미변경).
-  `settlement.caught`/`catchMult` + 잡기 ScoreEffectStep 기록,
-  mult 표시의 실효 배율에 포함 (개·약점·잡기 → 3×2×2=12)
-- ⚠ 미확정(임시 구현): 보스 말 시작 칸·방향·보스 전환 위치 —
-  임시로 START 시작·플레이어 방향·전환 유지, 확정 대기
-- ⚠ 사용자 작업: 보스 말 오브젝트 생성 → `bossPiece` 필드 연결
+★ 최신 — 게임 설정 데이터 ScriptableObject 분리 (규칙 변경 없음,
+저장 위치 통일):
+- 데이터 기준 에셋 4종 (`Assets/ScriptableObjects/`):
+  `TalismanDatabase`(부적 정의) / `BossDatabase`(보스 목록) /
+  `GameBalanceConfig`(투척 횟수·윷 배율·보스 이동 단계) /
+  `PresentationConfig`(연출 딜레이) — 클래스는 `Assets/Scripts/Data/`
+- YutGameManager 직렬화 설정 필드를 에셋 읽기 프로퍼티로 교체:
+  talismanPool/bosses/maxThrows/baseYutStats/bossMoveStageMin·Max/
+  moveStepDelay/effectStepDelay — Scene에 설정 목록 저장 금지
+- ★ 버그 수정: test2.unity에 저장된 구 talismanPool(50/100/75)이
+  덱 기준으로 쓰이던 문제 → 에셋 참조로 해결 (씬의 구 키는
+  고아 — Unity 저장 시 자동 제거)
+- 에셋 누락 시 ValidateDataAssets 경고 + ConfigReady 가드로
+  StartGame/EnterBossBattle 진입 차단 (조용한 대체 없음)
+- 탐욕 취소 시 multScoreText 양수 잔존 표시 버그 수정 → 0 표시
+- 씬 3개(test2/Test/SampleScene) Gamemanager에 에셋 참조 연결 완료
+- 사용자 Unity 작업 없음 — 밸런스 수정은 에셋 파일만 편집
+  (Play 종료 → 에셋 편집·저장 → 새 게임 시작으로 반영 확인)
 - 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
+
+[이전] 2026-10-19 오후 (10차) — 부적 10종 밸런스 변경 (사용자 확정):
+- 피해 부적 = '최종 피해 배율': 화염·수룡·초목 ×2.5 / 탐욕 ×1.5(잡기 성공
+  시 0, 모든 증가 효과보다 우선) / 천운 약점 속성 ×3(약점 상성 ×2와 별도
+  중첩) / 승부 ×1.5(남은 재투척 전부 포기 유지). 조건 부적 배율은 곱셈
+  중첩 — 사용 순서 무관
+- 추혼부 = 잡기 배율 ×2→×4 **대체** (부적 곱셈 루프에서 제외 — 중복 없음)
+- 인연부 = 덱에서 2장 획득 (카드 value=획득 장수). 사용 카드 먼저 제거 후
+  덱 순서대로 AcquireCard. 덱이 장수보다 적으면 발동 불가·미소모
+  ⚠ 덱에 1장만 남은 경우(1장 획득 vs 발동 차단)는 미확정 — 임시로 차단
+- 봉쇄부 = 다음 최초 던지기의 보스 이동 1회 금지 (`pendingMoveReduction`
+  폐기 → `BossManager.pendingMoveSeal`). 봉쇄 이동 0칸 기록, 재투척·확정·
+  거부 입력으로 소모 안 함. 보스 전환 해제 유지·중복 중첩 없음 — 둘 다 미확정
+- `TalismanData.value` 의미 = 효과별 상이 (피해 부적=배율 / 추혼부=잡기 대체
+  배율 / 재기부=횟수 / 인연부=장수) — 주석 참조. `sessionEffects.mult`
+- `ThrowSettlement.talismanCancelled` 추가 — 탐욕 취소를 정산 데이터에 보관.
+  정산 로그에 실제 잡기 배율 표시 (고정 '잡기2' 문구 제거)
+- ⚠ 정정: test2.unity에는 구 talismanPool 수치가 직렬화돼 있었고
+  덱 기준으로 사용됐음 — 11차의 에셋 분리로 해결
+- 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
+
+[이전] 2026-10-19 오후 (9차) — 부적 손패 한도 10 + 초과 소멸 (사용자 확정):
+- `TalismanManager.HandLimit = 10` — 초과 획득분은 덱 복귀 없이 런 소멸,
+  기존 손패 보존. 모든 획득은 `AcquireCard` 공통 경로 통과
+- 획득 순서 = 선택한 순서 (selectedIndices 추가 순서 — 취소 후 재선택은
+  재선택 시점으로 갱신). 기존 후보 인덱스 순서 획득 버그 수정
+- 인연부 순서 확정: 덱 검사 → 사용 카드 제거 → 1장 획득 — 손패 10장에서도
+  정상 교환. 덱 소진 시 미소모. 새 카드만 소멸 대상
+- `talismanNoticeText` 신규 필드 — "손패가 가득 차 부적 N장이 소멸했습니다."
+- `talismanHandNameTexts`/`talismanUseButtons` 8→10, `UseTalisman9`/`10` 래퍼
+- 씬에 신규 배열 미직렬화 → 기본값 10 적용, 씬 수정 없음
+- 후속: `talismanHandDescTexts[10]` 신규 — 손패 카드 설명 Text (이름과 같은
+  순서, 빈 슬롯 빈칸, 미연결 무시). 사용자가 설명 Text 10개 연결
+- 검증: dotnet build 0·0. Unity Play 검증 대기
+
+[이전] 2026-10-19 오후 (8차) — 소모형 부적 시스템 + 초기 10종 (사용자 확정 4가지: 시작 선택=매
+보스전 / 땅=방울 대체 부적 3택1 / 피해 50%=×1.5 증가 / 덱=10종 각 1장·
+사용 시 런에서 소멸):
+- 신규 `TalismanData.cs` (Data): `TalismanRarity`(범품/진품/영물/신물/미정),
+  `TalismanEffectKind` 10종, `TalismanData`(cardId·이름·설명·레어도·효과·
+  수치·속성 — Inspector 편집 가능, 이름 문자열 비교로 효과 판별 금지)
+- 신규 `TalismanManager.cs` (Core): 런 단위 `drawPile`(10종 셔플)·`hand`,
+  선택창 상태(`isChoosing`/`candidates`/`requiredPicks`) — `OpenStartPick`
+  (매 보스전 5택3) / `OpenLandPick`(땅 3택1, 방울 대체). 사용 구간 = 최초
+  투척 후~확정 전, 실패한 사용은 카드 미소모. `sessionEffects` = '이번
+  투척' 피해 효과 — 다음 세션에서 해제
+- 정산 순서: 상성 → 잡기 → 부적(사용 순서 순차 곱셈) → 최종 정수화 1회.
+  `ThrowSettlement.talismanMult` 기록, mult 표시에 포함. 탐욕부 충돌
+  (잡기와 같은 조건 — 임시 해석) 시 공격 0이 모든 증가 효과에 우선
+- `YutThrowSession`: `bonusRerolls`(재기부 한도 +1)·`rerollsForfeited`
+  (승부부 포기 — 세션 내 번복 불가). `BossManager.pendingMoveReduction`
+  (봉쇄부 → 다음 보스 이동 1회 −2, 보스 전환 시 소멸)
+- 신규 Inspector 필드: `talismanPool`(10종 정의), `talismanChoicePanel`,
+  `talismanOptionNameTexts`/`Desc`/`RarityTexts`[5], `talismanChoiceInfoText`,
+  `talismanConfirmButton`, `talismanHandNameTexts`[8], `talismanUseButtons`[8]
+- 신규 버튼: `SelectTalismanOption1~5`, `ConfirmTalismanChoice`,
+  `UseTalisman1~8` (+int 버전 `SelectTalismanOption`/`UseTalisman`)
+- 방울 이벤트 비활성: 땅 착지 → 부적 3택1로 대체 (BellManager·방울 필드는
+  호환용 유지, 발동 경로 제거 — 돌려야 하면 FinishPresentation의
+  OpenLandPick 호출을 bellManager.OpenBellChoice로 되돌리면 됨)
+- ⚠ 미확정 임시 규칙 (GAME_RULES §3 표): 미선택 후보 덱 복귀, 손패
+  무제한·다장 사용, 탐욕 충돌=잡기, 봉쇄 1회 −2·합산·최소 0칸, 승부부
+  재투척 0이면 불가, 인연부 덱 소진 미소모, 손패 보스 전환 유지
+- ⚠ 사용자 작업: 부적 선택창 패널 + 후보 텍스트 + 손패 UI 생성·연결,
+  OnClick 연결
+- 검증: dotnet build 오류 0·경고 0. Unity Play 검증 대기
+
+[이전] 2026-10-19 오전(7차) — 보스 말 + 잡기 ×2 + 누적 피해별 이동 단계:
+`bossPiece` 필드, `BossManager.bossPieceIndex`·`BossMoveStage`·
+`MoveBossPiece`·`ResetBossPiece`(모든 보스전 시작 START 초기화),
+`bossMoveStageMin/Max` 배열, 잡기 판정 `caught`/`catchMult` + 잡기 step.
 
 [이전] 2026-10-18 오전(6차) 변경사항 — 착지 정보 + 보스 상성 + 윷 4개 재투척 세션:
 - 신규 `YutThrowSession.cs` (Core, POJO): 윷 4개 각 앞·뒤 50%,
@@ -370,10 +444,38 @@ Devin 구현 (YutGameManager.cs 코드만 — 오브젝트 생성·배치는 사
 - 현재 브랜치: `develop` (origin: https://github.com/Lee-jinuk/Ryy.git)
 - 코드 구조: `YutGameManager` 총괄 + 책임별 POJO 매니저 6개 — `docs/ARCHITECTURE.md` 참조
 
+### [2026-10-19 오후 (11차) - GPT 기획 / Devin 구현]
+
+- 게임 설정을 ScriptableObject 에셋으로 분리 (상세는 요약 블록·GAME_RULES 11차 참조): `TalismanDatabase`/`BossDatabase`/`GameBalanceConfig`/`PresentationConfig` + `Assets/ScriptableObjects/*.asset`
+- `YutGameManager` 설정 직렬화 필드 → 에셋 읽기 프로퍼티. `ConfigReady` 가드로 에셋 누락 시 진입 차단
+- test2.unity의 구 `talismanPool` 직렬화 문제 해결 — 씬의 고아 직렬화 키는 무시되며 다음 씬 저장 시 자동 정리
+- 사용자 Unity 작업 없음 — 씬 3개에 에셋 참조 연결 완료. 밸런스 수정 = 에셋 파일 편집만
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기
+
+### [2026-10-19 오후 (10차) - GPT 기획 / Devin 구현]
+
+- 부적 밸런스 변경 구현 (상세는 요약 블록·GAME_RULES 10차·§3 표 참조): 피해 부적 최종 배율 방식, 추혼부 잡기 ×4 대체, 인연부 2장, 봉쇄부 이동 금지, 탐욕 취소 정산 보관
+- ⚠ 남은 미확정: 인연부 덱 1장 경계(임시 차단), 봉쇄 중복·보스 전환 이월, 승부부 재투척 0 불가(임시 유지), 미선택 후보 덱 복귀, 보스 말 이동 방향
+- ⚠ 정정: 당시 '씬 미직렬화' 보고는 test2.unity를 누락한 부정확한 판단 — 실제로는 구 수치가 직렬화돼 사용 중이었고 11차 에셋 분리로 해결
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기
+
+### [2026-10-19 오후 (9차) - GPT 기획 / Devin 구현]
+
+- 손패 한도 10 + 초과 소멸 (상세는 요약 블록·GAME_RULES 9차 참조): `HandLimit`/`AcquireCard` 공통 경로, 선택 순서 획득 수정, 인연부 제거→획득 순서, `talismanNoticeText` 소멸 안내, 손패 UI 배열 8→10 + `UseTalisman9`/`10`
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기 — 손패 9+3 획득, 10장 인연부, 소멸 안내 확인 필요
+
+### [2026-10-19 오후 (8차) - GPT 기획 / Devin 구현]
+
+- 소모형 부적 시스템 구현 (상세는 요약 블록·GAME_RULES 8차·§3 표 참조): `TalismanData.cs`+`TalismanManager.cs` 신설, 덱=10종 각 1장·사용 소멸, 매 보스전 5택3 + 땅 3택1(방울 대체), 사용 구간=최초 투척 후~확정 전, 정산에 부적 단계(상성→잡기→부적 순차 곱셈), 탐욕 충돌 공격 0 우선, 재기·인연·봉쇄·승부부 동작 필드(`bonusRerolls`/`rerollsForfeited`/`pendingMoveReduction`)
+- 미확정 임시 규칙 다수 — GAME_RULES §3 표의 미확정 행 참조, 확정 시 코드 주석 '미확정 임시' 검색
+- 사용자 Unity 작업: 부적 선택창 패널(후보 이름/설명/레어도 텍스트 5조 + 확정 버튼) + 손패 UI(이름 텍스트·사용 버튼 8조) 생성 후 필드 연결 + OnClick(`SelectTalismanOption1~5`/`ConfirmTalismanChoice`/`UseTalisman1~8`)
+- 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기
+
 ### [2026-10-19 오전 (7차) - GPT 기획 / Devin 구현]
 
 - 보스 말 + 잡기 ×2 + 이동 단계 구현 (상세는 요약 블록·GAME_RULES 7차 참조): `bossPiece` 필드, `BossManager.bossPieceIndex`·`BossMoveStage`·`MoveBossPiece`·`ResetBossPiece`, `bossMoveStageMin/Max` 배열, 잡기 판정·`caught`/`catchMult`·잡기 step, 실효 배율에 잡기 포함
-- 미확정 임시 구현: 보스 말 시작 칸(START)·방향(플레이어 동일)·보스 전환 위치(유지) — 확정 대기
+- 보스 말 초기 위치 확정: 모든 보스전 시작 시 `BeginBossFight` → `ResetBossPiece()`로 START 초기화 — 논리+화면 위치 함께, 소개·건너뛰기에서는 호출 없음
+- 미확정 임시 구현: 보스 말 이동 방향(플레이어 동일)만 남음 — 확정 대기
 - 검증: dotnet build 0 오류·0 경고. Unity Play 검증 대기 — `bossPiece` 연결 필요
 
 ### [2026-10-18 오전 (6차) - GPT 기획 / Devin 구현]

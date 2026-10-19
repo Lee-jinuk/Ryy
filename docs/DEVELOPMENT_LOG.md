@@ -6,10 +6,70 @@
 
 - `Assets/Scripts/Core/` — `YutGameManager.cs`(게임 총괄) + 책임별 매니저 `YutRollManager.cs`, `BoardManager.cs`, `ScoreManager.cs`, `BossManager.cs`, `BellManager.cs` + 데이터 `YutBoard.cs`, `YutThrowSession.cs`(윷 4개 투척 세션)
 - `Assets/Scripts/UI/` — `GameUIManager.cs` (UI 표시·연출)
-- `Assets/Scripts/Data/` — `.gitkeep`만 존재 (빈 폴더)
+- `Assets/Scripts/Data/` — `TalismanData.cs` (부적 카드 정의 자료형 — `TalismanRarity`/`TalismanEffectKind`/`TalismanData`)
 - `Assets/Prefabs/`, `Assets/ScriptableObjects/` — `.gitkeep`만 존재
 - `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
 - 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
+
+### [2026-10-19 오후 (11차) - GPT 기획 / Devin 구현]
+
+**게임 설정 데이터 ScriptableObject 분리 + test2.unity 구 부적 수치 이전** (사용자 승인 변경 — 규칙 변경 없이 데이터 저장 위치만 이동):
+
+- **원인**: `test2.unity`의 Gamemanager에 구 `talismanPool`(value=50/100/75 — 밸런스 변경 전 수치)이 직렬화돼 있어 실제 덱이 구 수치로 구성됐음. 10차의 "씬 미직렬화" 판단은 `test2`를 포함하지 않아 부정확했음 — 정정
+- 신규 `Assets/Scripts/Data/`: `TalismanDatabase.cs`, `BossDatabase.cs`, `GameBalanceConfig.cs`, `PresentationConfig.cs` (각 `CreateAssetMenu` — RYY 메뉴)
+- 신규 에셋 `Assets/ScriptableObjects/`: `TalismanDatabase.asset`(부적 10종 최신 수치: 배율 2.5/4/1.5/1/2/0/3/1.5), `BossDatabase.asset`(5종 1000~5000, 낙+2%p), `GameBalanceConfig.asset`(maxThrows 5, 윷 배율 2/3/4/5/6, 이동 단계 4-7/3-6/2-5), `PresentationConfig.asset`(0.15/0.35)
+- `YutGameManager`: 에셋 참조 4개 직렬화 필드 추가(`talismanDatabase`/`bossDatabase`/`balanceConfig`/`presentationConfig`). `talismanPool`/`bosses`/`maxThrows`/`baseYutStats`/`bossMoveStageMin/Max`/`moveStepDelay`/`effectStepDelay`를 읽기 프로퍼티로 전환 — 씬의 구 직렬화 키는 고아가 돼 Unity 저장 시 자동 제거(수동 삭제 불필요). `ConfigReady` + `ValidateDataAssets`(Awake) — 미연결·빈 목록·배열 길이 불일치·maxThrows≤0 경고. `StartGame`/`EnterBossBattle`에 ConfigReady 가드 — 에셋 누락 시 진입 차단(조용한 대체 없음)
+- 탐욕 취소 표시 수정: `FinishPresentation`에서 `talismanCancelled`이면 실효 배율 0 표시 (기존은 양수 mult 잔존)
+- `YutRollManager.BuildYutStats`/`TalismanManager.EnsureDeck`에 에셋 null 가드
+- 씬 3개(`test2`/`Test`/`SampleScene`) Gamemanager에 에셋 참조 직렬화 연결 — UI 참조·OnClick 변경 없음
+- 유지된 직렬화 설정: `backDoPenalty`, `baseProbabilities` (레거시 — 미사용, 데이터화 대상 아님), `bellPool`/`ownedBells`(방울 호환), `selectedBossIndex`, `goalScore`/`currentThrows` 등 실행 상태 — 실행 상태와 설정 구분은 헤더·주석으로 표기
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — 에셋 값 변경 반영 확인(Play 종료 → 편집·저장 → 새 게임), 에셋 누락 시 진입 차단, 기존 게임 진행 동일성 확인 필요
+
+### [2026-10-19 오후 (10차) - GPT 기획 / Devin 구현]
+
+**부적 10종 밸런스 변경** (사용자 승인 변경):
+
+- `TalismanData`: `value` 의미 재정의 주석 — 피해 부적=최종 피해 배율(2.5/1.5/3), 추혼부=잡기 배율 대체값(4), 재기부=횟수(1), 인연부=장수(2), 봉쇄부=미사용
+- `YutGameManager`: `talismanPool` 10종 수치·설명 신규 규칙으로 갱신 — 씬에 미직렬화라 이전 불필요. `pendingMoveReduction` 참조를 `pendingMoveSeal`로 교체
+- `TalismanManager`: `ActiveTalismanEffect.valuePercent` → `mult` (최종 피해 배율). 인연부 = `card.value` 장수만큼 덱 순서대로 획득 — 사용 카드 먼저 제거 후 `AcquireCard`, 덱이 장수보다 적으면 발동 불가·미소모(덱 1장 경계는 미확정). 봉쇄부 = `bossManager.pendingMoveSeal = true`
+- `BossManager`: `pendingMoveReduction` 폐기 → `pendingMoveSeal` — 다음 `MoveBossPiece`에서 이동 생략 + `lastBossMoveSteps = 0` 기록 후 소모
+- `ScoreManager`: 잡기 배율 = 추혼부 사용 시 `fx.mult`(4)로 대체(부적 곱셈 루프에서 CatchPursuit 제외로 중복 방지), 일반 잡기 ×2, 실패 ×1. 부적 루프는 `fx.mult` 직접 곱셈 — 순서 무관 동일 결과. 탐욕 취소를 `settlement.talismanCancelled`에 보관(연출·스킵 후 일치). 로그 `잡기{실제 배율}` 표시. 부적 step 표시명 `×{mult}`
+- 수식 검증 (코드 기준, 개 배율 3·칸 50): 약점 천운부 = 50×3×2×3=900, 약점+속성부적+천운부+추혼부 잡기 = 50×3×2×4×2.5×3=9000, 탐욕 잡기 실패 = 225, 탐욕 잡기 성공 = 0
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — 조합별 피해·봉쇄 1회 금지·인연부 2장 획득 확인 필요
+
+### [2026-10-19 오후 (9차 후속) - GPT 기획 / Devin 구현]
+
+**손패 카드 설명 표시** (사용자 승인 변경):
+
+- `YutGameManager`: `talismanHandDescTexts[10]` 추가 — 이름 슬롯과 같은 순서로 손패 카드 `description` 표시, 빈 슬롯 빈칸, 미연결 null-safe. `talismanHandNameTexts[10]` 유지
+- `GameUIManager`: 손패 루프에서 이름과 같은 인덱스로 설명 갱신 — 사용·획득으로 순서가 바뀌면 함께 갱신됨
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기
+
+### [2026-10-19 오후 (9차) - GPT 기획 / Devin 구현]
+
+**부적 손패 한도 10 + 초과 소멸** (사용자 승인 변경):
+
+- `TalismanManager`: `HandLimit = 10` 상수, `AcquireCard` 공통 획득 경로(여유→보유 / 초과→런 소멸, `pendingOverflowNotice` 누적). `ConfirmChoice`를 **선택 순서(selectedIndices 추가 순서)대로 획득**으로 수정 — 기존은 후보 인덱스 순서였음. 취소·재선택 시 재선택 시점이 순서가 됨(기존 토글 구조가 자연히 충족)
+- 인연부: 덱 검사 → 사용 카드 `hand.RemoveAt` → `AcquireCard` — 손패 10장에서도 정상 교환(9→10), 덱 소진 시 미소모. 새로 뽑은 카드만 소멸 대상
+- `YutGameManager`: `talismanHandNameTexts`/`talismanUseButtons` 8→10, `talismanNoticeText` 추가, `UseTalisman9`/`UseTalisman10` 래퍼
+- `GameUIManager`: 손패 루프 `HandLimit` 기준, 소멸 안내 "손패가 가득 차 부적 N장이 소멸했습니다." 표시(다음 선택창에서 해제)
+- 씬 확인: `Test.unity`·`SampleScene`에 신규 부적 배열 미직렬화 — 스크립트 기본값(10) 적용으로 씬 수정 불필요
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — 손패 9+3 획득, 10장 상태 인연부, 소멸 안내 확인 필요
+
+### [2026-10-19 오후 (8차) - GPT 기획 / Devin 구현]
+
+**소모형 부적 시스템 + 초기 10종** (사용자 승인 변경 — 핵심 4가지 확정: 시작 선택=매 보스전 / 땅=방울 대체 부적 / 피해 50%=×1.5 증가 / 덱=10종 각 1장·사용 소멸):
+
+- `TalismanData.cs` 신설 (Data): `TalismanRarity`(범품/진품/영물/신물/미정 — 배정·추첨 확률 미확정), `TalismanEffectKind` 10종, `TalismanData`(cardId·이름·설명·레어도·효과·수치·속성 — Inspector 편집, 문자열 비교 금지)
+- `TalismanManager.cs` 신설 (Core): `drawPile`(런 시작 시 10종 셔플, 사용 시 소멸)·`hand`·`candidates`/`selectedIndices`/`requiredPicks`/`isChoosing` — `OpenStartPick`(5택3, `StartBossBattle` 끝)·`OpenLandPick`(3택1, 땅 착지 시 방울 대체). `CanUseNow`(Playing+세션 활성+비선택·비연출) / `UseTalisman`(발동 실패 시 미소모) / `sessionEffects`('이번 투척' 피해 효과, `ClearSessionEffects`로 다음 세션 해제)
+- `YutThrowSession`: `bonusRerolls`(재기부 세션 한도) + `rerollsForfeited`(승부부 포기) — `MaxRerollCount` = 2+보너스, `CanReroll`은 포기 상태에서 차단
+- `BossManager`: `pendingMoveReduction` — 봉쇄부 감소분을 다음 `MoveBossPiece` 1회에 적용 후 소모(`Max(0, steps-감소)`), 이미 이동한 건 되돌리지 않음
+- `ScoreManager`: 정산 4단계 = 세션 부적 효과 순차 곱셈(상성→잡기→부적) — 속성 조건부(화염·수룡·초목)/잡기 조건부(추혼)/약점 조건부(천운)/무조건(탐욕·승부). `AddTalismanStep`(적용 카드별 `EffectSourceType.Talisman` 기록, sourceId=cardId) + `AddTalismanCancelStep`(탐욕 충돌 시 공격 0 — 모든 증가 효과보다 우선). `ThrowSettlement.talismanMult` 추가, `FinishPresentation` 실효 배율에 포함
+- `YutGameManager`: `talismanPool`(10종 정의 기본값) + 부적 UI 필드 8종. 가드에 `talismanManager.isChoosing` 추가(RollYut/RerollStick/ConfirmThrow — 선택 완료 전 투척 차단). `FinishPresentation` 땅 착지 → `OpenLandPick()`(방울 호출 제거, `BellManager`·방울 필드는 호환용 유지). `BeginBossFight` 세션 효과 해제+미소비 봉쇄 소멸, `ResetRunState` 덱 초기화
+- `GameUIManager`: 후보 이름/설명/레어도 5슬롯 표시, 선택 진행 `n/3` 안내, 확정 버튼 interactable, 선택창 패널 자동 토글, 손패 이름 8슬롯 + 사용 버튼 8개(사용 가능 구간만 interactable)
+- 버튼 진입점: `SelectTalismanOption(int)`+래퍼 1~5, `ConfirmTalismanChoice`, `UseTalisman(int)`+래퍼 1~8
+- 미확정 임시 규칙(GAME_RULES §3 표 참조): 미선택 후보 덱 복귀, 손패 무제한·다장 사용, 탐욕 충돌=잡기, 봉쇄 1회 −2·합산·최소 0칸, 승부부 재투척 0이면 불가, 인연부 덱 소진 미소모, 손패 보스 전환 유지
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — 선택창 패널·후보 텍스트·손패 UI 연결 필요
 
 ### [2026-10-19 오전 (7차) - GPT 기획 / Devin 구현]
 
@@ -20,6 +80,7 @@
 - `BoardManager`: `MoveBossPieceVisual` — 즉시 위치 변경(연출 없음), `bossPiece` 미연결 시 1회 경고 후 생략
 - 잡기: `SettleNormalThrow`에서 `landing == bossPieceIndex` 판정(칸 인덱스, 통과 미발동) → `settlement.caught`/`catchMult`(×2/×1) + 잡기 `ScoreEffectStep` 기록. 최종식 `RoundToInt(칸 점수 × 상성 × 윷 배율 × 잡기)` — 곱셈 완료 후 정수화. `FinishPresentation`의 `multiplier` 실효 배율에 잡기 포함. `ScoreEffectStep.beforeValueF` 추가
 - 미확정 임시 구현: 보스 말 START 시작·플레이어 방향·보스 전환 시 위치 유지 — 확정 대기로 문서에 명시
+- 후속 확정: **모든 보스전 시작 시 보스 말 START 초기화** — `BeginBossFight`에서 `ResetBossPiece()` 호출(논리 `bossPieceIndex=0` + 화면 위치 함께). 소개·건너뛰기에서는 호출 없음 → 보스 전환 위치는 '매 보스전 초기화'로 확정, 남은 미확정은 이동 방향뿐
 - 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — `bossPiece` 오브젝트 생성·연결 필요
 
 ### [2026-10-18 오전 (6차) - GPT 기획 / Devin 구현]

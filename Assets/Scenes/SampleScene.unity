@@ -4232,6 +4232,10 @@ MonoBehaviour:
     basicBonus: 0
     mult: 6
   effectStepDelay: 0.35
+  talismanDatabase: {fileID: 11400000, guid: 49c1b2d6aeb27a28e80b955e9ed40a7b, type: 2}
+  bossDatabase: {fileID: 11400000, guid: 6ff3a7e8ba46edcca102c98d65f71817, type: 2}
+  balanceConfig: {fileID: 11400000, guid: 737b2c6d98d5c3f5685063df10cc5d3a, type: 2}
+  presentationConfig: {fileID: 11400000, guid: 6166f977c3adb323872859e526f0ac7b, type: 2}
   board:
     tiles: []
     totalMoved: 0

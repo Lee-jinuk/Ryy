@@ -110,7 +110,7 @@ public class GameUIManager
         // 윷 4개 투척 세션 UI — 면 표시, 재투척 버튼 활성, 상태창, 남은 재투척, 확정 버튼
         YutThrowSession session = gm.rollManager.session;
         bool sessionActive = session != null && session.Active;
-        bool throwInputOpen = sessionActive && !gm.isPresenting && !gm.bellManager.isChoosingBell;
+        bool throwInputOpen = sessionActive && !gm.isPresenting && !gm.bellManager.isChoosingBell && !gm.talismanManager.isChoosing;
         for (int i = 0; i < YutThrowSession.StickCount; i++)
         {
             if (i < gm.stickFaceTexts.Length && gm.stickFaceTexts[i] != null)
@@ -170,6 +170,66 @@ public class GameUIManager
             {
                 gm.bellOptionDescTexts[i].text = hasOption ? gm.bellManager.currentBellOptions[i].description : "";
             }
+        }
+
+        // 부적 선택창 — 후보 이름·설명·레어도 표시 + 선택 진행 안내 (선택 중이 아니면 빈칸)
+        // 시작 5택3·땅 3택1이 같은 슬롯을 공유 — 후보 수만큼만 채우고 나머지는 빈칸
+        bool talChoosing = gm.talismanManager.isChoosing;
+        for (int i = 0; i < 5; i++)
+        {
+            bool hasOption = talChoosing && i < gm.talismanManager.candidates.Count;
+            TalismanData option = hasOption ? gm.talismanManager.candidates[i] : null;
+            if (i < gm.talismanOptionNameTexts.Length && gm.talismanOptionNameTexts[i] != null)
+            {
+                gm.talismanOptionNameTexts[i].text = hasOption ? option.talismanName : "";
+            }
+            if (i < gm.talismanOptionDescTexts.Length && gm.talismanOptionDescTexts[i] != null)
+            {
+                gm.talismanOptionDescTexts[i].text = hasOption ? option.description : "";
+            }
+            if (i < gm.talismanOptionRarityTexts.Length && gm.talismanOptionRarityTexts[i] != null)
+            {
+                gm.talismanOptionRarityTexts[i].text = hasOption ? gm.talismanManager.RarityName(option.rarity) : "";
+            }
+        }
+        if (gm.talismanChoiceInfoText != null)
+        {
+            gm.talismanChoiceInfoText.text = talChoosing
+                ? $"{gm.talismanManager.selectedIndices.Count} / {gm.talismanManager.requiredPicks} 장 선택"
+                : "";
+        }
+        if (gm.talismanConfirmButton != null)
+        {
+            gm.talismanConfirmButton.interactable =
+                talChoosing && gm.talismanManager.selectedIndices.Count == gm.talismanManager.requiredPicks;
+        }
+        // 부적 선택창 패널 표시 — 선택 상태와 패널 활성을 동기화
+        SetPanel(gm.talismanChoicePanel, talChoosing);
+
+        // 손패 — 이름 표시 + 사용 버튼 활성 (최초 투척 후~확정 전 구간에서만 사용 가능)
+        bool canUseTalisman = gm.talismanManager.CanUseNow();
+        for (int i = 0; i < TalismanManager.HandLimit; i++)
+        {
+            bool hasCard = i < gm.talismanManager.hand.Count;
+            if (i < gm.talismanHandNameTexts.Length && gm.talismanHandNameTexts[i] != null)
+            {
+                gm.talismanHandNameTexts[i].text = hasCard ? gm.talismanManager.hand[i].talismanName : "";
+            }
+            if (i < gm.talismanHandDescTexts.Length && gm.talismanHandDescTexts[i] != null)
+            {
+                gm.talismanHandDescTexts[i].text = hasCard ? gm.talismanManager.hand[i].description : "";
+            }
+            if (i < gm.talismanUseButtons.Length && gm.talismanUseButtons[i] != null)
+            {
+                gm.talismanUseButtons[i].interactable = canUseTalisman && hasCard;
+            }
+        }
+        // 초과 획득 소멸 안내 — 다음 선택창이 열리면 지워진다
+        if (gm.talismanNoticeText != null)
+        {
+            gm.talismanNoticeText.text = gm.talismanManager.pendingOverflowNotice > 0
+                ? $"손패가 가득 차 부적 {gm.talismanManager.pendingOverflowNotice}장이 소멸했습니다."
+                : "";
         }
 
         // 보유 임시 방울 — bellSlots 앞에서부터 활성화 + 자식 Text에 이름 표시
