@@ -109,6 +109,7 @@ public class BossManager
         pendingBossIndex = index;
         BossData boss = gm.bosses[index];
         EnsureAffinity(index);   // 처음 소개되는 시점에 상성 1회 생성 — 이후 전투·소개에서 같은 값 사용
+        gm.shopManager.ResetForBoss();   // 보스 전환 — 상품 목록·리프레시 비용 초기화 (사용자 확정: 보스 소개 시 리셋)
         if (gm.bossSelectPanel == null)
         {
             // 소개 화면은 필수 단계 — 패널 미연결 시 경고 후 대기 (자동 전투 진입 없음)

@@ -6,9 +6,28 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ## [2026-10-20 오후 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-21 오전 (21차) 변경사항 요약 - 사용자 지시 / Devin 구현]
+[2026-10-21 오전 (22차) 변경사항 요약 - 사용자 지시 / Devin 구현]
 
-★ 최신 — 보스 다음 이동 위치 미리보기 (사용자 확정):
+★ 최신 — 방울 UI 고정 슬롯 전환 + 상점 리프레시 (사용자 확정):
+- BellSlotUI 신규 — 이름/설명/상태 Text + 행동 Button 명시
+  참조. Bind로 리스너 교체(누적 없음), Clear로 빈 칸
+- 고정 슬롯 3그룹: equipBellSlots[4](전투)/
+  shopOfferSlots[4](구매)/shopBellSlots[4](판매) —
+  구형 Prefab 동적 목록 필드 제거(bellContent/bellItemPrefab/
+  shopOfferContent/shopBellContent/shopItemPrefab)
+- 판매 = SellBellInstance(인스턴스 ID) — 순서 변경 오판매 없음
+- 유료 리프레시: 2냥 시작·성공마다 ×2 (ShopConfig
+  refreshBaseCost/refreshCostMultiplier) + refreshButton/
+  refreshCostText + RefreshShop() 버튼 함수
+- 확정 정책: 목록 보스 구간 유지(재진입 무료 갱신 차단) /
+  비용·목록 보스 소개 시 초기화 / 재구매 횟수 새 상품 초기화
+- Inspector 작업: 슬롯 오브젝트 12개(BellSlotUI 부착) +
+  리프레시 버튼/텍스트 연결 필요 — 보고서의 Hierarchy 예시 참조
+- 검증: build 0·0. Unity Play 대기 — 슬롯 표시·거래·
+  리프레시 비용·목록 유지 확인 필요
+
+[이전] 2026-10-21 오전 (21차) — 보스 다음 이동 위치 미리보기
+(사용자 확정):
 - BossManager에 이동 계획 분리: 차례 준비(PrepareTurn)에
   거리 1회 추첨·보관 → 최초 투척에서 계획 1회 소비해 이동
   (실행 시 재추첨 없음). 족쇄방울·봉쇄부는 유효 거리·목적지

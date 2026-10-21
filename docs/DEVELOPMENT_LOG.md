@@ -11,6 +11,18 @@
 - `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
 - 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
 
+### [2026-10-21 오전 (22차) - 사용자 지시 / Devin 구현]
+
+**방울 UI 고정 슬롯 전환 + 상점 리프레시** (사용자 승인 + 정책 확정 3건):
+
+- `BellSlotUI.cs` 신규(Scripts/UI) — 슬롯 컴포넌트(nameText/descText/statusText/actionButton/actionLabel 명시 참조). `Bind`로 내용·버튼 표시·리스너 교체(누적 없음), `Clear`로 빈 칸
+- `YutGameManager` — `equipBellSlots[4]`·`shopOfferSlots[4]`·`shopBellSlots[4]`·`refreshButton`·`refreshCostText` 필드 신규 + `RefreshShop()` 버튼 함수. 구형 필드 제거: `bellContent`·`bellItemPrefab`·`shopOfferContent`·`shopBellContent`·`shopItemPrefab` (Scene 직렬화 잔여분 무해 — Unity가 무시. `BellItem`/`ShopItem` Prefab 에셋은 삭제하지 않음 — 미사용 보고)
+- `ShopManager` — 상품 목록 보스 구간 유지(`offers.Count == 0`일 때만 추첨), `BuildCandidatePool` 분리, `CurrentRefreshCost`(long 계산+int 상한), `CanRefresh`·`RefreshShop()`(후보 없음·잔액 부족 시 차감 없이 실패), `SellBellInstance(instanceId)` 인스턴스 판매로 교체, `ResetForBoss()`(목록·비용 초기화) — `BossManager.ShowBossSelect`에서 호출(다음 보스 소개 = 보스 전환)
+- `ShopConfig` + 에셋 — `refreshBaseCost=2`·`refreshCostMultiplier=2` 추가
+- `GameUIManager` — `SyncBellPanel`/`SyncShopPanel`을 고정 슬롯 바인딩으로 재작성 — 구형 동적 목록 생성·스냅샷 비교·Prefab 경로 제거. 상품 슬롯: 구매 완료 표시·비활성 조건(잔액·한도), 판매 슬롯: 인스턴스 ID 바인딩, 리프레시 비용 텍스트·버튼 활성
+- 정책 확정(사용자): 리프레시 비용 보스 전환 시 초기화 / 상점 닫아도 목록 유지 / 판매 방울 재구매 시 횟수 새 상품 초기화
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 0~4개 보유 표시 / 구매·판매 인스턴스 정확성 / 리프레시 비용 2→4→8 / 잔액 부족 유지 / 닫기·재진입 목록 유지 / 보스 전환 초기화
+
 ### [2026-10-21 오전 (21차) - 사용자 지시 / Devin 구현]
 
 **보스 다음 이동 위치 미리보기** (사용자 승인):

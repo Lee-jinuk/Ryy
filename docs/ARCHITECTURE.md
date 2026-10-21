@@ -23,7 +23,8 @@
 | `BossManager.cs` | Scripts/Core | 보스 데이터 접근·순차 소개·건너뛰기 판별·런타임 보스 상성·보스 말 위치·피해 단계별 이동 (`BossData`, `BossAffinity` 타입 정의 포함) |
 | `BellManager.cs` | Scripts/Core | 방울 장착·효과 — 보유 인스턴스(`ownedBells`)·성장 처리(`ApplyGrowth`)·속성 런 성장(`attrAttackBonus`)·지속 효과 조회·청개구리 유효 상성 |
 | `EconomyManager.cs` | Scripts/Core | 냥(화폐) — `money`·`AddMoney`/`TrySpend` 단일 경로·시작 자금 런당 1회 |
-| `ShopManager.cs` | Scripts/Core | 상점 — 진입 조건(Cleared+보스 소개 화면)·무작위 상품 후보·구매/판매 거래·연타 차단 |
+| `ShopManager.cs` | Scripts/Core | 상점 — 진입 조건(Cleared+보스 소개 화면)·상품 후보(보스 구간 유지)·구매/판매 거래·유료 리프레시·연타 차단 |
+| `BellSlotUI.cs` | Scripts/UI | 방울 고정 슬롯 표시 컴포넌트 — name/desc/status Text + actionButton 명시 참조, `Bind`/`Clear`로 표시·클릭 전달만 (계산 없음) |
 | `TalismanData.cs` | Scripts/Data | 부적 카드 정의 자료형 — `TalismanRarity`/`TalismanEffectKind`/`TalismanUseTiming`/`TalismanAppearance`/`TalismanData` (cardId·이름·설명·레어도·효과·수치·속성·`includeInDeck`·`useTiming`·`appearance`) |
 | `UsedTalismanRecord.cs` | Scripts/Data | 사용 부적 표시 기록 — useId·cardId·이름·설명·효과·수치·resultNote (표시 전용, 효과 실행과 분리) |
 | `TalismanDatabase.cs` | Scripts/Data | 부적 정의 에셋 — 카드 목록의 단일 기준 (`ScriptableObjects/TalismanDatabase.asset`) |
@@ -56,7 +57,7 @@
 | 보스 진행 `selectedBossIndex`(전투 중) / `pendingBossIndex`(소개 중) | gm 필드 / BossManager | BossManager |
 | 보유 방울 `ownedBells`·속성 성장 `attrAttackBonus` | BellManager | BellManager (`TryAddBell` 한도·중복 검사 / `RemoveBell` 인스턴스 제거 / `ApplyGrowth` 성장 발동·한도 소진 소멸 / `ResetForNewRun` 런 리셋) — 인스턴스 제거가 누적 성장을 회수하지 않음 |
 | 돈 `money` | EconomyManager | EconomyManager (`AddMoney`/`TrySpend`만) — 시작 자금은 `ResetForNewRun` 런당 1회, 상점·재복방울이 경유 |
-| 상점 상태 `isOpen`/`offers`/`soldOfferIndices` | ShopManager | ShopManager (`OpenShop` 진입 조건 검사·후보 추첨 / `BuyOffer`·`SellBell` 원자적 거래) — 열림 중 보스 진입·건너뛰기 차단 |
+| 상점 상태 `isOpen`/`offers`/`soldOfferIndices`/`refreshCount` | ShopManager | ShopManager (`OpenShop` — 보스 구간 목록 유지, 비어 있을 때만 추첨 / `BuyOffer`·`SellBellInstance`·`RefreshShop` 원자적 처리 / `ResetForBoss` — `BossManager.ShowBossSelect`에서 호출해 보스 전환마다 초기화) — 열림 중 보스 진입·건너뛰기 차단 |
 | 게임 상태 `currentState` | YutGameManager | YutGameManager (상태 전환 메서드) |
 | 카드 정의·보스 목록·밸런스 수치·연출 딜레이·방울 정의·상점/경제 | ScriptableObject 에셋 6종 (`talismanDatabase`/`bossDatabase`/`balanceConfig`/`presentationConfig`/`bellDatabase`/`shopConfig` 참조) | 사용자(에셋 편집만) — 코드는 읽기 전용. 필수 4종 누락 시 `ConfigReady` 가드로 게임 진입 차단. bellDatabase/shopConfig 미연결은 경고+기본값. `baseProbabilities`/`backDoPenalty`는 레거시로 씬 직렬화 유지(미사용) |
 | 연출 플래그 `isPresenting`/`hasRolled`/`lastResult` | YutGameManager (internal) | YutGameManager / GameUIManager |
@@ -74,9 +75,9 @@
 
 ## 버튼 OnClick 공용 메서드 (전부 `YutGameManager`에 유지)
 
-`StartGame`, `EnterBossBattle`, `SkipBoss`, `GoToNextBoss`, `RestartRun`, `RollYut`, `RerollStick(1~4)`, `ConfirmThrow`, `SkipPresentation`, `OpenShop`, `CloseShop`, `SelectTalismanOption(1~5)`, `ConfirmTalismanChoice`, `UseTalisman(1~10)`, `ModifyProbability`, `ResetProbabilities`, `UpgradeYutStat`
+`StartGame`, `EnterBossBattle`, `SkipBoss`, `GoToNextBoss`, `RestartRun`, `RollYut`, `RerollStick(1~4)`, `ConfirmThrow`, `SkipPresentation`, `OpenShop`, `CloseShop`, `RefreshShop`, `SelectTalismanOption(1~5)`, `ConfirmTalismanChoice`, `UseTalisman(1~10)`, `ModifyProbability`, `ResetProbabilities`, `UpgradeYutStat`
 
-(상점 상품 구매·보유 방울 판매 버튼은 `ShopItem` Prefab 생성 시 코드로 onClick 연결 — Inspector OnClick 불요. 구형 방울 선택 함수는 시스템 대체로 제거됨)
+(상품 구매·판매 버튼은 `BellSlotUI` 슬롯의 `actionButton`에 `Bind`로 onClick 연결 — Inspector OnClick 불요. 리프레시 버튼은 `RefreshShop`을 OnClick 연결)
 
 ## 새 기능 추가 시 배치 기준
 

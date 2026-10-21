@@ -394,178 +394,105 @@ public class GameUIManager
 
     // ── 방울 장착 패널 + 상점 표시 ──
 
-    private string lastBellSig = null;                          // 장착 목록 스냅샷 — 변할 때만 재구성
-    private readonly List<GameObject> bellItems = new List<GameObject>();
-    private string lastShopSig = null;
-    private readonly List<GameObject> shopOfferItems = new List<GameObject>();
-    private readonly List<GameObject> shopBellItems = new List<GameObject>();
     private bool bellPanelWarned;
 
-    // 장착 방울 목록 동기화 — 전투 화면(bellContent). 상점의 보유 목록은 SyncShopPanel이 담당.
-    // 표시 전용: 항목 생성·제거가 실제 장착 상태에 영향을 주지 않는다
+    // 장착 방울 표시 동기화 — 전투 화면의 고정 슬롯(equipBellSlots)을 채운다.
+    // 보유 수만큼 앞에서부터 채우고 나머지는 빈 칸. 표시 전용 — 장착 상태에 영향 없음
     private void SyncBellPanel()
     {
-        if (gm.bellContent == null || gm.bellItemPrefab == null)
+        bool anySlot = false;
+        foreach (BellSlotUI slot in gm.equipBellSlots)
+        {
+            if (slot != null) anySlot = true;
+        }
+        if (!anySlot)
         {
             if (!bellPanelWarned && gm.bellManager.ownedBells.Count > 0)
             {
                 bellPanelWarned = true;
-                Debug.LogWarning("[YutGameManager] bellContent/bellItemPrefab 미연결 — 장착 방울 표시가 생략됩니다.", gm);
+                Debug.LogWarning("[YutGameManager] equipBellSlots 미연결 — 장착 방울 표시가 생략됩니다. Scene에 슬롯(BellSlotUI)을 만들어 연결하세요.", gm);
             }
             return;
         }
-        string sig = "";
-        foreach (OwnedBell b in gm.bellManager.ownedBells)
+        for (int i = 0; i < gm.equipBellSlots.Length; i++)
         {
-            sig += $"{b.instanceId}:{b.remainingUses};";
-        }
-        if (sig == lastBellSig)
-        {
-            return;   // 목록·남은 횟수가 같으면 재구성 생략
-        }
-        lastBellSig = sig;
-        foreach (GameObject item in bellItems)
-        {
-            if (item != null) Object.Destroy(item);
-        }
-        bellItems.Clear();
-        foreach (OwnedBell bell in gm.bellManager.ownedBells)
-        {
-            GameObject item = Object.Instantiate(gm.bellItemPrefab, gm.bellContent);
-            FillBellItem(item, bell);
-            bellItems.Add(item);
+            BellSlotUI slot = gm.equipBellSlots[i];
+            if (slot == null) continue;
+            if (i < gm.bellManager.ownedBells.Count)
+            {
+                OwnedBell bell = gm.bellManager.ownedBells[i];
+                slot.Bind(bell.bellName, bell.description, BellUsesText(bell), "", false, null);
+            }
+            else
+            {
+                slot.Clear();
+            }
         }
     }
 
-    // BellItem 항목 채우기 — 자식 Text 순서: 1=이름, 2=설명, 3=남은 발동 횟수(선택)
-    private static void FillBellItem(GameObject item, OwnedBell bell)
-    {
-        Text[] texts = item.GetComponentsInChildren<Text>(true);
-        if (texts.Length > 0 && texts[0] != null)
-        {
-            texts[0].text = bell.bellName;
-        }
-        if (texts.Length > 1 && texts[1] != null)
-        {
-            texts[1].text = bell.description;
-        }
-        if (texts.Length > 2 && texts[2] != null)
-        {
-            texts[2].text = bell.remainingUses >= 0 ? $"남은 발동 {bell.remainingUses}회" : "지속";
-        }
-    }
+    private static string BellUsesText(OwnedBell bell) =>
+        bell.remainingUses >= 0 ? $"남은 발동 {bell.remainingUses}회" : "지속";
 
-    // 상점 표시 동기화 — 상점이 열려 있을 때만. 상품 목록·보유 방울 목록·잔액을 표시한다.
-    // 상품 버튼은 코드로 onClick 연결 — Inspector OnClick 연결이 필요 없다
+    // 상점 표시 동기화 — 고정 슬롯(shopOfferSlots·shopBellSlots) + 잔액 + 리프레시 비용.
+    // 슬롯의 버튼 리스너는 Bind가 매번 교체해 누적되지 않는다
     private void SyncShopPanel()
     {
+        bool open = gm.shopManager.isOpen;
         if (gm.shopMoneyText != null)
         {
-            gm.shopMoneyText.text = gm.shopManager.isOpen ? $"{gm.economyManager.money}냥" : "";
+            gm.shopMoneyText.text = open ? $"{gm.economyManager.money}냥" : "";
         }
-        if (!gm.shopManager.isOpen || gm.shopItemPrefab == null)
+        if (gm.refreshCostText != null)
         {
-            if (lastShopSig != null)   // 닫힐 때 항목을 비워 다음 진입이 오래된 상품을 보여주지 않게 한다
+            gm.refreshCostText.text = open ? $"새로고침 {gm.shopManager.CurrentRefreshCost}냥" : "";
+        }
+        if (gm.refreshButton != null)
+        {
+            gm.refreshButton.interactable = open && gm.shopManager.CanRefresh;
+        }
+        // 구매 상품 슬롯 — 상품 수만큼 채우고 나머지는 빈 칸. 구매 완료는 리프레시 전까지 표시 유지
+        for (int i = 0; i < gm.shopOfferSlots.Length; i++)
+        {
+            BellSlotUI slot = gm.shopOfferSlots[i];
+            if (slot == null) continue;
+            if (open && i < gm.shopManager.offers.Count)
             {
-                lastShopSig = null;
-                RebuildList(shopOfferItems);
-                RebuildList(shopBellItems);
-            }
-            return;
-        }
-        // 스냅샷 비교 — 돈·장착 수·판매 완료 수가 같으면 재구성 생략
-        string sig = $"{gm.economyManager.money}|{gm.bellManager.ownedBells.Count}|{gm.shopManager.soldOfferIndices.Count}";
-        if (sig == lastShopSig)
-        {
-            return;
-        }
-        lastShopSig = sig;
-        RebuildList(shopOfferItems);
-        RebuildList(shopBellItems);
-        if (gm.shopOfferContent != null)
-        {
-            for (int i = 0; i < gm.shopManager.offers.Count; i++)
-            {
-                int index = i;   // 클로저용 — 람다가 인덱스 변수를 공유하지 않게 고정
                 BellData offer = gm.shopManager.offers[i];
-                GameObject item = Object.Instantiate(gm.shopItemPrefab, gm.shopOfferContent);
-                FillShopItem(item, offer.bellName, offer.description, $"{offer.buyPrice}냥", "구매");
-                Button btn = item.GetComponentInChildren<Button>(true);
-                if (btn != null)
+                int index = i;   // 클로저용 — 람다가 인덱스 변수를 공유하지 않게 고정
+                bool sold = gm.shopManager.soldOfferIndices.Contains(index);
+                if (sold)
                 {
-                    bool sold = gm.shopManager.soldOfferIndices.Contains(index);
-                    btn.interactable = !sold &&
-                        gm.economyManager.money >= offer.buyPrice &&
-                        gm.bellManager.ownedBells.Count < gm.bellManager.MaxBells;
-                    if (!sold)
-                    {
-                        btn.onClick.AddListener(() => gm.shopManager.BuyOffer(index));
-                    }
-                    else
-                    {
-                        SetButtonLabel(btn, "판매 완료");
-                    }
+                    slot.Bind(offer.bellName, offer.description, $"{offer.buyPrice}냥", "구매 완료", false, null);
                 }
-                shopOfferItems.Add(item);
+                else
+                {
+                    slot.Bind(offer.bellName, offer.description, $"{offer.buyPrice}냥", "구매",
+                        gm.economyManager.money >= offer.buyPrice && gm.bellManager.ownedBells.Count < gm.bellManager.MaxBells,
+                        () => gm.shopManager.BuyOffer(index));
+                }
             }
-        }
-        if (gm.shopBellContent != null)
-        {
-            for (int i = 0; i < gm.bellManager.ownedBells.Count; i++)
+            else
             {
-                int index = i;
-                OwnedBell bell = gm.bellManager.ownedBells[i];
-                GameObject item = Object.Instantiate(gm.shopItemPrefab, gm.shopBellContent);
-                FillShopItem(item, bell.bellName, bell.description,
-                    $"{bell.sellPrice}냥 · {(bell.remainingUses >= 0 ? $"남은 발동 {bell.remainingUses}회" : "지속")}", "판매");
-                Button btn = item.GetComponentInChildren<Button>(true);
-                if (btn != null)
-                {
-                    btn.onClick.AddListener(() => gm.shopManager.SellBell(index));
-                }
-                shopBellItems.Add(item);
+                slot.Clear();
             }
         }
-    }
-
-    private static void RebuildList(List<GameObject> items)
-    {
-        foreach (GameObject item in items)
+        // 장착/판매 슬롯 — 보유 수만큼 채움. 인스턴스 ID로 바인딩해 목록 순서 변경으로 다른 방울이 팔리지 않게 한다
+        for (int i = 0; i < gm.shopBellSlots.Length; i++)
         {
-            if (item != null) Object.Destroy(item);
-        }
-        items.Clear();
-    }
-
-    // ShopItem 항목 채우기 — 자식 Text 순서: 1=이름, 2=설명, 3=가격/상태. 버튼 라벨은 자식 Text
-    private static void FillShopItem(GameObject item, string name, string desc, string price, string actionLabel)
-    {
-        Text[] texts = item.GetComponentsInChildren<Text>(true);
-        if (texts.Length > 0 && texts[0] != null)
-        {
-            texts[0].text = name;
-        }
-        if (texts.Length > 1 && texts[1] != null)
-        {
-            texts[1].text = desc;
-        }
-        if (texts.Length > 2 && texts[2] != null)
-        {
-            texts[2].text = price;
-        }
-        Button btn = item.GetComponentInChildren<Button>(true);
-        if (btn != null)
-        {
-            SetButtonLabel(btn, actionLabel);
-        }
-    }
-
-    private static void SetButtonLabel(Button btn, string label)
-    {
-        Text labelText = btn.GetComponentInChildren<Text>(true);
-        if (labelText != null)
-        {
-            labelText.text = label;
+            BellSlotUI slot = gm.shopBellSlots[i];
+            if (slot == null) continue;
+            if (open && i < gm.bellManager.ownedBells.Count)
+            {
+                OwnedBell bell = gm.bellManager.ownedBells[i];
+                int instanceId = bell.instanceId;
+                slot.Bind(bell.bellName, bell.description,
+                    $"{bell.sellPrice}냥 · {BellUsesText(bell)}", "판매", true,
+                    () => gm.shopManager.SellBellInstance(instanceId));
+            }
+            else
+            {
+                slot.Clear();
+            }
         }
     }
 

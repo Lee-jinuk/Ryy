@@ -15,3 +15,5 @@ MonoBehaviour:
   startingMoney: 50
   maxBells: 4
   shopOfferCount: 4
+  refreshBaseCost: 2
+  refreshCostMultiplier: 2

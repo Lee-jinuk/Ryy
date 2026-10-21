@@ -10,5 +10,7 @@ public class ShopConfig : ScriptableObject
 {
     public int startingMoney = 50;      // 새 런 시작 자금(냥) — 런당 1회 지급, 재진입·보스 전환으로 재지급 없음
     public int maxBells = 4;            // 방울 최대 보유·장착 수
-    public int shopOfferCount = 4;      // 상점 진입 시 무작위 상품 후보 수 (데이터 구성 미확정 — 설정값)
+    public int shopOfferCount = 4;      // 상점 무작위 상품 후보 수 (고정 슬롯 수와 맞춘다)
+    public int refreshBaseCost = 2;     // 상점 리프레시 시작 비용(냥)
+    public int refreshCostMultiplier = 2;   // 리프레시 성공마다 다음 비용에 곱하는 배수 (2→4→8→…)
 }

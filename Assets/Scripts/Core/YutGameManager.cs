@@ -83,13 +83,13 @@ public class YutGameManager : MonoBehaviour
 
     [Header("Bell / Shop UI — 방울 장착·상점")]
     public Text moneyText;                                     // 보유 냥 표시 (전투 화면, 미연결 시 무시)
-    public Transform bellContent;                              // 장착 방울 목록 부모 — BellItem Prefab이 자식으로 생성 (미연결 시 표시 생략)
-    public GameObject bellItemPrefab;                          // 방울 항목 Prefab — 자식 Text: 1번째=이름, 2번째=설명, 3번째=남은 발동 횟수(선택)
+    public BellSlotUI[] equipBellSlots = new BellSlotUI[4];    // 게임 화면 장착 방울 슬롯 — 고정 4칸, 표시 전용 (버튼 없음)
     public GameObject shopPanel;                               // 상점 패널 — 보스 소개 화면에서 진입 (ClearPanel 자식으로 두지 말 것)
     public Text shopMoneyText;                                 // 상점 내 보유 냥 표시 (미연결 시 무시)
-    public Transform shopOfferContent;                         // 상점 상품 목록 부모 — ShopItem Prefab 생성 (미연결 시 생략)
-    public Transform shopBellContent;                          // 상점 내 보유 방울 목록 부모 — ShopItem Prefab 생성 (미연결 시 생략)
-    public GameObject shopItemPrefab;                          // 상점 항목 Prefab — 자식 Text: 이름/설명/가격 + Button=거래 (코드로 onClick 연결)
+    public BellSlotUI[] shopOfferSlots = new BellSlotUI[4];    // 상점 구매 상품 슬롯 — 고정 4칸, 구매 버튼 포함
+    public BellSlotUI[] shopBellSlots = new BellSlotUI[4];     // 상점 장착/판매 슬롯 — 고정 4칸, 판매 버튼 포함
+    public Button refreshButton;                               // 상점 리프레시 버튼 — OnClick = RefreshShop (미연결 시 무시)
+    public Text refreshCostText;                               // 다음 리프레시 비용 표시 — "새로고침 N냥" (미연결 시 무시)
 
     // 부적 카드 정의 — 기준은 TalismanDatabase 에셋(talismanDatabase.cards).
     // Scene에 목록을 저장하지 않는다 — 에셋 하나만 편집하면 모든 씬에 동일 적용.
@@ -395,6 +395,9 @@ public class YutGameManager : MonoBehaviour
 
     // '상점' 버튼 — 보스 소개 화면에서 상점 진입 (첫 보스전 이전 Start 상태에서는 불가)
     public void OpenShop() => shopManager.OpenShop();
+
+    // '새로고침' 버튼 — 상점 상품 전체를 비용을 내고 새로 구성 (비용 2냥부터 성공마다 2배)
+    public void RefreshShop() => shopManager.RefreshShop();
 
     // '상점 닫기' 버튼 — 보스 소개 화면으로 복귀
     public void CloseShop() => shopManager.CloseShop();
