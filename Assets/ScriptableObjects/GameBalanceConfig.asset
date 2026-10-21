@@ -16,7 +16,7 @@ MonoBehaviour:
   yutStats:
   - result: 1
     basicBonus: 0
-    mult: 2
+    mult: 4
   - result: 2
     basicBonus: 0
     mult: 3
@@ -25,9 +25,11 @@ MonoBehaviour:
     mult: 4
   - result: 4
     basicBonus: 0
-    mult: 5
+    mult: 9
   - result: 5
     basicBonus: 0
-    mult: 6
+    mult: 9
   bossMoveStageMin: 040000000300000002000000i
   bossMoveStageMax: 070000000600000005000000i
+  catchMultiplier: 3
+  catchAffinityMult: 2

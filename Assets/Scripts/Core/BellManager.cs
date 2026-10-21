@@ -1,100 +1,195 @@
+// ──────────────────────────────────────────────
+// BellManager.cs — 방울 장착·효과 시스템
+//
+// 담당:
+//   - 보유 방울 인스턴스(ownedBells) — 런 단위 장착 상태, 최대 shopConfig.maxBells(기본 4)개
+//   - 성장형 방울 발동 처리 (윷 배율·속성 공격력 런타임 성장, 발동 한도 소진 시 인스턴스만 소멸)
+//   - 속성별 런타임 공격력 성장값(attrAttackBonus) — 칸 기본값과 분리된 런 상태
+//   - 지속형 방울 조회(족쇄·청개구리·재복·천운) — 실제 적용은 각 시스템이 호출해 수행
+//
+// 규칙 (사용자 확정):
+//   - 같은 종류의 방울은 1개까지 보유 (중복 장착 불가)
+//   - 소멸·판매해도 그 방울이 쌓은 런 성장은 런 종료까지 유지
+//   - 방울 정의(BellData/BellDatabase 에셋)는 런타임에 변경하지 않는다
+//   - 천운방울(BellEffectKind.FreeReroll)은 확률 미확정 — 데이터만 존재하고 효과 비활성
+//
+// 과거 방울 선택 이벤트(땅 칸 3택1)·bellSlots·임시 보유 구조는 땅 칸 부적 선택과
+// 장착 시스템으로 대체되어 제거됐다 — 관련 필드·함수는 남기지 않는다.
+// 일반 C# 클래스 (MonoBehaviour 아님) — Inspector 연결에 영향 없음
+// ──────────────────────────────────────────────
 using System.Collections.Generic;
 using UnityEngine;
 
-// 방울 시스템 담당 — 방울 이벤트 칸 발동, 후보 3개 제시·1개 선택, 보유 방울 상태, 보스전/런 초기화
-// 방울 후보 풀(bellPool)과 보유 목록(ownedBells)의 저장소는 Inspector 노출을 위해 YutGameManager에 유지
-// 방울 실제 효과는 미구현 — 임의로 추가하지 않는다
-// 일반 C# 클래스 (MonoBehaviour 아님) — Inspector 연결에 영향 없음
 public class BellManager
 {
     private readonly YutGameManager gm;
 
-    public bool isChoosingBell;       // 방울 선택창 표시 중 — 투척 입력 차단
-    public int selectedBellOption = -1;
-    public readonly List<BellData> currentBellOptions = new List<BellData>();
+    // 보유·장착 방울 — 런 단위 상태. 보스 전환에 유지, 새 런에서 정리
+    public readonly List<OwnedBell> ownedBells = new List<OwnedBell>();
+    private int nextInstanceId = 1;
+
+    // 속성별 런타임 공격력 성장값 — 칸 기본값(YutBoard.AttackScore)과 분리된 런 상태.
+    // 방울이 소멸·판매돼도 이 성장은 런 종료까지 유지된다
+    public readonly Dictionary<TileAttribute, int> attrAttackBonus = new Dictionary<TileAttribute, int>
+    {
+        { TileAttribute.Fire, 0 }, { TileAttribute.Water, 0 }, { TileAttribute.Forest, 0 },
+    };
 
     public BellManager(YutGameManager gm)
     {
         this.gm = gm;
     }
 
-    // 땅 칸 착지 → 정산 연출 종료 후 방울 뽑기 선택창 표시 (보스전이 계속될 때만)
-    public void OpenBellChoice()
+    public int MaxBells => gm.shopConfig != null ? Mathf.Max(1, gm.shopConfig.maxBells) : 4;
+
+    // 종류별 보유 여부 — 중복 장착 불가 규칙과 상점 표시에 사용
+    public bool OwnsKind(string bellId) =>
+        bellId != null && ownedBells.Exists(b => b.bellId == bellId);
+
+    // 효과 종류 보유 여부 — 지속형 효과 적용 검사용
+    public bool HasBell(BellEffectKind kind) =>
+        ownedBells.Exists(b => b.effect == kind);
+
+    // 속성의 런타임 성장 공격력 — 칸 기본값에 더해 정산·표시에 사용
+    public int GetAttrAttackBonus(TileAttribute attr) =>
+        attrAttackBonus.TryGetValue(attr, out int bonus) ? bonus : 0;
+
+    // 방울 획득 — 상점 구매의 유일한 경로. 장착 한도·중복 종류는 여기서 차단 (호출 전 가격 검사 별도)
+    public bool TryAddBell(BellData data)
     {
-        if (gm.bellChoicePanel == null)
+        if (data == null || ownedBells.Count >= MaxBells || OwnsKind(data.bellId))
         {
-            // 선택창 미연결이면 보이지 않는 선택 상태(isChoosingBell)로 멈추지 않도록 이벤트를 건너뛴다
-            Debug.LogWarning("[YutGameManager] bellChoicePanel 미연결 — 방울 뽑기 화면을 표시할 수 없어 이벤트를 건너뜁니다. 씬에 Bell Choice Panel을 만들어 연결하세요.", gm);
-            return;
+            return false;
         }
-        if (gm.bellPool == null || gm.bellPool.Count < 3)
+        ownedBells.Add(new OwnedBell
         {
-            Debug.LogWarning("[YutGameManager] bellPool이 3개 미만입니다 — 방울 이벤트를 건너뜁니다.", gm);
-            return;
-        }
-        // 후보 3개 무작위 추출 (중복 없음)
-        List<int> pick = new List<int>();
-        for (int i = 0; i < gm.bellPool.Count; i++)
-        {
-            pick.Add(i);
-        }
-        for (int i = pick.Count - 1; i > 0; i--)
-        {
-            int j = Random.Range(0, i + 1);
-            (pick[i], pick[j]) = (pick[j], pick[i]);
-        }
-        currentBellOptions.Clear();
-        for (int i = 0; i < 3; i++)
-        {
-            currentBellOptions.Add(gm.bellPool[pick[i]]);
-        }
-        selectedBellOption = -1;
-        isChoosingBell = true;
-        GameUIManager.ActivatePanel(gm.bellChoicePanel, nameof(gm.bellChoicePanel));
-        gm.uiManager.UpdateUI();
-        Debug.Log("--- 방울 이벤트: 3개 중 1개를 선택하세요 ---");
+            instanceId = nextInstanceId++,
+            bellId = data.bellId,
+            bellName = data.bellName,
+            description = data.description,
+            effect = data.effect,
+            targetResult = data.targetResult,
+            targetAttribute = data.targetAttribute,
+            growthAmount = data.growthAmount,
+            remainingUses = data.useLimit > 0 ? data.useLimit : -1,   // -1 = 지속형(한도 없음)
+            sellPrice = data.sellPrice,
+        });
+        return true;
     }
 
-    // 방울 후보 선택 버튼(int): index 0~2 — 선택만 하고 확정은 ConfirmBellChoice()
-    public void SelectBellOption(int index)
+    // 인스턴스 ID로 방울 제거 — 판매·한도 소진 소멸 공통 경로.
+    // 인스턴스만 제거한다 — 누적 성장(attrAttackBonus·yutStats)은 런 종료까지 유지 (사용자 확정)
+    public bool RemoveBell(int instanceId)
     {
-        if (!isChoosingBell || index < 0 || index >= currentBellOptions.Count)
+        int i = ownedBells.FindIndex(b => b.instanceId == instanceId);
+        if (i < 0)
         {
-            return;
+            return false;
         }
-        selectedBellOption = index;
-        Debug.Log($"방울 후보 선택: {currentBellOptions[index].bellName} (확정 버튼으로 결정)");
-        gm.uiManager.UpdateUI();
+        Debug.Log($"--- 방울 제거: {ownedBells[i].bellName} ---");
+        ownedBells.RemoveAt(i);
+        return true;
     }
 
-    // 방울 선택 확정 버튼 — 선택한 방울을 보스전 임시 보유에 추가하고 창 닫기
-    public void ConfirmBellChoice()
+    // 성장형 방울 발동 — 확정 정산당 조건을 한 번씩 평가한다 (ScoreManager가 착지 확정 후 호출).
+    // 성장분은 발동한 이번 공격부터 적용 (사용자 확정).
+    // 반환: 이번 정산에서 발동한 방울의 표시용 결과 — ScoreManager가 단계 기록으로 변환
+    public class GrowthTrigger
     {
-        if (!isChoosingBell || selectedBellOption < 0)
+        public string bellName;
+        public string note;          // "도깨비방울 — 도 배율 +0.5" / "화령방울 — 불 공격력 +5"
+        public bool isBasic;         // true = Basic(공격력) 변화 단계, false = Multiplier 변화 단계
+        public float before;
+        public float after;
+    }
+
+    public List<GrowthTrigger> ApplyGrowth(YutResult result, BoardTile tile)
+    {
+        var triggers = new List<GrowthTrigger>();
+        var exhausted = new List<int>();   // 순회 중 제거 방지 — 한도 소진분을 순회 후 제거
+        foreach (OwnedBell bell in ownedBells)
         {
-            return;
+            if (bell.remainingUses == 0)
+            {
+                continue;
+            }
+            switch (bell.effect)
+            {
+                case BellEffectKind.YutMultGrowth:
+                    // 해당 결과를 최종 확정한 이번 공격부터 대상 윷 런타임 배율 +성장량
+                    if (bell.targetResult != result)
+                    {
+                        continue;
+                    }
+                    {
+                        YutStatEntry stat = gm.rollManager.GetStat(result);
+                        float before = stat.mult;
+                        stat.mult = Mathf.Max(0f, stat.mult + bell.growthAmount);
+                        triggers.Add(new GrowthTrigger
+                        {
+                            bellName = bell.bellName,
+                            note = $"{bell.bellName} — {YutGameManager.ToKorean(result)} 배율 +{bell.growthAmount}",
+                            isBasic = false,
+                            before = before,
+                            after = stat.mult,
+                        });
+                    }
+                    break;
+                case BellEffectKind.AttrPowerGrowth:
+                    // 최종 착지 칸의 속성 전체 런타임 공격력 +성장량 — 이번 공격부터 반영
+                    if (bell.targetAttribute != tile.attribute ||
+                        !attrAttackBonus.ContainsKey(tile.attribute))
+                    {
+                        continue;
+                    }
+                    {
+                        int before = tile.AttackScore + attrAttackBonus[tile.attribute];
+                        attrAttackBonus[tile.attribute] += Mathf.RoundToInt(bell.growthAmount);
+                        triggers.Add(new GrowthTrigger
+                        {
+                            bellName = bell.bellName,
+                            note = $"{bell.bellName} — {BoardManager.AttributeName(tile.attribute)} 공격력 +{Mathf.RoundToInt(bell.growthAmount)}",
+                            isBasic = true,
+                            before = before,
+                            after = tile.AttackScore + attrAttackBonus[tile.attribute],
+                        });
+                    }
+                    break;
+                default:
+                    continue;   // 지속형·비활성 방울은 성장 평가 대상이 아니다
+            }
+            if (bell.remainingUses > 0 && --bell.remainingUses == 0)
+            {
+                exhausted.Add(bell.instanceId);   // 한도 소진 — 방울만 소멸, 누적 성장은 유지
+                Debug.Log($"--- {bell.bellName} 발동 한도 소진 — 방울 소멸 (성장은 유지) ---");
+            }
         }
-        BellData chosen = currentBellOptions[selectedBellOption];
-        gm.ownedBells.Add(chosen);
-        isChoosingBell = false;
-        GameUIManager.SetPanel(gm.bellChoicePanel, false);
-        Debug.Log($"--- 방울 획득: {chosen.bellName} (이번 보스전 한정) ---");
-        gm.uiManager.UpdateUI();
+        foreach (int id in exhausted)
+        {
+            RemoveBell(id);
+        }
+        return triggers;
     }
 
-    // 원클릭 버전 — 옵션 버튼에 바로 연결하면 선택과 확정을 한 번에 처리
-    public void SelectBellAndConfirm(int index)
+    // 청개구리방울 유효 상성 — 원래 강점 속성 ×3, 나머지 공격 속성 ×0.5.
+    // 잡기 강제 상성(catchAffinityMult)보다 우선한다 (사용자 확정). 비공격 속성은 ×1
+    public float FrogAffinityMult(TileAttribute attribute)
     {
-        SelectBellOption(index);
-        ConfirmBellChoice();
+        if (attribute != TileAttribute.Fire && attribute != TileAttribute.Water &&
+            attribute != TileAttribute.Forest)
+        {
+            return 1f;
+        }
+        return attribute == gm.bossManager.EnsureAffinity(gm.selectedBossIndex).strong ? 3f : 0.5f;
     }
 
-    // 런 종료·새 보스전 시작 시 방울 이벤트 상태 초기화
+    // 런 초기화 — 보유 방울·성장·인스턴스 카운터 전부 정리
     public void ResetForNewRun()
     {
-        isChoosingBell = false;
-        selectedBellOption = -1;
-        currentBellOptions.Clear();
-        gm.ownedBells.Clear();
+        ownedBells.Clear();
+        nextInstanceId = 1;
+        attrAttackBonus[TileAttribute.Fire] = 0;
+        attrAttackBonus[TileAttribute.Water] = 0;
+        attrAttackBonus[TileAttribute.Forest] = 0;
     }
 }

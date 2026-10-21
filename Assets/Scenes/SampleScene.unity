@@ -4236,6 +4236,8 @@ MonoBehaviour:
   bossDatabase: {fileID: 11400000, guid: 6ff3a7e8ba46edcca102c98d65f71817, type: 2}
   balanceConfig: {fileID: 11400000, guid: 737b2c6d98d5c3f5685063df10cc5d3a, type: 2}
   presentationConfig: {fileID: 11400000, guid: 6166f977c3adb323872859e526f0ac7b, type: 2}
+  bellDatabase: {fileID: 11400000, guid: 5a11be11da7a0000c0ffee000000b006, type: 2}
+  shopConfig: {fileID: 11400000, guid: 5a11be11da7a0000c0ffee000000b007, type: 2}
   board:
     tiles: []
     totalMoved: 0

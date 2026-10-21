@@ -42,6 +42,18 @@ public class BossManager
     // 보스 전환 시 해제). 이미 완료된 이번 이동은 되돌리지 않고 다음 MoveBossPiece에서 소모된다
     public bool pendingMoveSeal;
 
+    // 다음 이동 계획 — 차례 준비(PrepareBossMove)에 기본 거리를 1회 추첨해 보관하고
+    // 최초 투척 접수(MoveBossPiece)에서 1회 소비한다. 재투척·확정·UI 갱신에서는 재추첨 없음
+    public bool movePlanReady;
+    public int plannedBaseSteps;    // 추첨된 기본 이동 거리 (족쇄·봉쇄 미반영)
+
+    // 유효 이동 거리·목적지 — 족쇄방울·봉쇄부를 계산 시점에 반영 (봉쇄 플래그는 소모하지 않음).
+    // 봉쇄부를 준비 단계에 쓰면 목적지가 현재 칸으로 즉시 바뀐다
+    public int PlannedEffectiveSteps =>
+        !movePlanReady ? 0 : pendingMoveSeal ? 0 : ApplyMoveReduction(plannedBaseSteps);
+    public int PlannedDestination =>
+        (bossPieceIndex + PlannedEffectiveSteps) % YutBoard.TileCount;
+
     // 상성 대상이 되는 공격 속성 — START·땅·쇠는 상성 없이 공격점수 0 유지
     private static readonly TileAttribute[] CombatAttributes =
         { TileAttribute.Fire, TileAttribute.Water, TileAttribute.Forest };
@@ -223,10 +235,33 @@ public class BossManager
         return Random.Range(min, max + 1);   // Random.Range(int)는 상한 미포함 → max 포함을 위해 +1
     }
 
+    // 족쇄방울 — 보스 이동 거리 −1칸, 최소 1칸 보장 (사용자 확정).
+    // 봉쇄부의 이동 0칸은 PlannedEffectiveSteps·MoveBossPiece에서 먼저 처리되어 이 보정으로 되살아나지 않는다
+    private int ApplyMoveReduction(int steps)
+    {
+        return gm.bellManager.HasBell(BellEffectKind.BossMoveReduce)
+            ? Mathf.Max(1, steps - 1)
+            : steps;
+    }
+
+    // 차례 준비 — 다음 이동의 기본 거리를 1회 추첨해 계획한다. 보스 말은 이동하지 않고
+    // UI 갱신·재호출에서는 재추첨하지 않는다 (계획 소비는 MoveBossPiece에서만)
+    public void PrepareBossMove()
+    {
+        plannedBaseSteps = DrawBossMoveSteps();
+        movePlanReady = true;
+    }
+
     // 보스 말 1회 이동 — 새 투척 세션의 최초 RollYut() 성공 시에만 호출 (재투척·확정·거부된 입력에서는 호출 금지)
+    // 차례 준비에 추첨한 계획을 1회 소비해 실행한다 — 실행 시점에 재추첨하지 않는다
     // 플레이어 위치·누적 이동·완주와 무관하며, 도착·경유 칸의 효과를 발동시키지 않는다
     public void MoveBossPiece()
     {
+        if (!movePlanReady)
+        {
+            PrepareBossMove();   // 안전망 — 정상 흐름에서는 차례 준비에 이미 계획돼 있다
+        }
+        movePlanReady = false;
         if (pendingMoveSeal)
         {
             // 봉쇄부 — 이번 보스 이동 생략하고 상태 소모. 실제 이동거리 0으로 기록
@@ -235,19 +270,20 @@ public class BossManager
             Debug.Log($"봉쇄부 적용: 보스 이동 0칸 — 칸 {bossPieceIndex} 유지");
             return;
         }
-        int steps = DrawBossMoveSteps();
+        int steps = ApplyMoveReduction(plannedBaseSteps);
         lastBossMoveSteps = steps;
         bossPieceIndex = (bossPieceIndex + steps) % YutBoard.TileCount;   // 끝 칸 넘으면 START로 순환
         gm.boardManager.MoveBossPieceVisual(bossPieceIndex);
-        Debug.Log($"--- 보스 말 이동: +{steps}칸 → 칸 {bossPieceIndex} (이동 단계 {BossMoveStage}) ---");
+        Debug.Log($"--- 보스 말 이동: +{steps}칸 (계획 {plannedBaseSteps}) → 칸 {bossPieceIndex} (이동 단계 {BossMoveStage}) ---");
     }
 
-    // 보스 말 초기화 — 논리 위치와 화면 위치를 함께 START(인덱스 0)로 되돌린다
+    // 보스 말 초기화 — 논리 위치와 화면 위치를 함께 START(인덱스 0)로 되돌리고 이전 이동 계획을 폐기한다
     // 호출 시점: 모든 보스전 시작(BeginBossFight) + 런 초기화. 소개 화면·건너뛰기에서는 호출되지 않는다
     public void ResetBossPiece()
     {
         bossPieceIndex = 0;
         lastBossMoveSteps = 0;
+        movePlanReady = false;
         gm.boardManager.MoveBossPieceVisual(0);
     }
 }

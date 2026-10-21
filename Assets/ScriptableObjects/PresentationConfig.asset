@@ -14,3 +14,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveStepDelay: 0.15
   effectStepDelay: 0.35
+  greedStepPreDelay: 0.5
+  greedStepPostDelay: 0.5

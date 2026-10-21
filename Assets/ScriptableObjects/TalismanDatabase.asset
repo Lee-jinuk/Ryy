@@ -15,46 +15,70 @@ MonoBehaviour:
   cards:
   - cardId: t_fire
     talismanName: "화염부"
-    description: "이번 투척에서 불 칸 착지 시 최종 피해 ×2.5"
+    description: "이번 투척에서 불 칸 착지 시 최종 피해 ×4"
     rarity: 4
     effect: 0
-    value: 2.5
+    value: 4
     attribute: 1
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
   - cardId: t_water
     talismanName: "수룡부"
-    description: "이번 투척에서 물 칸 착지 시 최종 피해 ×2.5"
+    description: "이번 투척에서 물 칸 착지 시 최종 피해 ×4"
     rarity: 4
     effect: 1
-    value: 2.5
+    value: 4
     attribute: 2
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
   - cardId: t_forest
     talismanName: "초목부"
-    description: "이번 투척에서 풀 칸 착지 시 최종 피해 ×2.5"
+    description: "이번 투척에서 풀 칸 착지 시 최종 피해 ×4"
     rarity: 4
     effect: 2
-    value: 2.5
+    value: 4
     attribute: 3
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
   - cardId: t_pursuit
     talismanName: "추혼부"
-    description: "이번 투척에서 보스말 잡기 성공 시 잡기 배율이 ×4로 변경"
+    description: "이번 투척에서 보스말 잡기에 성공하면 최종 피해가 추가로 ×4 증가한다. 기본 잡기 배율은 유지한다"
     rarity: 4
     effect: 3
     value: 4
     attribute: 0
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
   - cardId: t_greed
     talismanName: "탐욕부"
-    description: "이번 투척 최종 피해 ×1.5. 단, 보스말 잡기 성공 시 최종 피해 0"
+    description: "이번 투척 최종 피해 ×2. 단, 보스말 잡기 성공 시 최종 피해 0"
     rarity: 4
     effect: 4
-    value: 1.5
+    value: 2
     attribute: 0
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
   - cardId: t_retry
     talismanName: "재기부"
-    description: "이번 투척의 개별 윷 재투척 기회 1회 추가 (같은 윷 1회 제한 유지)"
+    description: "이번 투척 재투척 기회 +1 — 추가 기회로는 이미 재투척한 윷도 다시 던질 수 있다 (윷당 특별 기회 1회)"
     rarity: 4
     effect: 5
     value: 1
     attribute: 0
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
   - cardId: t_bond
     talismanName: "인연부"
     description: "사용 즉시 부적 덱에서 카드 2장 획득"
@@ -62,6 +86,10 @@ MonoBehaviour:
     effect: 6
     value: 2
     attribute: 0
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
   - cardId: t_seal
     talismanName: "봉쇄부"
     description: "다음 최초 던지기 시 보스 이동을 1회 막는다"
@@ -69,17 +97,106 @@ MonoBehaviour:
     effect: 7
     value: 0
     attribute: 0
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
   - cardId: t_fortune
     talismanName: "천운부"
-    description: "이번 투척에서 보스 약점 속성 칸 착지 시 최종 피해 ×3"
+    description: "이번 투척에서 보스 약점 속성 칸 착지 시 최종 피해 ×4"
     rarity: 4
     effect: 8
-    value: 3
+    value: 4
     attribute: 0
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
   - cardId: t_allinnothing
     talismanName: "승부부"
-    description: "사용 후 남은 재투척을 전부 포기하면 이번 투척 최종 피해 ×1.5"
+    description: "사용 후 남은 재투척을 전부 포기하면 이번 투척 최종 피해 ×2"
     rarity: 4
     effect: 9
-    value: 1.5
+    value: 2
     attribute: 0
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
+  - cardId: t_advance
+    talismanName: "진격부"
+    description: "이번 투척의 확정된 윷 이동 거리 +1칸. 최종 착지 칸 효과를 적용하며 윷 자체 배율은 유지한다"
+    rarity: 4
+    effect: 10
+    value: 1
+    attribute: 0
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
+  - cardId: t_retreat
+    talismanName: "후퇴부"
+    description: "이번 투척의 확정된 윷 이동 거리 −1칸. 최종 착지 칸 효과를 적용하며 윷 자체 배율은 유지한다. 도는 이동하지 않고 현재 칸 효과를 적용한다"
+    rarity: 4
+    effect: 10
+    value: -1
+    attribute: 0
+    targetResult: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
+  - cardId: t_do
+    talismanName: "일도부"
+    description: "사용 후 바로 다음 개별 재투척의 전체 결과가 도이고, 최종 확정 결과도 도이면 이번 도 배율 ×2"
+    rarity: 4
+    effect: 11
+    value: 2
+    attribute: 0
+    targetResult: 1
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_gae
+    talismanName: "이개부"
+    description: "사용 후 바로 다음 개별 재투척의 전체 결과가 개이고, 최종 확정 결과도 개이면 이번 개 배율 ×2"
+    rarity: 4
+    effect: 11
+    value: 2
+    attribute: 0
+    targetResult: 2
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_geol
+    talismanName: "삼걸부"
+    description: "사용 후 바로 다음 개별 재투척의 전체 결과가 걸이고, 최종 확정 결과도 걸이면 이번 걸 배율 ×2"
+    rarity: 4
+    effect: 11
+    value: 2
+    attribute: 0
+    targetResult: 3
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_yut
+    talismanName: "윷령부"
+    description: "사용 후 바로 다음 개별 재투척의 전체 결과가 윷이고, 최종 확정 결과도 윷이면 이번 윷 배율 ×2"
+    rarity: 4
+    effect: 11
+    value: 2
+    attribute: 0
+    targetResult: 4
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
+  - cardId: t_mo
+    talismanName: "모령부"
+    description: "사용 후 바로 다음 개별 재투척의 전체 결과가 모이고, 최종 확정 결과도 모이면 이번 모 배율 ×2"
+    rarity: 4
+    effect: 11
+    value: 2
+    attribute: 0
+    targetResult: 5
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0

@@ -23,6 +23,10 @@ public class ScoreEffectStep
     public float opValueF;           // 실제 적용 배율 (0.5/2 등) — int로 표현 불가한 소수 배율 기록용
     public float beforeValueF;       // 적용 전 소수 수치 — 상성 반영 멀티플 등
     public float afterValueF;        // 적용 후 소수 수치 — 상성 반영 멀티플 등
+    public int useId;                // 연결된 사용 부적 기록 (0 = 카드 단계 아님 — 상성·잡기 등은 카드 표시 제거 없음)
+    public string reasonText;        // 배율 이유 표시 텍스트 — "추혼부 ×4", "잡기 상성 ×2" 등. 비어 있으면 displayName 사용
+    public float preApplyDelay = -1f;    // 이유 표시 → 배율 갱신 전 추가 대기(초). <0 = 바로 갱신 — 탐욕부 전용 타이밍
+    public float postApplyDelay = -1f;   // 배율 갱신 → 카드 제거 대기(초). <0 = effectStepDelay 사용
 }
 
 // 한 번의 투척에 대한 확정 정산 — 점수는 여기서 계산되고, 연출은 이 데이터만 재생한다
@@ -30,16 +34,18 @@ public class ScoreEffectStep
 public class ThrowSettlement
 {
     public YutResult result;
-    public int baseBasic;            // 효과 적용 전 초기 베이직 (윷 스탯 기준)
-    public int baseMult;             // 효과 적용 전 초기 멀티플
+    public int baseBasic;            // 효과 적용 전 초기 베이직 (착지 칸 공격력 — 방울 성장 전)
+    public float baseMult;           // 효과 적용 전 초기 멀티플 (방울 성장 전)
     public int finalBasic;           // 모든 효과 적용 후 베이직
-    public int finalMult;            // 모든 효과 적용 후 멀티플
+    public float finalMult;          // 모든 효과 적용 후 멀티플 — 방울 성장(+0.5) 포함 소수 가능
     public int throwScore;           // finalBasic × finalMult — TotalScore에 1회만 합산
     public int landingTileIndex = -1;    // 말판 도착 칸 (-1 = 이동 없음 — 저주)
     public int tileScore;                // 도착 칸의 기본 공격점수 (불·물·풀 50 / START·땅·쇠 0)
-    public float affinityMult = 1f;      // 도착 칸 속성에 대한 보스 상성 배율 (약점 2 / 강점 0.5 / 기본 1)
+    public float affinityMult = 1f;      // 이번 정산의 유효 상성 배율 — 잡기 성공 시 GameBalanceConfig.catchAffinityMult로 고정
+    public float actualAffinityMult = 1f;// 실제 착지 속성의 보스 상성 배율 (약점 2 / 강점 0.5 / 기본 1) — 기록·디버깅용
+    public float resultBonusMult = 1f;   // 결과별 부적(일도부~모령부) 보너스 — 성공+최종 결과 일치 시에만 적용
     public bool caught;                  // 잡기 성공 — 최종 도착 칸 = 보스 말 위치 (통과는 미발동)
-    public float catchMult = 1f;         // 잡기 배율 (실패 ×1 / 성공 ×2, 추혼부 사용 시 ×4로 대체)
+    public float catchMult = 1f;         // 잡기 배율 (실패 ×1 / 성공 GameBalanceConfig.catchMultiplier — 추혼부는 추가 배율로 별도)
     public float talismanMult = 1f;      // 이번 투척 부적 피해 효과의 누적 배율 (미적용 ×1, 조건 만족분의 곱)
     public bool talismanCancelled;       // 탐욕부 충돌 등으로 최종 피해가 0으로 취소됨 — 연출·스킵 후에도 기록 유지
     public bool landedOnBellTile;        // 땅 칸에 정확히 착지했는지 — 부적 뽑기 화면 발동 조건 (방울 대체)
@@ -63,57 +69,95 @@ public class ScoreManager
         this.gm = gm;
     }
 
-    // 확정 결과(도~모) 투척 정산: 말 이동 → 도착 칸 공격점수 × 보스 상성 × 윷 배율 → 점수 확정 → 총점 합산
-    // 공식: 최종 데미지 = 도착 칸 기본 공격점수 × 상성 배율 × 윷 결과 배율 (완주·윷 기본점수 가산 없음)
+    // 확정 결과(도~모) 투척 정산: 말 이동(+이동 보정) → 잡기 판정 → 유효 상성 결정
+    //   (잡기 성공 시 강제 ×2) → 결과별 부적 → 부적 배율 곱셈 → 정수화 → 총점 합산
+    // 공식: 최종 데미지 = 착지 칸 공격력 × 윷 배율 × 결과별 부적 × 상성 × 잡기 × 부적 곱 (완주·윷 기본점수 가산 없음)
     // START·땅·쇠는 상성과 무관하게 공격점수 0 → 데미지 0. 모든 결과는 투척 1회를 정확히 소모한다
     public void SettleNormalThrow(ThrowSettlement settlement, YutResult selected)
     {
         // 1) 말 이동 → 도착 칸의 속성과 기본 공격점수 확정
-        int steps = BoardManager.MoveSteps(selected);
+        //    진격부·후퇴부의 세션 이동 보정을 합산 — 윷 결과·배율은 미변경.
+        //    보정 후 0칸이면 이동 없이 현재 칸으로 정산 (경로 비어 있어도 판정 정상 실행)
+        YutThrowSession session = gm.rollManager.session;
+        int moveDelta = session != null ? session.moveDelta : 0;
+        int steps = Mathf.Max(0, BoardManager.MoveSteps(selected) + moveDelta);
         int landing = gm.board.MovePiece(steps, settlement.movePath);
         BoardTile tile = gm.board.tiles[landing];
         settlement.landingTileIndex = landing;
-        settlement.tileScore = tile.AttackScore;
         settlement.landedOnBellTile = tile.attribute == TileAttribute.Earth;
 
+        // 방울 성장 — 최종 착지 칸·확정 결과 기준으로 발동한 이번 공격부터 반영 (사용자 확정).
+        // baseBasic/baseMult는 성장 전 값 — 연출이 '윷 기본 배율'·칸 기본점수 후 성장 단계를 별도 표시
         YutStatEntry stat = gm.rollManager.GetStat(selected);
-        settlement.affinityMult = gm.bossManager.AffinityMultiplier(tile.attribute);
-        settlement.baseBasic = tile.AttackScore;
+        settlement.baseBasic = tile.AttackScore + gm.bellManager.GetAttrAttackBonus(tile.attribute);
         settlement.baseMult = stat.mult;
-        settlement.finalBasic = settlement.baseBasic;
+        foreach (BellManager.GrowthTrigger growth in gm.bellManager.ApplyGrowth(selected, tile))
+        {
+            AddBellStep(settlement.steps, growth);
+        }
+        settlement.tileScore = tile.AttackScore + gm.bellManager.GetAttrAttackBonus(tile.attribute);
+        settlement.finalBasic = settlement.tileScore;
         settlement.finalMult = stat.mult;
 
         gm.currentThrows++;   // 확정 투척은 기본 투척 기회 정확히 1회 소모 (재투척은 별도 소모 없음)
 
-        // 2) 보스 상성 적용 기록 — 공격 속성 칸(불·물·풀) 착지 시에만. 소수 배율은 float 필드에 기록
-        if (tile.AttackScore > 0)
+        // 결과별 부적(일도부~모령부) — 재투척 평가 성공 + 최종 결과가 같은 종류일 때만
+        // 해당 윷 배율에 별도 ×배율 적용. 다른 종류이면 보너스 없음. 세션 한정, 영구 스탯 미변경
+        settlement.resultBonusMult = 1f;
+        string resultBonusName = null;
+        int resultBonusUseId = 0;
+        if (session != null &&
+            session.succeededResultBonus.TryGetValue(selected, out (float mult, string name, int useId) bonus))
         {
-            AddAffinityStep(settlement.steps, tile, stat.mult, settlement.affinityMult);
+            settlement.resultBonusMult = bonus.mult;
+            resultBonusName = bonus.name;
+            resultBonusUseId = bonus.useId;
         }
 
-        // 3) 보스 말 잡기 판정 — 최종 도착 칸 = 보스 말 현재 칸이면 성공 (통과만으론 미발동, 칸 인덱스 비교)
-        //    성공 시 최종 피해 ×2 — 칸 점수·윷 배율·상성을 모두 계산한 뒤 적용. 0점 칸은 잡아도 0
+        // 2) 보스 말 잡기 판정 — 최종 도착 칸 = 보스 말 현재 칸이면 성공 (통과만으론 미발동, 칸 인덱스 비교)
+        //    성공 시 잡기 배율(GameBalanceConfig.catchMultiplier) + 이번 정산의 유효 상성을
+        //    catchAffinityMult로 고정. 실패하면 실제 상성·잡기 ×1. 원래 약점·강점 배정 자체는 미변경
         settlement.caught = landing == gm.bossManager.bossPieceIndex;
-        // 추혼부 사용 시 잡기 배율 ×2 → ×4로 대체 (추가 곱셈이 아니라 배율 자체 교체 — 부적 루프에서 중복 곱하지 않는다)
-        float pursuitMult = 0f;
-        foreach (TalismanManager.ActiveTalismanEffect fx in gm.talismanManager.sessionEffects)
+        settlement.actualAffinityMult = gm.bossManager.AffinityMultiplier(tile.attribute);
+        float catchForcedAffinity = gm.balanceConfig != null ? gm.balanceConfig.catchAffinityMult : 2f;
+        // 청개구리방울 — 원래 강점 ×3·나머지 공격 속성 ×0.5를 잡기 강제 상성보다 우선 적용 (사용자 확정)
+        bool frogActive = gm.bellManager.HasBell(BellEffectKind.FrogAffinity);
+        settlement.affinityMult = frogActive
+            ? gm.bellManager.FrogAffinityMult(tile.attribute)
+            : (settlement.caught ? catchForcedAffinity : settlement.actualAffinityMult);
+        settlement.catchMult = settlement.caught
+            ? (gm.balanceConfig != null ? gm.balanceConfig.catchMultiplier : 3f)
+            : 1f;
+
+        // 3) 상성·잡기 단계 기록 — 잡기 여부와 유효 상성 결정 후 생성한다.
+        //    잡기로 상성이 강제 적용됐으면 '잡기 상성 ×2'처럼 이유를 표시. 공격 칸에서만 기록
+        if (settlement.tileScore > 0)
         {
-            if (fx.kind == TalismanEffectKind.CatchPursuit)
+            if (settlement.resultBonusMult != 1f)
             {
-                pursuitMult = fx.mult;
+                AddResultBonusStep(settlement.steps, resultBonusName, selected, stat.mult, settlement.resultBonusMult, resultBonusUseId);
             }
+            AddAffinityStep(settlement.steps, tile, stat.mult * settlement.resultBonusMult,
+                settlement.affinityMult, settlement.caught, frogActive);
         }
-        settlement.catchMult = !settlement.caught ? 1f : (pursuitMult > 0f ? pursuitMult : 2f);
         if (settlement.caught)
         {
-            AddCatchStep(settlement.steps, stat.mult * settlement.affinityMult, settlement.catchMult);
+            AddCatchStep(settlement.steps,
+                stat.mult * settlement.resultBonusMult * settlement.affinityMult, settlement.catchMult);
         }
 
         // 4) 부적 피해 효과 — 조건을 만족한 카드의 최종 피해 배율을 곱셈으로 중첩
         //    조건은 확정된 도착 속성·보스 약점 속성·잡기 여부로만 검사 — 통과 칸에는 미적용
-        //    추혼부는 위에서 잡기 배율 대체로 처리됐으므로 이 루프에서 제외
-        float runningMult = stat.mult * settlement.affinityMult * settlement.catchMult;
+        //    추혼부는 잡기 성공 조건의 추가 배율로 이 루프에서 1회 곱한다.
+        //    조건 불충족 카드도 안내 단계로 기록한다 — 표시된 카드를 순차 제거하는 재생 단계
+        float runningMult = stat.mult * settlement.resultBonusMult * settlement.affinityMult * settlement.catchMult;
+        var steppedUseIds = new HashSet<int>();
+        if (resultBonusUseId > 0)
+        {
+            steppedUseIds.Add(resultBonusUseId);
+        }
         bool greedCancelled = false;
+        TalismanManager.ActiveTalismanEffect greedFx = null;
         foreach (TalismanManager.ActiveTalismanEffect fx in gm.talismanManager.sessionEffects)
         {
             bool applies = false;
@@ -125,13 +169,15 @@ public class ScoreManager
                     applies = tile.attribute == fx.attribute;
                     break;
                 case TalismanEffectKind.CatchPursuit:
-                    continue;   // 잡기 배율 대체로 이미 처리 — 여기서 다시 곱하지 않는다
+                    applies = settlement.caught;   // 잡기 성공 시에만 최종 피해 추가 배율로 적용
+                    break;
                 case TalismanEffectKind.WeaknessStrike:
                     applies = tile.attribute == gm.bossManager.EnsureAffinity(gm.selectedBossIndex).weak;
                     break;
                 case TalismanEffectKind.GreedStrike:
                     applies = true;
                     greedCancelled = settlement.caught;   // 충돌(=잡기, 미확정 임시 해석) 시 공격 0 — 다른 증가 효과보다 우선
+                    greedFx = fx;
                     break;
                 case TalismanEffectKind.AllOrNothing:
                     applies = true;
@@ -140,27 +186,86 @@ public class ScoreManager
             if (!applies)
             {
                 Debug.Log($"부적 {fx.displayName} — 조건 불충족으로 미적용");
+                AddTalismanFailStep(settlement.steps, fx, runningMult);
+                steppedUseIds.Add(fx.useId);
                 continue;
             }
             float before = runningMult;
             runningMult *= fx.mult;
             settlement.talismanMult *= fx.mult;
-            AddTalismanStep(settlement.steps, fx, before, runningMult);
+            // 탐욕부가 잡기 취소될 예정이면 카드 표시 제거는 '피해 0' 취소 단계가 담당한다
+            int stepUseId = (fx.kind == TalismanEffectKind.GreedStrike && greedCancelled) ? 0 : fx.useId;
+            AddTalismanStep(settlement.steps, fx, before, runningMult, stepUseId);
+            // 탐욕부는 별도 연출 타이밍 — 이유 표시 후 잠시 뒤 갱신, 갱신 후 잠시 유지하고 카드 제거.
+            // 취소된 탐욕부(피해 0)는 배율 상승 연출을 하지 않으므로 일반 타이밍 유지
+            if (fx.kind == TalismanEffectKind.GreedStrike && !greedCancelled)
+            {
+                ScoreEffectStep last = settlement.steps[settlement.steps.Count - 1];
+                last.preApplyDelay = gm.presentationConfig != null ? gm.presentationConfig.greedStepPreDelay : 0.5f;
+                last.postApplyDelay = gm.presentationConfig != null ? gm.presentationConfig.greedStepPostDelay : 0.5f;
+            }
+            steppedUseIds.Add(fx.useId);
         }
         settlement.talismanCancelled = greedCancelled;
         if (greedCancelled)
         {
-            AddTalismanCancelStep(settlement.steps, runningMult);
+            AddTalismanCancelStep(settlement.steps, runningMult, greedFx != null ? greedFx.useId : 0);
+            if (greedFx != null)
+            {
+                steppedUseIds.Add(greedFx.useId);
+            }
+        }
+
+        // 재복방울 — 보스 원래 약점 속성 칸으로 공격했으면 판정당 1냥 (정산당 1회 — 연출·스킵으로 중복 지급 없음)
+        // 약점 기준 = 원래 상성 배정 (청개구리 변경 상성 기준 여부는 미확정 — 원래 약점 기준 임시 적용)
+        if (settlement.tileScore > 0 &&
+            gm.bellManager.HasBell(BellEffectKind.GoldOnWeakness) &&
+            tile.attribute == gm.bossManager.EnsureAffinity(gm.selectedBossIndex).weak)
+        {
+            gm.economyManager.AddMoney(Mathf.Max(1, Mathf.RoundToInt(
+                gm.bellManager.ownedBells.Find(b => b.effect == BellEffectKind.GoldOnWeakness)?.growthAmount ?? 1f)));
+            settlement.steps.Add(new ScoreEffectStep
+            {
+                source = EffectSourceType.Bell,
+                sourceId = "bell_jaebok",
+                displayName = "재복방울 — 약점 공격 수입",
+                reasonText = "재복방울 — 약점 공격 +1냥",
+                target = EffectTarget.Multiplier,
+                op = EffectOp.Multiply,
+                opValueF = 1f,
+                beforeValueF = runningMult,
+                afterValueF = runningMult,   // 배율 변화 없음 — 수입 안내 단계
+                order = settlement.steps.Count,
+            });
+        }
+
+        // 비피해·미발동 카드의 정산 안내 단계 — 배율 변경 없이 사용 내역을 재생하고 카드 표시를 제거한다
+        // (즉시 효과는 사용 시점에 이미 실행됨 — 여기서 다시 적용하지 않는다)
+        // 진격부·후퇴부는 이동 연출과 함께 표시하므로 여기서는 제외
+        foreach (UsedTalismanRecord rec in gm.talismanManager.usedThisThrow)
+        {
+            if (rec.effect == TalismanEffectKind.MoveDelta || steppedUseIds.Contains(rec.useId))
+            {
+                continue;
+            }
+            string note = rec.effect == TalismanEffectKind.ResultBonus
+                ? $"{rec.talismanName} — 발동 조건 불충족"
+                : rec.resultNote;
+            if (string.IsNullOrEmpty(note))
+            {
+                note = $"{rec.talismanName} — 적용됨";
+            }
+            AddInfoStep(settlement.steps, rec.useId, note, runningMult);
         }
 
         // 5) 이번 투척 점수 확정 + 보스전 총점 1회 합산 — 곱셈(상성·잡기·부적 소수 포함)을 모두 마친 뒤 정수화
         //    표시용 throwScore 필드는 여기서 갱신하지 않는다 — '투척 점수 표시' 단계에서만 보인다
         settlement.throwScore = settlement.talismanCancelled
             ? 0
-            : Mathf.RoundToInt(settlement.finalBasic * settlement.affinityMult * settlement.finalMult * settlement.catchMult * settlement.talismanMult);
+            : Mathf.RoundToInt(settlement.finalBasic * settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult * settlement.catchMult * settlement.talismanMult);
         gm.totalScore += settlement.throwScore;
 
-        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x 상성{settlement.affinityMult} x {settlement.finalMult}{(settlement.caught ? $" x 잡기{settlement.catchMult}" : "")}{(settlement.talismanMult != 1f ? $" x 부적{settlement.talismanMult}" : "")}{(settlement.talismanCancelled ? " → 취소" : "")} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Total: {gm.totalScore}");
+        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x 상성{settlement.affinityMult} x {settlement.finalMult}{(settlement.resultBonusMult != 1f ? $" x 결과부적{settlement.resultBonusMult}" : "")}{(settlement.caught ? $" x 잡기{settlement.catchMult}" : "")}{(settlement.talismanMult != 1f ? $" x 부적{settlement.talismanMult}" : "")}{(settlement.talismanCancelled ? " → 취소" : "")} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Total: {gm.totalScore}");
     }
 
     // 저주 계열 결과 처리: 백도와 낙은 별개 결과이며 둘 다 투척 1회 소모
@@ -189,24 +294,79 @@ public class ScoreManager
     }
 
     // 보스 상성 단계 기록 — 배율 적용 과정을 정산 기록에 남겨 연출·디버깅에 사용한다
-    private void AddAffinityStep(List<ScoreEffectStep> steps, BoardTile tile, int yutMult, float affinityMult)
+    private void AddAffinityStep(List<ScoreEffectStep> steps, BoardTile tile, float yutMult,
+        float affinityMult, bool forcedByCatch, bool frogActive)
     {
         string attrName = BoardManager.AttributeName(tile.attribute);
         string role = gm.bossManager.AffinityRoleName(tile.attribute);
         steps.Add(new ScoreEffectStep
         {
-            source = EffectSourceType.Boss,
-            sourceId = $"boss{gm.selectedBossIndex}_affinity",
-            displayName = $"보스 상성 — {attrName} {role}",
+            source = frogActive ? EffectSourceType.Bell : EffectSourceType.Boss,
+            sourceId = frogActive ? "bell_frog" : $"boss{gm.selectedBossIndex}_affinity",
+            // 잡기로 상성이 강제 적용된 경우 이유를 표시 — 원래 상성 배정과 구분
+            displayName = frogActive ? $"청개구리방울 — {attrName} 상성 ×{affinityMult}"
+                : forcedByCatch ? $"잡기 상성 ×{affinityMult}" : $"보스 상성 — {attrName} {role}",
+            // 이유 표시: 강제 시 '잡기 상성 ×2', 청개구리 시 변경 상성, 실제 상성은 '약점/강점/일반 상성 ×N'
+            reasonText = frogActive
+                ? $"청개구리방울 — {(tile.attribute == gm.bossManager.EnsureAffinity(gm.selectedBossIndex).strong ? "강점" : "")} 상성 ×{affinityMult}"
+                : forcedByCatch ? $"잡기 상성 ×{affinityMult}"
+                : (role == "약점" || role == "강점" ? $"{role} 상성 ×{affinityMult}" : $"일반 상성 ×{affinityMult}"),
             target = EffectTarget.Multiplier,
             op = EffectOp.Multiply,
             opValue = 0,                    // 소수 배율은 opValueF에 기록
             opValueF = affinityMult,
-            beforeValue = yutMult,
-            beforeValueF = yutMult,
+            beforeValue = 0,
+            beforeValueF = yutMult,                // 윷 배율 × 결과별 부적까지 반영된 멀티플
             afterValue = 0,
             afterValueF = yutMult * affinityMult,   // 상성 반영 실효 멀티플 (예: 3×0.5=1.5)
             delta = 0,
+            order = steps.Count,
+        });
+    }
+
+    // 결과별 부적(일도부~모령부) 단계 기록 — 성공 상태 + 최종 결과 일치 시에만 호출
+    private void AddResultBonusStep(List<ScoreEffectStep> steps, string cardName, YutResult result,
+        float before, float bonusMult, int useId)
+    {
+        steps.Add(new ScoreEffectStep
+        {
+            source = EffectSourceType.Talisman,
+            sourceId = $"talisman_result_{result}",
+            displayName = $"{cardName} — {YutGameManager.ToKorean(result)} ×{bonusMult}",
+            reasonText = $"{cardName} ×{bonusMult}",
+            target = EffectTarget.Multiplier,
+            op = EffectOp.Multiply,
+            opValue = 0,
+            opValueF = bonusMult,
+            beforeValue = 0,
+            beforeValueF = before,                 // 윷 배율 (결과별 부적 적용 전)
+            afterValue = 0,
+            afterValueF = before * bonusMult,      // 보너스 반영 멀티플
+            delta = 0,
+            order = steps.Count,
+            useId = useId,
+        });
+    }
+
+    // 방울 성장 단계 기록 — 윷 배율 성장(Multiplier)·속성 공격력 성장(Basic)을 정산 기록에 남긴다.
+    // 성장 처리는 BellManager.ApplyGrowth가 정산 계산 전에 수행 — 이 단계는 표시 재생 전용
+    private void AddBellStep(List<ScoreEffectStep> steps, BellManager.GrowthTrigger growth)
+    {
+        steps.Add(new ScoreEffectStep
+        {
+            source = EffectSourceType.Bell,
+            sourceId = $"bell_{growth.bellName}",
+            displayName = growth.note,
+            reasonText = growth.note,
+            target = growth.isBasic ? EffectTarget.Basic : EffectTarget.Multiplier,
+            op = EffectOp.Add,
+            opValue = growth.isBasic ? Mathf.RoundToInt(growth.after - growth.before) : 0,
+            opValueF = growth.isBasic ? 0f : growth.after - growth.before,
+            beforeValue = growth.isBasic ? Mathf.RoundToInt(growth.before) : 0,
+            afterValue = growth.isBasic ? Mathf.RoundToInt(growth.after) : 0,
+            beforeValueF = growth.isBasic ? 0f : growth.before,
+            afterValueF = growth.isBasic ? 0f : growth.after,
+            delta = growth.isBasic ? Mathf.RoundToInt(growth.after - growth.before) : 0,
             order = steps.Count,
         });
     }
@@ -219,6 +379,7 @@ public class ScoreManager
             source = EffectSourceType.Boss,
             sourceId = $"boss{gm.selectedBossIndex}_catch",
             displayName = "보스 말 잡기",
+            reasonText = $"보스말 잡기 ×{catchMult}",
             target = EffectTarget.Multiplier,
             op = EffectOp.Multiply,
             opValue = (int)catchMult,
@@ -226,7 +387,7 @@ public class ScoreManager
             beforeValue = 0,
             beforeValueF = effectiveMultBefore,                  // 윷 배율 × 상성까지 반영된 멀티플
             afterValue = 0,
-            afterValueF = effectiveMultBefore * catchMult,       // 잡기 ×2 반영 최종 실효 멀티플
+            afterValueF = effectiveMultBefore * catchMult,       // 잡기 배율 반영 최종 실효 멀티플
             delta = 0,
             order = steps.Count,
         });
@@ -234,13 +395,14 @@ public class ScoreManager
 
     // 부적 피해 효과 단계 기록 — 조건 통과한 카드별로 적용 배율과 전후 실효 멀티플을 남긴다
     private void AddTalismanStep(List<ScoreEffectStep> steps, TalismanManager.ActiveTalismanEffect fx,
-        float before, float after)
+        float before, float after, int useId)
     {
         steps.Add(new ScoreEffectStep
         {
             source = EffectSourceType.Talisman,
             sourceId = fx.sourceId,
             displayName = $"{fx.displayName} ×{fx.mult}",
+            reasonText = $"{fx.displayName} ×{fx.mult}",
             target = EffectTarget.Multiplier,
             op = EffectOp.Multiply,
             opValue = 0,
@@ -251,17 +413,66 @@ public class ScoreManager
             afterValueF = after,
             delta = 0,
             order = steps.Count,
+            useId = useId,
+        });
+    }
+
+    // 부적 조건 불충족 단계 기록 — 배율 변경 없이 안내만 재생하고 해당 카드 표시를 제거한다
+    private void AddTalismanFailStep(List<ScoreEffectStep> steps, TalismanManager.ActiveTalismanEffect fx,
+        float runningMult)
+    {
+        steps.Add(new ScoreEffectStep
+        {
+            source = EffectSourceType.Talisman,
+            sourceId = fx.sourceId,
+            displayName = $"{fx.displayName} — 조건 불충족",
+            reasonText = $"{fx.displayName} — 조건 불충족",
+            target = EffectTarget.Multiplier,
+            op = EffectOp.Multiply,
+            opValue = 0,
+            opValueF = 1f,                    // ×1 — Mult 표시 유지
+            beforeValue = 0,
+            beforeValueF = runningMult,
+            afterValue = 0,
+            afterValueF = runningMult,        // 전후 동일 — 배율 변화 없음
+            delta = 0,
+            order = steps.Count,
+            useId = fx.useId,
+        });
+    }
+
+    // 비피해·미발동 카드의 사용 내역 안내 단계 — 배율 변경 없이 표시만 재생한다
+    private void AddInfoStep(List<ScoreEffectStep> steps, int useId, string note, float runningMult)
+    {
+        steps.Add(new ScoreEffectStep
+        {
+            source = EffectSourceType.Talisman,
+            sourceId = $"used_{useId}",
+            displayName = note,
+            reasonText = note,
+            target = EffectTarget.Multiplier,
+            op = EffectOp.Multiply,
+            opValue = 0,
+            opValueF = 1f,
+            beforeValue = 0,
+            beforeValueF = runningMult,
+            afterValue = 0,
+            afterValueF = runningMult,
+            delta = 0,
+            order = steps.Count,
+            useId = useId,
         });
     }
 
     // 탐욕부 충돌 — 공격 0 단계 기록 (우선순위: 공격 0은 모든 증가 효과를 덮어쓴다)
-    private void AddTalismanCancelStep(List<ScoreEffectStep> steps, float runningMult)
+    private void AddTalismanCancelStep(List<ScoreEffectStep> steps, float runningMult, int useId)
     {
         steps.Add(new ScoreEffectStep
         {
             source = EffectSourceType.Talisman,
             sourceId = "talisman_greed_cancel",
             displayName = "탐욕부 충돌 — 공격 0",
+            reasonText = "탐욕부 — 잡기 성공으로 피해 0",
             target = EffectTarget.Multiplier,
             op = EffectOp.Multiply,
             opValue = 0,
@@ -272,6 +483,7 @@ public class ScoreManager
             afterValueF = 0f,
             delta = 0,
             order = steps.Count,
+            useId = useId,
         });
     }
 

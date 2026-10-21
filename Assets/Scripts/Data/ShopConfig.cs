@@ -1,0 +1,14 @@
+// ──────────────────────────────────────────────
+// ShopConfig.cs — 상점·경제 설정 에셋
+// 시작 자금·장착 한도·상점 상품 수의 단일 기준.
+// 에셋 생성: Assets 우클릭 → Create → RYY → Shop Config
+// ──────────────────────────────────────────────
+using UnityEngine;
+
+[CreateAssetMenu(fileName = "ShopConfig", menuName = "RYY/Shop Config")]
+public class ShopConfig : ScriptableObject
+{
+    public int startingMoney = 50;      // 새 런 시작 자금(냥) — 런당 1회 지급, 재진입·보스 전환으로 재지급 없음
+    public int maxBells = 4;            // 방울 최대 보유·장착 수
+    public int shopOfferCount = 4;      // 상점 진입 시 무작위 상품 후보 수 (데이터 구성 미확정 — 설정값)
+}

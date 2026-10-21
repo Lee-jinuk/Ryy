@@ -22,6 +22,8 @@ public class YutGameManager : MonoBehaviour
     public BossDatabase bossDatabase;              // 보스 순서·이름·HP·능력 — Assets/ScriptableObjects/BossDatabase
     public GameBalanceConfig balanceConfig;        // 투척 횟수·윷 배율·보스 이동 범위 — Assets/ScriptableObjects/GameBalanceConfig
     public PresentationConfig presentationConfig;  // 연출 딜레이 — Assets/ScriptableObjects/PresentationConfig
+    public BellDatabase bellDatabase;              // 방울 정의 12종 — Assets/ScriptableObjects/BellDatabase
+    public ShopConfig shopConfig;                  // 시작 자금·장착 한도·상점 상품 수 — Assets/ScriptableObjects/ShopConfig
 
     // 설정 에셋이 모두 연결됐는지 — Awake에서 경고, 게임 진입 경로에서 차단
     internal bool ConfigReady =>
@@ -73,25 +75,21 @@ public class YutGameManager : MonoBehaviour
     public GameObject[] boardTiles = new GameObject[30];  // 칸 오브젝트 30개 — START → 이동 방향 29칸 순서. 자식의 Text가 속성명 표시, 'BellIcon' 이름의 자식은 땅(방울) 칸 표시
     public RectTransform playerPiece;                // 플레이어 말 — 도착 칸 위치로 이동
     public RectTransform bossPiece;                  // 보스 말 — 플레이어와 별개, 최초 투척 성공 시마다 이동 (미연결 시 경고 후 표시만 생략)
+    public RectTransform bossMovePreview;            // 보스 다음 이동 예고 표식 — 준비 단계에 예정 도착 칸에 표시, 최초 투척 접수 시 숨김 (미연결 시 표시만 생략)
     public Text lapCountText;                        // 완주 횟수 (숫자만 출력, 미연결 시 무시)
     public Text landingTileText;                     // 착지 칸 정보 — "불 - 50점" 형식 (상성·윷 배율 적용 전 칸 기본점수, 미연결 시 무시)
     // 말 이동 1칸당 딜레이(초) — 기준은 PresentationConfig 에셋
     public float moveStepDelay => presentationConfig != null ? presentationConfig.moveStepDelay : 0.15f;
 
-    [Header("Bell Event — 방울 뽑기 (땅 칸 부적 선택으로 대체됨 — 필드는 호환용 유지)")]
-    public List<BellData> bellPool = new List<BellData>  // 방울 후보 풀 (테스트용 더미 — 실제 효과 미구현)
-    {
-        new BellData { bellName = "테스트 방울 1", description = "효과 미구현 (테스트용)" },
-        new BellData { bellName = "테스트 방울 2", description = "효과 미구현 (테스트용)" },
-        new BellData { bellName = "테스트 방울 3", description = "효과 미구현 (테스트용)" },
-        new BellData { bellName = "테스트 방울 4", description = "효과 미구현 (테스트용)" },
-        new BellData { bellName = "테스트 방울 5", description = "효과 미구현 (테스트용)" },
-        new BellData { bellName = "테스트 방울 6", description = "효과 미구현 (테스트용)" },
-    };
-    public GameObject bellChoicePanel;                // 방울 3개 선택창 — 사용자 생성
-    public Text[] bellOptionNameTexts = new Text[3];  // 후보 3개 이름 표시
-    public Text[] bellOptionDescTexts = new Text[3];  // 후보 3개 설명 표시
-    public List<BellData> ownedBells = new List<BellData>();  // 현재 보스전에서 획득한 임시 방울 (다음 보스전 시작·런 종료 시 소멸)
+    [Header("Bell / Shop UI — 방울 장착·상점")]
+    public Text moneyText;                                     // 보유 냥 표시 (전투 화면, 미연결 시 무시)
+    public Transform bellContent;                              // 장착 방울 목록 부모 — BellItem Prefab이 자식으로 생성 (미연결 시 표시 생략)
+    public GameObject bellItemPrefab;                          // 방울 항목 Prefab — 자식 Text: 1번째=이름, 2번째=설명, 3번째=남은 발동 횟수(선택)
+    public GameObject shopPanel;                               // 상점 패널 — 보스 소개 화면에서 진입 (ClearPanel 자식으로 두지 말 것)
+    public Text shopMoneyText;                                 // 상점 내 보유 냥 표시 (미연결 시 무시)
+    public Transform shopOfferContent;                         // 상점 상품 목록 부모 — ShopItem Prefab 생성 (미연결 시 생략)
+    public Transform shopBellContent;                          // 상점 내 보유 방울 목록 부모 — ShopItem Prefab 생성 (미연결 시 생략)
+    public GameObject shopItemPrefab;                          // 상점 항목 Prefab — 자식 Text: 이름/설명/가격 + Button=거래 (코드로 onClick 연결)
 
     // 부적 카드 정의 — 기준은 TalismanDatabase 에셋(talismanDatabase.cards).
     // Scene에 목록을 저장하지 않는다 — 에셋 하나만 편집하면 모든 씬에 동일 적용.
@@ -109,6 +107,10 @@ public class YutGameManager : MonoBehaviour
     public Text[] talismanHandDescTexts = new Text[10];          // 손패 카드 설명 표시 슬롯 — 이름과 같은 순서, 빈 슬롯은 빈칸 (미연결 칸은 무시)
     public Button[] talismanUseButtons = new Button[10];         // 손패 카드 사용 버튼 — 사용 가능 구간에서만 interactable
     public Text talismanNoticeText;                              // 부적 안내 — "손패가 가득 차 부적 N장이 소멸했습니다." (미연결 시 무시)
+    public Text multiplierReasonText;                            // 배율 변화 이유 표시 — Mult 위에 사용자 배치 ("추혼부 ×4" 등, 미연결 시 무시)
+    public GameObject usedTalismanPanel;                         // 사용 부적 패널 — 이번 투척 사용 카드 표시 영역 (미연결 시 표시 생략)
+    public Transform usedTalismanContent;                        // 사용 부적 목록 부모 — 항목 Prefab이 자식으로 생성 (미연결 시 표시 생략)
+    public GameObject usedTalismanItemPrefab;                    // 사용 부적 항목 Prefab — 자식 Text 첫 번째=이름, 두 번째=설명(선택)
 
     [Header("Throw Session UI — 윷 4개 재투척")]
     public Text[] stickFaceTexts = new Text[4];      // 각 윷의 앞/뒤 표시 (재투척 여부는 표시하지 않음 — 제한은 rerolled[]가 판별)
@@ -119,10 +121,6 @@ public class YutGameManager : MonoBehaviour
 
     [Header("Buttons")]
     public GameObject nextBossButton;   // 클리어 패널의 '다음 관문' 버튼 — 마지막 보스 클리어 시 자동 숨김 (미연결 시 무시)
-
-    [Header("Slots")]
-    public GameObject[] bellSlots = new GameObject[3];      // 방울 슬롯 3칸 (방울 선택 결과 표시용)
-    public GameObject[] talismanSlots = new GameObject[4];  // 부적 슬롯 4칸
 
     // 보스 목록 — 기준은 BossDatabase 에셋(bossDatabase.bosses). Scene에 목록을 저장하지 않는다
     public List<BossData> bosses => bossDatabase != null ? bossDatabase.bosses : null;
@@ -182,7 +180,9 @@ public class YutGameManager : MonoBehaviour
     internal BoardManager boardManager;      // 말판·말 이동
     internal ScoreManager scoreManager;      // 점수·저주 정산
     internal BossManager bossManager;        // 보스·관문
-    internal BellManager bellManager;        // 방울 이벤트 (땅 칸 부적 대체로 현재 미발동)
+    internal BellManager bellManager;        // 방울 장착·효과 (런 단위 장착 상태·성장·지속 효과)
+    internal EconomyManager economyManager;  // 냥(화폐) — 시작 자금·구매·판매·수입
+    internal ShopManager shopManager;        // 방울 상점 — 보스 소개 화면의 구매·판매
     internal TalismanManager talismanManager; // 부적 카드 — 뽑기 덱·손패·선택·사용·세션 효과
     internal GameUIManager uiManager;        // UI 표시·연출
 
@@ -238,6 +238,10 @@ public class YutGameManager : MonoBehaviour
         {
             return;
         }
+        if (shopManager.isOpen)
+        {
+            return;   // 상점 이용 중 — 상점을 닫아야 보스전에 진입할 수 있다
+        }
         if (!ConfigReady)
         {
             Debug.LogError("설정 데이터 에셋 미연결 — 보스전을 시작할 수 없습니다.", this);
@@ -254,7 +258,14 @@ public class YutGameManager : MonoBehaviour
     }
 
     // 보스 소개 화면의 '건너뛰기' 버튼 — 전투 없이 다음 보스 소개로 이동 (판별·제한은 BossManager)
-    public void SkipBoss() => bossManager.SkipBoss();
+    public void SkipBoss()
+    {
+        if (shopManager.isOpen)
+        {
+            return;   // 상점 이용 중 — 상점을 닫아야 건너뛸 수 있다
+        }
+        bossManager.SkipBoss();
+    }
 
     // 실제 보스전 시작 (소개 화면 '다음' 버튼에서 호출)
     private void StartBossBattle()
@@ -281,16 +292,25 @@ public class YutGameManager : MonoBehaviour
         ResetRunState();
         GameUIManager.SetPanel(clearPanel, false);
         GameUIManager.SetPanel(gameOverPanel, false);
-        GameUIManager.SetPanel(bellChoicePanel, false);
         GameUIManager.SetPanel(talismanChoicePanel, false);
         GameUIManager.SetPanel(bossSelectPanel, false);
+        GameUIManager.SetPanel(shopPanel, false);
         GameUIManager.SetPanel(gamePanel, false);
         GameUIManager.SetPanel(startPanel, true);
         currentState = GameState.Start;
         uiManager.UpdateUI();
     }
 
-    // '윷 던지기' 버튼 — 윷 4개 최초 투척으로 새 세션 시작 (이동·득점은 '결과 확정'에서만 발생)
+    // 차례 준비 — 새 세션 생성(미투척 상태) + 이전 투척의 '이번 투척' 부적 효과 해제.
+    // 보스전 시작·정산 종료 후 다음 차례에서 한 번만 호출된다. 준비 단계에서는 부적 사용만 가능하다
+    private void PrepareTurn()
+    {
+        rollManager.PrepareSession();
+        talismanManager.ClearSessionEffects();
+        bossManager.PrepareBossMove();   // 다음 보스 이동 계획 — 거리를 1회 추첨해 예고 표시, 실제 이동은 최초 투척 시
+    }
+
+    // '윷 던지기' 버튼 — 준비된 세션의 윷 4개 최초 투척 (이동·득점은 '결과 확정'에서만 발생)
     public void RollYut()
     {
         if (currentState != GameState.Playing)
@@ -298,20 +318,23 @@ public class YutGameManager : MonoBehaviour
             Debug.Log("윷을 던질 수 있는 상태가 아닙니다. (GameState.Playing 아님)");
             return;
         }
-        if (isPresenting || bellManager.isChoosingBell || talismanManager.isChoosing)
+        if (isPresenting || talismanManager.isChoosing)
         {
-            return;   // 정산 연출 재생 중 또는 선택창(방울·부적) 표시 중 연타 방지 — 중복 투척/득점 불가
+            return;   // 정산 연출 재생 중 또는 부적 선택창 표시 중 연타 방지 — 중복 투척/득점 불가
         }
         if (currentThrows >= maxThrows)
         {
             return;
         }
-        if (rollManager.session != null && rollManager.session.Active)
+        if (rollManager.session == null)
         {
-            return;   // 진행 중 세션 덮어쓰기 차단 — 재투척 선택 또는 '결과 확정' 필요
+            PrepareTurn();   // 안전망 — 정상 흐름에서는 차례 준비에 이미 생성돼 있다
         }
-        rollManager.StartSession();
-        talismanManager.ClearSessionEffects();   // 이전 투척의 '이번 투척' 부적 효과 해제 — 새 세션으로 이월 없음
+        if (rollManager.session.rolled)
+        {
+            return;   // 이미 던진 세션 — 재투척 선택 또는 '결과 확정' 필요
+        }
+        rollManager.session.InitialRoll();   // 면만 던진다 — 준비 단계 부적 효과는 세션에 보존
         bossManager.MoveBossPiece();   // 최초 투척 성공 시 보스 말 1회 이동 (재투척·확정에서는 이동 없음)
         hasRolled = false;   // 이전 확정 결과 표시 지우기 — 새 세션은 확정 전까지 결과 미표시
         uiManager.UpdateUI();
@@ -320,7 +343,7 @@ public class YutGameManager : MonoBehaviour
     // 윷별 재투척 버튼(int): index 0~3 — 선택한 윷 하나만 다시 던진다
     public void RerollStick(int index)
     {
-        if (currentState != GameState.Playing || isPresenting || bellManager.isChoosingBell || talismanManager.isChoosing)
+        if (currentState != GameState.Playing || isPresenting || talismanManager.isChoosing)
         {
             return;
         }
@@ -337,14 +360,14 @@ public class YutGameManager : MonoBehaviour
     // '결과 확정' 버튼 — 확정된 결과로 말 이동·공격 정산 시작 (기본 투척 1회 소모는 여기서만)
     public void ConfirmThrow()
     {
-        if (currentState != GameState.Playing || isPresenting || bellManager.isChoosingBell || talismanManager.isChoosing)
+        if (currentState != GameState.Playing || isPresenting || talismanManager.isChoosing)
         {
             return;
         }
         YutThrowSession session = rollManager.session;
-        if (session == null || !session.Active)
+        if (session == null || !session.RollInProgress)
         {
-            return;   // 확정할 세션 없음 또는 이미 확정 — 연타 차단
+            return;   // 확정할 세션 없음·아직 미투척·이미 확정 — 연타 차단
         }
         session.Confirm();
 
@@ -370,20 +393,11 @@ public class YutGameManager : MonoBehaviour
         FinishPresentation(currentSettlement);
     }
 
-    // 방울 후보 선택 버튼(int): index 0~2 — 선택만 하고 확정은 ConfirmBellChoice()
-    public void SelectBellOption(int index) => bellManager.SelectBellOption(index);
-    public void SelectBellOption1() => bellManager.SelectBellOption(0);
-    public void SelectBellOption2() => bellManager.SelectBellOption(1);
-    public void SelectBellOption3() => bellManager.SelectBellOption(2);
+    // '상점' 버튼 — 보스 소개 화면에서 상점 진입 (첫 보스전 이전 Start 상태에서는 불가)
+    public void OpenShop() => shopManager.OpenShop();
 
-    // 방울 선택 확정 버튼 — 선택한 방울을 보스전 임시 보유에 추가하고 창 닫기
-    public void ConfirmBellChoice() => bellManager.ConfirmBellChoice();
-
-    // 원클릭 버전 — 옵션 버튼에 바로 연결하면 선택과 확정을 한 번에 처리
-    public void SelectBellAndConfirm(int index) => bellManager.SelectBellAndConfirm(index);
-    public void SelectBellAndConfirm1() => bellManager.SelectBellAndConfirm(0);
-    public void SelectBellAndConfirm2() => bellManager.SelectBellAndConfirm(1);
-    public void SelectBellAndConfirm3() => bellManager.SelectBellAndConfirm(2);
+    // '상점 닫기' 버튼 — 보스 소개 화면으로 복귀
+    public void CloseShop() => shopManager.CloseShop();
 
     // 부적 후보 선택 토글(int): index 0~4 — 시작 5택3·땅 3택1 공용. 확정은 ConfirmTalismanChoice()
     public void SelectTalismanOption(int index) => talismanManager.SelectCandidate(index);
@@ -417,7 +431,7 @@ public class YutGameManager : MonoBehaviour
     public void ResetProbabilities() => rollManager.ResetProbabilities();
 
     // 주술 등 영구 강화용 API — 다음 투척부터 적용. baseYutStats는 오염되지 않음
-    public void UpgradeYutStat(YutResult result, int newBasicBonus, int newMult) =>
+    public void UpgradeYutStat(YutResult result, int newBasicBonus, float newMult) =>
         rollManager.UpgradeYutStat(result, newBasicBonus, newMult);
 
     // ============ 내부 로직 (게임 흐름 조정) ============
@@ -430,6 +444,8 @@ public class YutGameManager : MonoBehaviour
         scoreManager = new ScoreManager(this);
         bossManager = new BossManager(this);
         bellManager = new BellManager(this);
+        economyManager = new EconomyManager(this);
+        shopManager = new ShopManager(this);
         talismanManager = new TalismanManager(this);
         uiManager = new GameUIManager(this);
 
@@ -442,6 +458,17 @@ public class YutGameManager : MonoBehaviour
             goalScore = bossManager.CurrentBoss.maxHP;   // 선택 화면 미리보기
         }
         WarnIfPanelNested();
+        if (bossMovePreview != null)
+        {
+            // 예고 표식은 버튼 입력을 가리지 않게 Raycast를 끄고 시작 시 숨겨 둔다
+            var previewImage = bossMovePreview.GetComponent<UnityEngine.UI.Image>();
+            if (previewImage != null)
+            {
+                previewImage.raycastTarget = false;
+            }
+            bossMovePreview.gameObject.SetActive(false);
+        }
+        economyManager.ResetForNewRun();   // 첫 런 시작 자금 지급 (이후 지급은 RestartRun→ResetRunState에서만)
         GameUIManager.SetPanel(startPanel, true);
         GameUIManager.SetPanel(gamePanel, false);
         GameUIManager.SetPanel(clearPanel, false);
@@ -480,6 +507,14 @@ public class YutGameManager : MonoBehaviour
         {
             Debug.LogWarning("GameBalanceConfig의 보스 이동 단계 배열 길이가 맞지 않습니다 — 이동 단계를 찾지 못하면 기본 1단계로 동작합니다.", balanceConfig);
         }
+        if (bellDatabase == null)
+        {
+            Debug.LogWarning("BellDatabase 에셋 미연결 — 상점에 판매할 방울이 없습니다.", this);
+        }
+        if (shopConfig == null)
+        {
+            Debug.LogWarning("ShopConfig 에셋 미연결 — 시작 자금 50·장착 4·상품 4 기본값으로 동작합니다.", this);
+        }
     }
 
     // 보스전 시작: 선택 보스 적용 + 전투 상태 초기화 + 보스 특수능력 적용
@@ -496,14 +531,12 @@ public class YutGameManager : MonoBehaviour
         throwScore = 0;
         hasRolled = false;
         currentSettlement = null;
-        bellManager.ResetForNewRun();
-        talismanManager.ClearSessionEffects();          // 이전 보스전의 '이번 투척' 효과 해제 — 손패·덱은 런 단위 유지
         bossManager.pendingMoveSeal = false;            // 미소비 봉쇄부는 보스전을 넘기지 않는다 (미확정 임시 규칙)
-        rollManager.session = null;                     // 이전 보스전 투척 세션 정리
         landingTileInfo = "";
-        bossManager.ResetBossPiece();                   // 모든 보스전 시작 시 보스 말을 START로 초기화 (첫 던지기 전까지 대기)
+        bossManager.ResetBossPiece();                   // 모든 보스전 시작 시 보스 말을 START로 초기화 + 이전 이동 계획 폐기
         boardManager.SetupBoard();                      // 배치는 런당 1회 생성·유지, 말 위치·완주만 초기화
         boardManager.MovePieceVisual(board.pieceIndex); // 말을 시작점(START) 위치에 배치
+        PrepareTurn();                                  // 이전 투척 세션·부적 효과 정리 + 첫 차례 준비 — 보스 말 초기화 후 이동 계획을 세운다
         rollManager.BuildWeights();                     // 기본 확률로 재구축 → 보스 효과 중복 누적 방지
         // 보스 낙 확률 능력은 신규 윷 4개 면 조합 방식에 적용 불가 — 적용 호출을 하지 않는다 (미확정 사항 보고)
         if (boss != null && boss.nakBonusPercent > 0f)
@@ -521,9 +554,8 @@ public class YutGameManager : MonoBehaviour
         GameUIManager.SetPanel(clearPanel, false);
         GameUIManager.SetPanel(gameOverPanel, false);
         GameUIManager.SetPanel(bossSelectPanel, false);
-        GameUIManager.SetPanel(bellChoicePanel, false);
+        GameUIManager.SetPanel(shopPanel, false);
         GameUIManager.SetPanel(talismanChoicePanel, false);
-        bellManager.isChoosingBell = false;
         hasRolled = false;
         currentState = GameState.Playing;
         uiManager.UpdateUI();
@@ -533,9 +565,7 @@ public class YutGameManager : MonoBehaviour
     private void EnterClear()
     {
         currentState = GameState.Cleared;
-        bellManager.isChoosingBell = false;
         GameUIManager.SetPanel(gameOverPanel, false);            // 클리어/게임오버 동시 표시 방지
-        GameUIManager.SetPanel(bellChoicePanel, false);
         GameUIManager.SetPanel(talismanChoicePanel, false);
         GameUIManager.ActivatePanel(clearPanel, nameof(clearPanel));
         // 다음 관문 버튼: 마지막 보스 클리어(최종 클리어)면 숨기고 메시지 표시
@@ -553,10 +583,9 @@ public class YutGameManager : MonoBehaviour
     private void EnterGameOver()
     {
         currentState = GameState.GameOver;
-        bellManager.isChoosingBell = false;
         GameUIManager.SetPanel(clearPanel, false);
-        GameUIManager.SetPanel(bellChoicePanel, false);
         GameUIManager.SetPanel(talismanChoicePanel, false);
+        GameUIManager.SetPanel(shopPanel, false);
         GameUIManager.ActivatePanel(gameOverPanel, nameof(gameOverPanel));
         uiManager.UpdateUI();
         BossData boss = bossManager.CurrentBoss;
@@ -595,14 +624,19 @@ public class YutGameManager : MonoBehaviour
     internal void FinishPresentation(ThrowSettlement settlement)
     {
         basicScore = settlement.finalBasic;
-        // 실효 배율 (윷 × 상성 × 잡기 × 부적) — 탐욕부 잡기 취소 시 0 (정상 연출·스킵 모두 표시 일치)
+        // 실효 배율 (윷 × 결과별 부적 × 상성 × 잡기 × 부적) — 탐욕부 잡기 취소 시 0 (정상 연출·스킵 모두 표시 일치)
         multiplier = settlement.talismanCancelled ? 0f
-            : settlement.finalMult * settlement.affinityMult * settlement.catchMult * settlement.talismanMult;
+            : settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult * settlement.catchMult * settlement.talismanMult;
         throwScore = settlement.throwScore;
         displayTotal = totalScore;
         isPresenting = false;
         activePresentation = null;
+        if (settlement.landingTileIndex >= 0)
+        {
+            boardManager.MovePieceVisual(settlement.landingTileIndex);   // 이동 중 스킵해도 말을 최종 착지 칸에 맞춘다
+        }
         uiManager.ShowLandingInfo(settlement);   // 스킵 경로 — 이동 연출 없이도 착지 정보 표시
+        uiManager.ClearUsedTalismanFeedback();   // 이유 텍스트 비우고 남은 사용 카드 표시 정리 — 다음 투척에 잔류 없음
         uiManager.UpdateUI();
 
         if (currentState != GameState.Playing)
@@ -619,11 +653,13 @@ public class YutGameManager : MonoBehaviour
             EnterGameOver();   // 5회 소진 후에도 보스 생존 — 마지막 투척 처치는 위 클리어 판정이 먼저 잡는다
             return;
         }
+        PrepareTurn();   // 다음 차례 준비 — 새 세션 생성 + 이전 '이번 투척' 부적 효과 해제. 선택창이 닫히면 부적 사용 가능
         // 땅 칸 착지 — 정산 연출이 끝나고 보스전이 계속될 때 부적 후보 3택1 선택창 표시 (방울 선택 대체)
         if (settlement.landedOnBellTile)
         {
             talismanManager.OpenLandPick();
         }
+        uiManager.UpdateUI();   // 최종 상태로 갱신 — 새 준비 세션·선택창 반영 후 CanUseNow 기준으로 손패 버튼 활성 판정
     }
 
     // 런 전체 초기화 — 게임오버/보스 선택 복귀로 런이 끝날 때 호출
@@ -631,7 +667,9 @@ public class YutGameManager : MonoBehaviour
     private void ResetRunState()
     {
         StopPresentation();                  // 이전 보스전의 잔여 연출 정리
-        bellManager.ResetForNewRun();        // 방울 선택창·임시 방울·방울 이벤트 상태
+        bellManager.ResetForNewRun();        // 보유 방울·속성 성장 등 런 단위 장착 상태 정리
+        shopManager.ResetForNewRun();        // 상점 열림 상태·상품 후보 정리
+        economyManager.ResetForNewRun();     // 돈 초기화 + 시작 자금 재지급 (런당 1회)
         talismanManager.ResetForNewRun();    // 부적 덱 재구성·손패·선택창·세션 효과 전부 초기화
         hasRolled = false;                   // 이전 윷 결과 표시용 데이터
         currentSettlement = null;
@@ -666,6 +704,10 @@ public class YutGameManager : MonoBehaviour
         {
             Debug.LogWarning("[YutGameManager] bossSelectPanel이 clearPanel의 자식입니다. 다음 관문 클릭 시 clearPanel이 꺼지면 함께 숨겨지니 Canvas 바로 아래로 분리하세요.", bossSelectPanel);
         }
+        if (shopPanel != null && clearPanel != null && shopPanel.transform.IsChildOf(clearPanel.transform))
+        {
+            Debug.LogWarning("[YutGameManager] shopPanel이 clearPanel의 자식입니다. 결과 화면이 꺼지면 함께 숨겨지니 Canvas 바로 아래로 분리하세요.", shopPanel);
+        }
     }
 
     private void Start()
@@ -696,8 +738,8 @@ public class YutGameManager : MonoBehaviour
             }
             else if (currentState == GameState.Playing)
             {
-                // 세션 진행 중이면 스페이스바 = 결과 확정 (새 최초 투척은 던지지 않는다)
-                if (rollManager.session != null && rollManager.session.Active)
+                // 투척 진행 중이면 스페이스바 = 결과 확정 (준비 단계·확정 후에는 최초 투척)
+                if (rollManager.session != null && rollManager.session.RollInProgress)
                 {
                     ConfirmThrow();
                 }

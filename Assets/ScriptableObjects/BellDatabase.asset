@@ -1,0 +1,147 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5a11be11da7a0000c0ffee000000b002, type: 3}
+  m_Name: BellDatabase
+  m_EditorClassIdentifier: 
+  bells:
+  - bellId: b_dokkaebi
+    bellName: "도깨비방울"
+    description: "도를 최종 확정할 때마다 도의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    effect: 1
+    targetResult: 1
+    targetAttribute: 0
+    growthAmount: 0.5
+    useLimit: 5
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_gaehwa
+    bellName: "개화방울"
+    description: "개를 최종 확정할 때마다 개의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    effect: 1
+    targetResult: 2
+    targetAttribute: 0
+    growthAmount: 0.5
+    useLimit: 5
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_geoleum
+    bellName: "걸음방울"
+    description: "걸을 최종 확정할 때마다 걸의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    effect: 1
+    targetResult: 3
+    targetAttribute: 0
+    growthAmount: 0.5
+    useLimit: 5
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_yutryeong
+    bellName: "윷령방울"
+    description: "윷을 최종 확정할 때마다 윷의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    effect: 1
+    targetResult: 4
+    targetAttribute: 0
+    growthAmount: 0.5
+    useLimit: 5
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_moryeong
+    bellName: "모령방울"
+    description: "모를 최종 확정할 때마다 모의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    effect: 1
+    targetResult: 5
+    targetAttribute: 0
+    growthAmount: 0.5
+    useLimit: 5
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_hwaryeong
+    bellName: "화령방울"
+    description: "불 속성 칸에 최종 착지할 때마다 불 속성 전체의 기본 공격력이 +5 성장한다. 10회 발동 후 소멸한다."
+    effect: 2
+    targetResult: 0
+    targetAttribute: 1
+    growthAmount: 5
+    useLimit: 10
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_suryeong
+    bellName: "수령방울"
+    description: "물 속성 칸에 최종 착지할 때마다 물 속성 전체의 기본 공격력이 +5 성장한다. 10회 발동 후 소멸한다."
+    effect: 2
+    targetResult: 0
+    targetAttribute: 2
+    growthAmount: 5
+    useLimit: 10
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_mogryeong
+    bellName: "목령방울"
+    description: "풀 속성 칸에 최종 착지할 때마다 풀 속성 전체의 기본 공격력이 +5 성장한다. 10회 발동 후 소멸한다."
+    effect: 2
+    targetResult: 0
+    targetAttribute: 3
+    growthAmount: 5
+    useLimit: 10
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_jokswae
+    bellName: "족쇄방울"
+    description: "보유하는 동안 보스 말의 이동 거리가 1칸 줄어든다. 이동 거리는 최소 1칸이다."
+    effect: 3
+    targetResult: 0
+    targetAttribute: 0
+    growthAmount: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_frog
+    bellName: "청개구리방울"
+    description: "보유하는 동안 보스의 원래 강점 속성 상성이 ×3, 나머지 공격 속성은 ×0.5가 된다. 잡기 강제 상성보다 우선한다."
+    effect: 4
+    targetResult: 0
+    targetAttribute: 0
+    growthAmount: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_cheonun
+    bellName: "천운방울"
+    description: "개별 재투척 시 일정 확률로 재투척 기회를 소모하지 않는다. (확률 미확정 — 현재 비활성)"
+    effect: 5
+    targetResult: 0
+    targetAttribute: 0
+    growthAmount: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 0
+  - bellId: b_jaebok
+    bellName: "재복방울"
+    description: "보스의 원래 약점 속성 칸으로 공격할 때마다 1냥을 얻는다."
+    effect: 6
+    targetResult: 0
+    targetAttribute: 0
+    growthAmount: 1
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1

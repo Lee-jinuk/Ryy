@@ -16,7 +16,7 @@ public class YutStatEntry
 {
     public YutResult result;
     public int basicBonus;
-    public int mult;
+    public float mult;   // 방울 성장(+0.5) 지원을 위한 소수 배율 — 정수화는 정산 마지막에 1회만
 }
 
 // 윷 투척과 확률 담당 — 윷 4개 투척 세션(면 조합·재투척), 기본/런타임 확률 관리(예약 API),
@@ -26,7 +26,8 @@ public class YutRollManager
 {
     private readonly YutGameManager gm;
 
-    // 진행 중인 투척 세션 — null이면 세션 없음. 최초 투척/재투척/확정은 YutGameManager 버튼 경유
+    // 현재 차례의 투척 세션 — 차례 준비(PrepareSession)에 생성되고 rolled=false면 최초 투척 전.
+    // 최초 투척/재투척/확정은 YutGameManager 버튼 경유
     public YutThrowSession session;
 
     // 런타임 추첨용 가중치 — 보스 특수능력·방울·주술의 확률 조작은 여기만 적용해 기본 데이터 오염 방지
@@ -41,11 +42,11 @@ public class YutRollManager
         this.gm = gm;
     }
 
-    // 새 투척 세션 시작 — 윷 4개 최초 투척. 호출 전 가드(상태·연출·방울 선택·진행 중 세션)는 YutGameManager가 처리
-    public void StartSession()
+    // 차례 준비 — 새 세션을 생성만 하고 던지지 않는다 (rolled=false = 준비 단계).
+    // 준비 단계에서 사용하는 부적 효과가 세션 필드에 보관되도록 최초 투척 전에 만들어 둔다
+    public void PrepareSession()
     {
         session = new YutThrowSession();
-        session.InitialRoll();
     }
 
     // 기본 확률 → 런타임 가중치 복사. 누락 결과는 0, 음수는 0으로 보정
@@ -145,10 +146,10 @@ public class YutRollManager
 
     // 주술 등 영구 강화용 API — 다음 투척부터 적용. baseYutStats는 오염되지 않음
     // basicBonus는 예약 필드(현재 미적용), mult는 해당 윷의 멀티플
-    public void UpgradeYutStat(YutResult result, int newBasicBonus, int newMult)
+    public void UpgradeYutStat(YutResult result, int newBasicBonus, float newMult)
     {
         yutStats[result].basicBonus = Mathf.Max(0, newBasicBonus);
-        yutStats[result].mult = Mathf.Max(0, newMult);
+        yutStats[result].mult = Mathf.Max(0f, newMult);
     }
 
     public YutStatEntry GetStat(YutResult result) => yutStats[result];

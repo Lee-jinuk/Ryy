@@ -11,6 +11,119 @@
 - `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
 - 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
 
+### [2026-10-21 오전 (21차) - 사용자 지시 / Devin 구현]
+
+**보스 다음 이동 위치 미리보기** (사용자 승인):
+
+- `BossManager` — 이동 계획 분리: `movePlanReady`·`plannedBaseSteps` 필드 + `PrepareBossMove()`(차례 준비에 거리 1회 추첨·보관) + `PlannedEffectiveSteps`·`PlannedDestination`(족쇄방울·봉쇄부를 계산 시점에 반영 — 봉쇄 미소모). `MoveBossPiece()`는 준비된 계획을 1회 소비해 실행(재추첨 없음). `ApplyMoveReduction`으로 족쇄 로직 공용화. `ResetBossPiece`가 계획도 함께 폐기
+- `YutGameManager` — `bossMovePreview`(RectTransform) 필드 추가, `PrepareTurn`에서 `PrepareBossMove()` 호출, `BeginBossFight` 순서 정리(ResetBossPiece→PrepareTurn — 새 보스 기준 계획), Awake에서 표식 Raycast Target 해제·초기 숨김
+- `BoardManager` — `MoveBossPreviewVisual(tileIndex)` 추가 — 표식을 예정 칸 위치에 배치
+- `GameUIManager` — UpdateUI에 예고 표시 제어: `Playing` + 미투척 세션 + `movePlanReady`일 때만 표시, 표시 중엔 `PlannedDestination`으로 위치 갱신 — 추첨·상태 변경은 UI에서 하지 않음
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기: 첫 보스전 첫 투척 전 예고 표시 / 예고 칸=실제 이동 일치 / 재투척·확정 추가 이동 없음 / 봉쇄부 사용 즉시 예고 현재 칸 갱신·미소모 / 다음 차례 예고 복귀 / 족쇄 적용 일치 / 클리어·게임오버·보스 전환 잔류 없음 / 정상·스킵 동일
+
+### [2026-10-21 오전 (20차) - 사용자 지시 / Devin 구현]
+
+**정산 후 부적 버튼 재활성화 누락 수정**:
+
+- `YutGameManager.FinishPresentation` — `UpdateUI`가 `PrepareTurn`·땅 선택창 처리 전에 실행돼 손패 버튼이 이전 확정 세션 기준 비활성으로 남던 문제. `PrepareTurn`+땅 선택 처리 후 최종 `UpdateUI`를 추가 — 버튼 강제 활성이 아니라 새 준비 세션·선택창 상태를 반영한 뒤 `CanUseNow`+카드 `useTiming`으로 활성 판정. `PrepareTurn` 중복 호출 없음(준비 효과 초기화 방지), 클리어·게임오버 경로는 준비 세션 미생성
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 일반 칸 정산 후 버튼 활성 / 2·3번째 차례 반복 / 땅 선택 완료 후 활성 / 투척 후·재투척·정산 중 비활성 / 정상·스킵 동일 동작
+
+### [2026-10-21 오전 (19차) - GPT 기획 / Devin 구현]
+
+**기본 재투척 1회·말판 확률·부적 사용 시점 변경** (사용자 승인):
+
+- `YutThrowSession` — `MaxRerolls` 2→1. `rolled` 플래그·`RollInProgress` 추가: 세션은 차례 준비에 생성(rolled=false=준비 단계), `InitialRoll`은 면과 재투척 기록만 초기화하고 준비 때 사용한 부적 효과(특별 재투척·moveDelta·armed/succeeded 결과 부적·포기) 보존. `CanReroll`에 `!rolled` 가드
+- `BoardManager` — 확률 30/30/30/10/쇠0, 추첨 예외 반환값 Metal→Earth (쇠는 정의·표시 유지, 생성만 제외)
+- `TalismanData` — `TalismanUseTiming` enum(BeforeFirstThrow)·`useTiming` 필드 + `TalismanAppearance` enum(미정/노란부적/하얀부적)·`appearance` 필드 추가. 사용 시점을 카드 데이터로 판정 — 색상·이름 문자열 판정 금지. `TalismanDatabase.asset` 17종 전부 `useTiming: 0`·`appearance: 0` 명시
+- `TalismanManager` — `CanUseNow`를 '세션 존재 + 미투척(rolled=false) + 미확정'으로 변경(준비 단계만 허용), 카드별 `CanUseCard` = 구간 + `useTiming` 데이터 검사. 승부부·재기부 등 준비 사용 효과는 세션 필드에 보관돼 투척 후 유지
+- `YutRollManager` — `StartSession` → `PrepareSession` (세션 생성만, 투척 안 함)
+- `YutGameManager` — `PrepareTurn()` 신규(세션 생성 + `ClearSessionEffects` — 차례당 1회): `BeginBossFight`·정산 종료 후 다음 차례에서 호출. `RollYut`는 준비 세션의 `InitialRoll`만 실행 + 보스 이동, `rolled` 세션 차단. `ConfirmThrow`는 `RollInProgress`만 허용. 스페이스바 분기도 동일 기준
+- `GameUIManager` — `throwInputOpen`을 `RollInProgress` 기준으로 변경, 면 표시는 `rolled` 이후만, 준비 상태 메시지 추가, 손패 사용 버튼은 준비 구간 활성
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기: 재투척 기본 1회 / 재기부 사용 시 2회 / 쇠 없는 30칸 말판 / 준비 단계 부적 사용→투척 후 효과 유지(봉쇄·재기·승부·결과별) / 투척 후 사용 차단 / 다음 차례 재사용 가능 / 정상·스킵 결과 일치
+
+### [2026-10-20 오후 (18차) - GPT 기획 / Devin 구현]
+
+**방울 장착·상점·경제 시스템** (사용자 승인 — 과거 방울 선택 이벤트 완전 대체):
+
+- 신규 파일: `Scripts/Data/BellData.cs`(BellEffectKind·BellData·OwnedBell)·`BellDatabase.cs`·`ShopConfig.cs`, `Scripts/Core/EconomyManager.cs`·`ShopManager.cs`, `Prefabs/BellItem.prefab`·`ShopItem.prefab`, 에셋 `BellDatabase.asset`(12종)·`ShopConfig.asset`(50냥·4칸·후보 4종)
+- `BellManager` 재작성 — 장착 인스턴스 관리·성장 처리(`ApplyGrowth` → GrowthTrigger 목록 반환, 한도 소진 인스턴스만 소멸)·속성 공격력 런 성장·청개구리 유효 상성(`FrogAffinityMult`)·지속 효과 조회(`HasBell`). 과거 선택 이벤트 코드 전부 제거
+- `YutGameManager` — 레거시 필드(`bellPool`·`bellChoicePanel`·`bellOption*`·`ownedBells`·`bellSlots`·`talismanSlots`)와 방울 선택 버튼 함수 제거. 신규 필드: `bellDatabase`·`shopConfig`·`moneyText`·`shopMoneyText`·`bellContent`·`bellItemPrefab`·`shopPanel`·`shopOfferContent`·`shopBellContent`·`shopItemPrefab`. 신규 버튼 함수: `OpenShop`·`CloseShop`. `EnterBossBattle`·`SkipBoss`는 상점 열림 중 차단. 보스전 시작에서 방울 초기화 제거(런 단위 유지)
+- `ScoreManager` — 정산에서 방울 성장 발동(이번 공격부터)·`AddBellStep` 기록(Basic/Multiplier), 청개구리 유효 상성(잡기 강제보다 우선), 재복방울 약점 공격 +1냥(정산당 1회). `baseMult`·`finalMult` float화
+- `YutRollManager` — `YutStatEntry.mult` int→float, `UpgradeYutStat` 시그니처 float
+- `BossManager` — `MoveBossPiece`에 족쇄방울 −1칸(최소 1칸, 봉쇄부 경로 미간섭)
+- `GameUIManager` — `SyncBellPanel`(스냅샷 비교 후 재구성)·`SyncShopPanel`(상품·보유 목록+잔액, 버튼 onClick 코드 연결) 신규. 방울 선택창·bellSlots 동기화 제거
+- `Assembly-CSharp.csproj` — 신규 5개 스크립트 등록. `SampleScene.unity` — `bellDatabase`·`shopConfig` 에셋 참조 연결 (구형 필드 직렬화 잔여분은 무해 — Unity가 무시)
+- 미구현·미확정: 천운방울 효과(확률 미확정 — effectEnabled=0), 재복방울 세부 해석(원래 약점 기준·피해 0 시에도 지급 — 임시 적용), 방울 재구매 횟수 처리
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기: 상점 진입/구매/판매/잔액 표시, 성장 방울 발동·소멸·성장 유지, 족쇄/청개구리/재복 실효과, 런 초기화
+
+### [2026-10-20 오후 (17차) - GPT 기획 / Devin 구현]
+
+**배율 이유 표시 범위 확장 + 탐욕부 연출 타이밍** (사용자 승인 — 표시만, 계산·카드 소모·피해 계산 미변경):
+
+- `ScoreManager`: 상성 이유 텍스트 세분화 — 일반 상성 "일반 상성 ×1"(기존 "상성 ×1"), 약점·강점·잡기 강제는 기존 유지. `ScoreEffectStep.preApplyDelay`/`postApplyDelay` 신규(기본 -1 = 일반 타이밍) — 탐욕부 비취소 단계에만 `PresentationConfig`의 탐욕부 딜레이 기록. 취소 탐욕부는 상승 연출 없이 취소 안내 단계만 재생
+- `PresentationConfig.cs` + `.asset`: `greedStepPreDelay`·`greedStepPostDelay` 신규(0.5s) — 탐욕부 이유 표시→갱신 대기, 갱신→카드 제거 대기
+- `GameUIManager`: 단계 재생 시 `preApplyDelay>0`이면 이유 표시 후 대기 뒤 갱신, `postApplyDelay>0`이면 그 시간 사용(아니면 `effectStepDelay`)
+- 이유 표시 전체 범위: 윷 기본 배율 → 결과별 부적 → 상성(일반/약점/강점/잡기 강제) → 잡기 → 피해 부적 → 조건 불충족 → 취소 — 감소·유지 단계 포함 전 단계 표시
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기: 탐욕부 0.5s+0.5s 타이밍 / 취소 시 상승 연출 없음 / 정상·스킵 최종 일치
+
+### [2026-10-20 오후 (16차) - GPT 기획 / Devin 구현]
+
+**사용 부적 패널 + 배율 변화 이유 표시** (사용자 승인 — 표시 기능만, 계산 규칙·카드 소모 시점·피해 계산 미변경):
+
+- 신규 `Assets/Scripts/Data/UsedTalismanRecord.cs` — 사용 시점 데이터 복사(useId·cardId·이름·설명·효과·수치·resultNote·displayConsumed). `TalismanManager.usedThisThrow` 보관, `ClearSessionEffects`·`ResetForNewRun`에서 정리
+- `TalismanManager`: `ActiveTalismanEffect.useId` 추가, 성공한 사용만 기록(실패 시 기록 없음·미소모). 인연부 획득 결과·재기부·봉쇄부·진격/후퇴 안내문을 `resultNote`로 기록
+- `YutThrowSession`: `armed/succeededResultBonus` 튜플에 useId 추가 — 결과별 부적 단계와 사용 기록 연결
+- `ScoreManager`: `ScoreEffectStep.useId`·`reasonText` 신규. 상성(실제/잡기 강제)·잡기·부적·결과별 부적 단계에 이유 텍스트 기록. 조건 불충족 피해 카드 `AddTalismanFailStep` + 비피해·미발동 카드 `AddInfoStep`(×1 — Mult 미변경) 추가 — 진격부·후퇴부는 이동 연출 구간에서 처리. 탐욕 취소 시 카드 제거는 취소 단계가 담당
+- `GameUIManager`: `SyncUsedTalismanPanel`(동적 항목 생성·소비분 정리·패널 토글)·`RemoveUsedItem`·`SetMultiplierReason`·`ClearUsedTalismanFeedback` 신규. 연출 순서 = 이유 → Mult 갱신 → 간격 → 카드 제거. 이동 단계에서 진격부·후퇴부 안내+제거. 미연결 시 경고 후 표시 생략(게임 진행 유지)
+- `YutGameManager` 신규 필드: `multiplierReasonText`·`usedTalismanPanel`·`usedTalismanContent`·`usedTalismanItemPrefab` — 전부 미연결 시 무시. `FinishPresentation`에 `ClearUsedTalismanFeedback` + 플레이어 말 최종 착지 스냅 추가(이동 중 스킵 대응)
+- 신규 `Assets/Prefabs/UsedTalismanItem.prefab` — NameText(첫 자식)+DescText(둘째 자식, 선택) 구조, `GetComponentsInChildren<Text>` 순서로 채움
+- `Assembly-CSharp.csproj`에 UsedTalismanRecord.cs 등록
+- 검증: `dotnet build` 오류 0·경고 0 — 코드 검증 완료. Unity Play 검증 대기: 사용 성공만 표시·다장 표시·순차 제거·이유 텍스트·조건 불충족·스킵 정리·비피해 카드 잔여 없음·사용 카드 없는 투척
+
+### [2026-10-20 오후 (15차) - GPT 기획 / Devin 구현]
+
+**부적 제외 범위 정정** (사용자 승인 정정 — 14차의 '활성 2종'은 범위 전달 오류):
+
+- `TalismanDatabase.asset` 정정: 복구 12종 `includeInDeck: 0→1` — 활성 **14종** = t_fire·t_water·t_forest·t_pursuit·t_greed·t_retry·t_bond·t_seal·t_fortune·t_allinnothing·t_advance·t_retreat·t_yut·t_mo / 제외 유지 **3종** = t_do·t_gae·t_geol만
+- 코드 변경 없음 — `includeInDeck` 필터·윷 배율·잡기 규칙·추혼부·이름(윷령부/모령부) 등 14차 변경은 전부 유지
+- 기대 동작 (코드 기준): 새 런 덱 14장 각 1장 / 시작 선택 후보 5장 중 3장 복귀 / 땅 선택 덱 충분 시 3택1 / 일도부·이개부·삼걸부는 모든 획득 경로에서 미등장 / 윷령부·모령부의 결과별 ×2 보너스 유지
+- 검증: 에셋 값 확인으로 대체 (코드 미변경 — 빌드 불필요). Unity Play 검증 대기: 덱 14장 구성·시작 5택3·제외 3종 미등장·새 런 기준 손패
+
+### [2026-10-20 오후 (14차) - GPT 기획 / Devin 구현]
+
+**윷 기본 배율 변경 + 부적 구성 2종 축소** (사용자 승인 변경):
+
+- `GameBalanceConfig` yutStats: 도4/개3/걸4/윷9/모9 — 클래스 기본값과 `.asset` 모두 갱신 (이동 거리 불변)
+- `TalismanData.includeInDeck` 필드 신규 — 카드 정의는 유지하되 덱 구성에서 제외할 수 있게 함
+- `TalismanManager.EnsureDeck`: `includeInDeck: false` 카드 필터링 추가 (null 가드 포함). 후보 부족 시 `Mathf.Min` 축소·0장 생략 로직은 기존 그대로
+- `TalismanDatabase.asset`: 윷령부(t_yut, 구 사윷부)·모령부(t_mo, 구 오모부) 이름 변경(사용자 확인). cardId·effect enum(0~11)·value 전부 유지. **당시 15종을 `includeInDeck: 0`으로 제외했으나 15차에서 범위 오류로 정정 — 실제 제외는 일도부·이개부·삼걸부 3종**
+- 덱 축소 시 동작 (기존 코드 기준): 시작 선택 후보 2장 중 2장 획득 → 덱 소진. 이후 땅 선택·다음 보스 시작 선택은 생략. 사용 카드 소멸·재지급 없음
+- 수식 검증 (코드 기준, 50·일반·잡기 없음): 도**200**/개**150**/걸**200**/윷**450**/모**450** / 잡기 성공(상성2·잡기3): 도1200/개900/걸1200/윷2700/모2700 / 결과별 부적 성공 윷·모: 50×18 = **900**
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — 새 런에서 윷령부·모령부만 등장, 후보 2/1/0장 선택창 비정지, 다음 투척 보너스 미잔류
+
+### [2026-10-20 오전 (13차) - GPT 기획 / Devin 구현]
+
+**잡기 보상 ×3 + 잡기 시 유효 상성 ×2 고정 + 추혼부 추가 배율** (사용자 승인 변경):
+
+- `GameBalanceConfig`: `catchMultiplier = 3`(잡기 배율)·`catchAffinityMult = 2`(잡기 시 강제 상성) 신규 — 클래스 기본값과 `.asset` 모두 반영
+- `ScoreManager`: 정산 순서 재구성 — 착지 확정 → **잡기 판정** → 실제 상성 조회(`actualAffinityMult`) → 유효 상성 결정(잡기면 2 고정) → 잡기 배율(잡기면 3) → 결과별 부적 → 상성·잡기 단계 기록(강제 시 '잡기 상성 ×2' 표시) → 부적 곱셈. `pursuitMult` 잡기 배율 대체 로직 제거 — `CatchPursuit`는 `caught` 조건의 일반 곱셈 카드로 처리(×4, 잡기 성공 시에만). `ThrowSettlement.actualAffinityMult` 추가
+- 잡기 연출 단계 `beforeValueF`에 `resultBonusMult` 누락 수정 — 윷×결과부적×상성까지 반영 후 잡기 배율 표시
+- `TalismanDatabase.asset` 추혼부: value 6→4, 설명 '잡기 배율 ×6 변경' → '잡기 성공 시 최종 피해 추가 ×4'. `TalismanData` 주석 갱신
+- 수식 검증 (코드 기준, 50·개): 잡기 성공 = 50×3×2×3 = **900** (원래 상성 무관) / +추혼 = **3,600** / +이개부 성공 = **7,200** / 잡기 실패 추혼부 사용 = 무효·조건 불충족 / 탐욕+잡기 = **0** / 약점+천운+추혼+잡기 = **14,400**
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — test2 씬에서 조합별 피해·'잡기 상성 ×2' 표시·스킵 일치 확인 필요
+
+### [2026-10-19 오후 (12차) - GPT 기획 / Devin 구현]
+
+**부적 17종 확장 + 밸런스 상향** (사용자 승인 변경):
+
+- 1단계 — 기존 10종 상향: `TalismanDatabase.asset`의 value·description 갱신 (속성 ×4 / 추혼 ×6 / 탐욕 ×2 / 천운 ×4 / 승부 ×2). cardId·enum 0~9 유지
+- 2단계 — 재기부 특별 재투척: `YutThrowSession` 재작성 — `bonusRerolls`→`specialRerolls`, `speciallyRerolled[]` 추가. `CanReroll`: 미재투척 윷은 기본 기회(서로 다른 2개·윷당 1회) 우선, 이미 재투척·기본 소진이면 특별 기회(윷당 1회) 소비. `RemainingRerolls` = 기본 잔여 + 특별 합계. 승부부 포기 시 둘 다 차단(기존 forfeited 가드 유지)
+- 3단계 — 진격부·후퇴부: `TalismanEffectKind.MoveDelta`(10) + 세션 `moveDelta` 합산. `SettleNormalThrow`에서 `Max(0, MoveSteps + moveDelta)` — 후퇴 도 → 0칸 `MovePiece(0)`으로 현재 칸 정상 정산(경로 비움·판정 유지). 합산 상쇄 가능
+- 4단계 — 일도부~오모부: `TalismanEffectKind.ResultBonus`(11) + `TalismanData.targetResult`. 세션 `armedResultBonus`/`succeededResultBonus` (Dictionary<YutResult,(mult,name)> — 카드별 독립). `Reroll` 성공 시 `EvaluateArmedBonuses` — 목표 일치 성공 기록 후 전부 해제(1회 평가). 정산에서 `succeeded[확정결과]`면 `settlement.resultBonusMult` ×2 — `AddResultBonusStep` 기록, `runningMult`·공식·로그·`FinishPresentation` 실효 배율에 포함
+- 에셋: 신규 7종 추가 — t_advance/t_retreat(MoveDelta ±1), t_do~t_mo(ResultBonus, targetResult 1~5, value 2). 덱 17종, 손패 10 유지
+- 수식 검증 (코드 기준): 걸+승부 = 50×4×2=400 / 개+약점+속성+천운 = 50×3×2×4×4=4800 / +추혼 잡기 = 4800×6=28800 / 도 보너스 성공 = 배율 2→4
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 검증 대기 — 특별 재투척 소비 순서, 후퇴 0칸 정산, 결과별 부적 성공/실패 분기 확인 필요
+
 ### [2026-10-19 오후 (11차) - GPT 기획 / Devin 구현]
 
 **게임 설정 데이터 ScriptableObject 분리 + test2.unity 구 부적 수치 이전** (사용자 승인 변경 — 규칙 변경 없이 데이터 저장 위치만 이동):

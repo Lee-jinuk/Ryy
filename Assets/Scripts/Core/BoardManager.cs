@@ -27,13 +27,14 @@ public class BoardManager
     };
 
     // 속성별 독립 추첨 확률 (START 제외 29칸 각각에 적용 — 고정 칸 수 비율이 아니며 최소 개수 보장 없음)
+    // 쇠 = 0% — 정의·표시는 유지하고 신규 배치 추첨에서만 제외 (2026-10-21 확정)
     private static readonly (TileAttribute attribute, float percent)[] AttributeWeights =
     {
-        (TileAttribute.Fire, 25f),
-        (TileAttribute.Water, 25f),
-        (TileAttribute.Forest, 25f),
-        (TileAttribute.Earth, 15f),
-        (TileAttribute.Metal, 10f),
+        (TileAttribute.Fire, 30f),
+        (TileAttribute.Water, 30f),
+        (TileAttribute.Forest, 30f),
+        (TileAttribute.Earth, 10f),
+        (TileAttribute.Metal, 0f),
     };
 
     public static string AttributeName(TileAttribute attribute) => attribute switch
@@ -47,7 +48,7 @@ public class BoardManager
         _ => attribute.ToString(),
     };
 
-    // 속성 칸 1개 독립 추첨 — 불25 물25 풀25 땅15 쇠10 (%)
+    // 속성 칸 1개 독립 추첨 — 불30 물30 풀30 땅10 쇠0(생성 제외) (%)
     private static TileAttribute DrawAttribute()
     {
         float roll = Random.Range(0f, 100f);
@@ -60,7 +61,7 @@ public class BoardManager
                 return attribute;
             }
         }
-        return TileAttribute.Metal;
+        return TileAttribute.Earth;   // 예외 반환 — 쇠가 어떤 경로로도 생성되지 않게 한다
     }
 
     // 보스전 진입 시 호출 — 배치는 런당 1회만 생성하고 게임오버까지 유지한다
@@ -160,6 +161,21 @@ public class BoardManager
         if (tileObj != null)
         {
             gm.bossPiece.position = tileObj.transform.position;
+        }
+    }
+
+    // 보스 이동 예고 표식을 예정 도착 칸 위치에 배치 — 표식은 순수 표시이며
+    // 잡기 판정·칸 효과와 무관. 본체(bossPiece)와 별개 오브젝트
+    public void MoveBossPreviewVisual(int tileIndex)
+    {
+        if (gm.bossMovePreview == null || tileIndex < 0 || tileIndex >= gm.boardTiles.Length)
+        {
+            return;
+        }
+        GameObject tileObj = gm.boardTiles[tileIndex];
+        if (tileObj != null)
+        {
+            gm.bossMovePreview.position = tileObj.transform.position;
         }
     }
 

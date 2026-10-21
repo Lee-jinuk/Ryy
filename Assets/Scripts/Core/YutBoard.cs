@@ -19,14 +19,6 @@ public class BoardTile
             : 0;
 }
 
-// 방울 데이터 — 현재는 이름/설명만 (실제 발동 효과는 미구현)
-[System.Serializable]
-public class BellData
-{
-    public string bellName = "방울";
-    [TextArea] public string description = "";
-}
-
 // 30칸 원형 말판 상태 — 속성 배치·말 위치·완주 횟수를 관리.
 // 배치는 런당 1회 생성해 게임오버까지 유지 (보스 전환·건너뛰기에서 재추첨 없음)
 [System.Serializable]
