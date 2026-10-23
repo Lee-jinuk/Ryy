@@ -17,19 +17,44 @@ MonoBehaviour:
     maxHP: 1000
     abilityDescription: "낙 확률 +2%p"
     nakBonusPercent: 2
+    useAffinity: 0
+    affinityWeak: 0
+    affinityStrong: 0
+    affinityWeakMult: 2
+    affinityStrongMult: 0.5
   - bossName: "두 번째 저승지기"
     maxHP: 2000
     abilityDescription: "낙 확률 +2%p"
     nakBonusPercent: 2
+    useAffinity: 0
+    affinityWeak: 0
+    affinityStrong: 0
+    affinityWeakMult: 2
+    affinityStrongMult: 0.5
   - bossName: "세 번째 저승지기"
     maxHP: 3000
     abilityDescription: "낙 확률 +2%p"
     nakBonusPercent: 2
+    useAffinity: 0
+    affinityWeak: 0
+    affinityStrong: 0
+    affinityWeakMult: 2
+    affinityStrongMult: 0.5
   - bossName: "네 번째 저승지기"
     maxHP: 4000
     abilityDescription: "낙 확률 +2%p"
     nakBonusPercent: 2
+    useAffinity: 0
+    affinityWeak: 0
+    affinityStrong: 0
+    affinityWeakMult: 2
+    affinityStrongMult: 0.5
   - bossName: "다섯 번째 저승지기"
     maxHP: 5000
     abilityDescription: "낙 확률 +2%p"
     nakBonusPercent: 2
+    useAffinity: 0
+    affinityWeak: 0
+    affinityStrong: 0
+    affinityWeakMult: 2
+    affinityStrongMult: 0.5

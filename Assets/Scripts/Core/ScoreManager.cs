@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum EffectSourceType { YutResult, Talisman, Bell, Spell, Boss }
+public enum EffectSourceType { YutResult, Talisman, Bell, Spell, Boss, TileEffect }
 public enum EffectTarget { Basic, Multiplier }
 public enum EffectOp { Add, Multiply }
 
@@ -34,19 +34,22 @@ public class ScoreEffectStep
 public class ThrowSettlement
 {
     public YutResult result;
-    public int baseBasic;            // 효과 적용 전 초기 베이직 (착지 칸 공격력 — 방울 성장 전)
+    public int baseBasic;            // 효과 적용 전 초기 베이직 = 확정 윷의 기본점수 (점수제 전환 — 칸 공격점수 폐지)
     public float baseMult;           // 효과 적용 전 초기 멀티플 (방울 성장 전)
     public int finalBasic;           // 모든 효과 적용 후 베이직
     public float finalMult;          // 모든 효과 적용 후 멀티플 — 방울 성장(+0.5) 포함 소수 가능
-    public int throwScore;           // finalBasic × finalMult — TotalScore에 1회만 합산
+    public int throwScore;           // D에 속성 착지 효과까지 적용한 최종 피해 — TotalScore에 1회만 합산
     public int landingTileIndex = -1;    // 말판 도착 칸 (-1 = 이동 없음 — 저주)
-    public int tileScore;                // 도착 칸의 기본 공격점수 (불·물·풀 50 / START·땅·쇠 0)
-    public float affinityMult = 1f;      // 이번 정산의 유효 상성 배율 — 잡기 성공 시 GameBalanceConfig.catchAffinityMult로 고정
-    public float actualAffinityMult = 1f;// 실제 착지 속성의 보스 상성 배율 (약점 2 / 강점 0.5 / 기본 1) — 기록·디버깅용
+    public bool attackLanded;            // 공격 칸(불·물·풀·땅) 착지 — START·쇠는 공격 0. 땅은 추가 배율 ×1 공격 허용 (2026-10-22 확정, 구 tileScore>0 대체)
+    public float affinityMult = 1f;      // 이번 정산의 유효 상성 배율 — 상성 능력이 있는 보스만 적용, 없으면 ×1
+    public float actualAffinityMult = 1f;// 실제 착지 속성의 보스 상성 배율 (약점/강점/기본, 능력 없으면 1) — 기록·디버깅용
     public float resultBonusMult = 1f;   // 결과별 부적(일도부~모령부) 보너스 — 성공+최종 결과 일치 시에만 적용
     public bool caught;                  // 잡기 성공 — 최종 도착 칸 = 보스 말 위치 (통과는 미발동)
     public float catchMult = 1f;         // 잡기 배율 (실패 ×1 / 성공 GameBalanceConfig.catchMultiplier — 추혼부는 추가 배율로 별도)
+    public float catchBonusMult = 1f;    // 별도 잡기 보너스 (실패 ×1 / 성공 GameBalanceConfig.catchBonusMult — 상성 무관, 2026-10-22 확정)
     public float talismanMult = 1f;      // 이번 투척 부적 피해 효과의 누적 배율 (미적용 ×1, 조건 만족분의 곱)
+    public float tileEffectMult = 1f;    // 속성 착지 효과 배율 — 불 ×1.5 / 물 연계 / 풀·비공격 ×1 (표시 일치용)
+    public string tileEffectNote;        // 착지 효과 설명 — "3연속 ×4"·"도트 등록 +60" 등 (착지 정보 표시용)
     public bool talismanCancelled;       // 탐욕부 충돌 등으로 최종 피해가 0으로 취소됨 — 연출·스킵 후에도 기록 유지
     public bool landedOnBellTile;        // 땅 칸에 정확히 착지했는지 — 부적 뽑기 화면 발동 조건 (방울 대체)
     public List<int> movePath = new List<int>();  // 경유 칸 인덱스 — 이동 연출 재생용
@@ -69,15 +72,14 @@ public class ScoreManager
         this.gm = gm;
     }
 
-    // 확정 결과(도~모) 투척 정산: 말 이동(+이동 보정) → 잡기 판정 → 유효 상성 결정
-    //   (잡기 성공 시 강제 ×2) → 결과별 부적 → 부적 배율 곱셈 → 정수화 → 총점 합산
-    // 공식: 최종 데미지 = 착지 칸 공격력 × 윷 배율 × 결과별 부적 × 상성 × 잡기 × 부적 곱 (완주·윷 기본점수 가산 없음)
-    // START·땅·쇠는 상성과 무관하게 공격점수 0 → 데미지 0. 모든 결과는 투척 1회를 정확히 소모한다
+    // 확정 결과(도~모) 투척 정산: 말 이동(+이동 보정) → 잡기 판정 → 상성(능력 보스만)
+    //   → 결과별 부적 → 부적 배율 곱셈 → D 확정 → 속성 착지 효과(불×1.5/물 연계/풀 도트) → 총점 합산
+    // 공식: D = 윷 기본점수 × 윷 배율 × 결과별 부적 × 보스 능력 배율 × 잡기 × 잡기 보너스 × 부적 곱
+    //   → 착지 효과 적용이 최종 피해. START·땅·쇠는 공격 0 (사용자 확정). 모든 결과는 투척 1회를 소모
     public void SettleNormalThrow(ThrowSettlement settlement, YutResult selected)
     {
-        // 1) 말 이동 → 도착 칸의 속성과 기본 공격점수 확정
-        //    진격부·후퇴부의 세션 이동 보정을 합산 — 윷 결과·배율은 미변경.
-        //    보정 후 0칸이면 이동 없이 현재 칸으로 정산 (경로 비어 있어도 판정 정상 실행)
+        // 1) 말 이동 → 도착 칸 확정 — 진격부·후퇴부의 세션 이동 보정을 합산 (윷 결과·배율 미변경).
+        //    보정 후 0칸이면 이동 없이 현재 칸으로 정산
         YutThrowSession session = gm.rollManager.session;
         int moveDelta = session != null ? session.moveDelta : 0;
         int steps = Mathf.Max(0, BoardManager.MoveSteps(selected) + moveDelta);
@@ -85,18 +87,20 @@ public class ScoreManager
         BoardTile tile = gm.board.tiles[landing];
         settlement.landingTileIndex = landing;
         settlement.landedOnBellTile = tile.attribute == TileAttribute.Earth;
+        settlement.attackLanded = tile.attribute == TileAttribute.Fire
+            || tile.attribute == TileAttribute.Water || tile.attribute == TileAttribute.Forest
+            || tile.attribute == TileAttribute.Earth;   // 땅 공격 허용 — 추가 배율 ×1 (2026-10-22 확정)
 
         // 방울 성장 — 최종 착지 칸·확정 결과 기준으로 발동한 이번 공격부터 반영 (사용자 확정).
-        // baseBasic/baseMult는 성장 전 값 — 연출이 '윷 기본 배율'·칸 기본점수 후 성장 단계를 별도 표시
+        // baseBasic은 확정 윷의 기본점수 — 칸 공격점수·속성 공격력 성장 합산은 점수제 전환으로 제거
         YutStatEntry stat = gm.rollManager.GetStat(selected);
-        settlement.baseBasic = tile.AttackScore + gm.bellManager.GetAttrAttackBonus(tile.attribute);
+        settlement.baseBasic = stat.baseScore;
         settlement.baseMult = stat.mult;
         foreach (BellManager.GrowthTrigger growth in gm.bellManager.ApplyGrowth(selected, tile))
         {
             AddBellStep(settlement.steps, growth);
         }
-        settlement.tileScore = tile.AttackScore + gm.bellManager.GetAttrAttackBonus(tile.attribute);
-        settlement.finalBasic = settlement.tileScore;
+        settlement.finalBasic = settlement.baseBasic;
         settlement.finalMult = stat.mult;
 
         gm.currentThrows++;   // 확정 투척은 기본 투척 기회 정확히 1회 소모 (재투척은 별도 소모 없음)
@@ -114,36 +118,47 @@ public class ScoreManager
             resultBonusUseId = bonus.useId;
         }
 
-        // 2) 보스 말 잡기 판정 — 최종 도착 칸 = 보스 말 현재 칸이면 성공 (통과만으론 미발동, 칸 인덱스 비교)
-        //    성공 시 잡기 배율(GameBalanceConfig.catchMultiplier) + 이번 정산의 유효 상성을
-        //    catchAffinityMult로 고정. 실패하면 실제 상성·잡기 ×1. 원래 약점·강점 배정 자체는 미변경
+        // 2) 보스 말 잡기 판정 — 최종 도착 칸 = 보스 말 현재 칸이면 성공 (통과만으론 미발동)
+        //    성공 시 잡기 배율(catchMultiplier) + 별도 잡기 보너스(catchBonusMult) — 상성과 무관 (2026-10-22 확정).
+        //    상성은 능력이 있는 보스에만 적용 — 비상성 보스의 모든 공격 상성은 ×1
         settlement.caught = landing == gm.bossManager.bossPieceIndex;
+        BossAffinity affinity = gm.bossManager.GetAffinity(gm.selectedBossIndex);
         settlement.actualAffinityMult = gm.bossManager.AffinityMultiplier(tile.attribute);
-        float catchForcedAffinity = gm.balanceConfig != null ? gm.balanceConfig.catchAffinityMult : 2f;
-        // 청개구리방울 — 원래 강점 ×3·나머지 공격 속성 ×0.5를 잡기 강제 상성보다 우선 적용 (사용자 확정)
-        bool frogActive = gm.bellManager.HasBell(BellEffectKind.FrogAffinity);
+        // 청개구리방울 — 상성 능력이 있는 보스에서만 의미 있음. 비상성 보스는 '원래 강점'이 없어 적용 불가
+        bool frogActive = gm.bellManager.HasBell(BellEffectKind.FrogAffinity) && affinity != null;
         settlement.affinityMult = frogActive
             ? gm.bellManager.FrogAffinityMult(tile.attribute)
-            : (settlement.caught ? catchForcedAffinity : settlement.actualAffinityMult);
+            : settlement.actualAffinityMult;
         settlement.catchMult = settlement.caught
             ? (gm.balanceConfig != null ? gm.balanceConfig.catchMultiplier : 3f)
             : 1f;
+        settlement.catchBonusMult = settlement.caught
+            ? (gm.balanceConfig != null ? gm.balanceConfig.catchBonusMult : 2f)
+            : 1f;
 
-        // 3) 상성·잡기 단계 기록 — 잡기 여부와 유효 상성 결정 후 생성한다.
-        //    잡기로 상성이 강제 적용됐으면 '잡기 상성 ×2'처럼 이유를 표시. 공격 칸에서만 기록
-        if (settlement.tileScore > 0)
+        // 3) 상성·잡기 단계 기록 — 상성 능력이 있는 보스(또는 청개구리 적용)만 상성 단계를 남긴다.
+        //    비상성 보스는 상성 ×1이라 단계 없음. 잡기는 공격 칸이 아니어도 판정·기록한다
+        if (settlement.attackLanded)
         {
             if (settlement.resultBonusMult != 1f)
             {
                 AddResultBonusStep(settlement.steps, resultBonusName, selected, stat.mult, settlement.resultBonusMult, resultBonusUseId);
             }
-            AddAffinityStep(settlement.steps, tile, stat.mult * settlement.resultBonusMult,
-                settlement.affinityMult, settlement.caught, frogActive);
+            // 상성 단계는 공격 속성(불·물·풀) 착지에서만 — 땅은 상성 대상이 아니다
+            if ((affinity != null || frogActive) &&
+                tile.attribute != TileAttribute.Earth)
+            {
+                AddAffinityStep(settlement.steps, tile, affinity, stat.mult * settlement.resultBonusMult,
+                    settlement.affinityMult, frogActive);
+            }
         }
         if (settlement.caught)
         {
             AddCatchStep(settlement.steps,
                 stat.mult * settlement.resultBonusMult * settlement.affinityMult, settlement.catchMult);
+            AddCatchStep(settlement.steps,
+                stat.mult * settlement.resultBonusMult * settlement.affinityMult * settlement.catchMult,
+                settlement.catchBonusMult, "잡기 보너스");
         }
 
         // 4) 부적 피해 효과 — 조건을 만족한 카드의 최종 피해 배율을 곱셈으로 중첩
@@ -172,7 +187,8 @@ public class ScoreManager
                     applies = settlement.caught;   // 잡기 성공 시에만 최종 피해 추가 배율로 적용
                     break;
                 case TalismanEffectKind.WeaknessStrike:
-                    applies = tile.attribute == gm.bossManager.EnsureAffinity(gm.selectedBossIndex).weak;
+                    // 상성 능력이 없는 보스는 약점이 없다 — 천운부는 조건을 충족하지 않는다 (2026-10-22 확정)
+                    applies = affinity != null && tile.attribute == affinity.weak;
                     break;
                 case TalismanEffectKind.GreedStrike:
                     applies = true;
@@ -216,11 +232,11 @@ public class ScoreManager
             }
         }
 
-        // 재복방울 — 보스 원래 약점 속성 칸으로 공격했으면 판정당 1냥 (정산당 1회 — 연출·스킵으로 중복 지급 없음)
-        // 약점 기준 = 원래 상성 배정 (청개구리 변경 상성 기준 여부는 미확정 — 원래 약점 기준 임시 적용)
-        if (settlement.tileScore > 0 &&
+        // 재복방울 — 보스 약점 속성 칸으로 공격했으면 판정당 1냥 (정산당 1회 — 연출·스킵으로 중복 지급 없음)
+        // 상성 능력이 없는 보스는 약점이 없으므로 수입을 지급하지 않는다 (2026-10-22 확정)
+        if (settlement.attackLanded && affinity != null &&
             gm.bellManager.HasBell(BellEffectKind.GoldOnWeakness) &&
-            tile.attribute == gm.bossManager.EnsureAffinity(gm.selectedBossIndex).weak)
+            tile.attribute == affinity.weak)
         {
             gm.economyManager.AddMoney(Mathf.Max(1, Mathf.RoundToInt(
                 gm.bellManager.ownedBells.Find(b => b.effect == BellEffectKind.GoldOnWeakness)?.growthAmount ?? 1f)));
@@ -258,14 +274,18 @@ public class ScoreManager
             AddInfoStep(settlement.steps, rec.useId, note, runningMult);
         }
 
-        // 5) 이번 투척 점수 확정 + 보스전 총점 1회 합산 — 곱셈(상성·잡기·부적 소수 포함)을 모두 마친 뒤 정수화
+        // 5) D 확정 → 속성 착지 효과 적용 → 총점 1회 합산.
+        //    D = 윷 기본점수 × 윷 배율 × 결과별 부적 × 상성 × 잡기 × 잡기 보너스 × 부적 곱.
+        //    불×1.5·물 연계·풀 도트는 TileEffectManager가 적용하고 물 연속·도트 기록을 갱신한다.
         //    표시용 throwScore 필드는 여기서 갱신하지 않는다 — '투척 점수 표시' 단계에서만 보인다
-        settlement.throwScore = settlement.talismanCancelled
-            ? 0
-            : Mathf.RoundToInt(settlement.finalBasic * settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult * settlement.catchMult * settlement.talismanMult);
+        float preEffectDamage = settlement.talismanCancelled
+            ? 0f
+            : settlement.finalBasic * settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult
+                * settlement.catchMult * settlement.catchBonusMult * settlement.talismanMult;
+        settlement.throwScore = gm.tileEffects.ResolveLandingEffect(tile, preEffectDamage, settlement);
         gm.totalScore += settlement.throwScore;
 
-        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x 상성{settlement.affinityMult} x {settlement.finalMult}{(settlement.resultBonusMult != 1f ? $" x 결과부적{settlement.resultBonusMult}" : "")}{(settlement.caught ? $" x 잡기{settlement.catchMult}" : "")}{(settlement.talismanMult != 1f ? $" x 부적{settlement.talismanMult}" : "")}{(settlement.talismanCancelled ? " → 취소" : "")} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Total: {gm.totalScore}");
+        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x {settlement.finalMult}{(settlement.resultBonusMult != 1f ? $" x 결과부적{settlement.resultBonusMult}" : "")}{(settlement.affinityMult != 1f ? $" x 상성{settlement.affinityMult}" : "")}{(settlement.caught ? $" x 잡기{settlement.catchMult} x 보너스{settlement.catchBonusMult}" : "")}{(settlement.talismanMult != 1f ? $" x 부적{settlement.talismanMult}" : "")}{(settlement.talismanCancelled ? " → 취소" : "")} x 착지{settlement.tileEffectMult} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Total: {gm.totalScore}");
     }
 
     // 저주 계열 결과 처리: 백도와 낙은 별개 결과이며 둘 다 투척 1회 소모
@@ -293,9 +313,10 @@ public class ScoreManager
         // 낙: 획득 점수 0 + 누적 점수 유지 — 추가 처리 없음 (투척 소모·콤보 단절은 위 공통 처리)
     }
 
-    // 보스 상성 단계 기록 — 배율 적용 과정을 정산 기록에 남겨 연출·디버깅에 사용한다
-    private void AddAffinityStep(List<ScoreEffectStep> steps, BoardTile tile, float yutMult,
-        float affinityMult, bool forcedByCatch, bool frogActive)
+    // 보스 상성 단계 기록 — 상성 능력이 있는 보스(또는 청개구리 적용)에서만 호출된다.
+    // 비상성 보스는 상성 ×1로 단계를 남기지 않는다
+    private void AddAffinityStep(List<ScoreEffectStep> steps, BoardTile tile, BossAffinity affinity,
+        float yutMult, float affinityMult, bool frogActive)
     {
         string attrName = BoardManager.AttributeName(tile.attribute);
         string role = gm.bossManager.AffinityRoleName(tile.attribute);
@@ -303,13 +324,11 @@ public class ScoreManager
         {
             source = frogActive ? EffectSourceType.Bell : EffectSourceType.Boss,
             sourceId = frogActive ? "bell_frog" : $"boss{gm.selectedBossIndex}_affinity",
-            // 잡기로 상성이 강제 적용된 경우 이유를 표시 — 원래 상성 배정과 구분
             displayName = frogActive ? $"청개구리방울 — {attrName} 상성 ×{affinityMult}"
-                : forcedByCatch ? $"잡기 상성 ×{affinityMult}" : $"보스 상성 — {attrName} {role}",
-            // 이유 표시: 강제 시 '잡기 상성 ×2', 청개구리 시 변경 상성, 실제 상성은 '약점/강점/일반 상성 ×N'
+                : $"보스 상성 — {attrName} {role}",
+            // 이유 표시: 청개구리는 변경 상성, 실제 상성은 '약점/강점/일반 상성 ×N'
             reasonText = frogActive
-                ? $"청개구리방울 — {(tile.attribute == gm.bossManager.EnsureAffinity(gm.selectedBossIndex).strong ? "강점" : "")} 상성 ×{affinityMult}"
-                : forcedByCatch ? $"잡기 상성 ×{affinityMult}"
+                ? $"청개구리방울 — {(affinity != null && tile.attribute == affinity.strong ? "강점" : "")} 상성 ×{affinityMult}"
                 : (role == "약점" || role == "강점" ? $"{role} 상성 ×{affinityMult}" : $"일반 상성 ×{affinityMult}"),
             target = EffectTarget.Multiplier,
             op = EffectOp.Multiply,
@@ -371,15 +390,17 @@ public class ScoreManager
         });
     }
 
-    // 보스 말 잡기 단계 기록 — 성공 시에만 기록 (실패는 ×1이라 단계 없음)
-    private void AddCatchStep(List<ScoreEffectStep> steps, float effectiveMultBefore, float catchMult)
+    // 보스 말 잡기 단계 기록 — 성공 시에만 기록 (실패는 ×1이라 단계 없음).
+    // label로 잡기 배율(×3)과 별도 잡기 보너스(×2)를 구분해 표시한다
+    private void AddCatchStep(List<ScoreEffectStep> steps, float effectiveMultBefore, float catchMult,
+        string label = "보스 말 잡기")
     {
         steps.Add(new ScoreEffectStep
         {
             source = EffectSourceType.Boss,
             sourceId = $"boss{gm.selectedBossIndex}_catch",
-            displayName = "보스 말 잡기",
-            reasonText = $"보스말 잡기 ×{catchMult}",
+            displayName = label,
+            reasonText = $"{label} ×{catchMult}",
             target = EffectTarget.Multiplier,
             op = EffectOp.Multiply,
             opValue = (int)catchMult,

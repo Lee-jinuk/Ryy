@@ -33,15 +33,27 @@ public enum TalismanEffectKind
     WeaknessStrike,  // 천운부 — 약점 속성 칸 착지 시 최종 피해 ×value (약점 상성과 별도)
     AllOrNothing,    // 승부부 — 남은 재투척 전부 포기 → 최종 피해 ×value
     MoveDelta,       // 진격부·후퇴부 — 이번 투척 이동 거리 ±value (윷 배율·결과 미변경)
-    ResultBonus      // 일도부~모령부 — 다음 재투척의 전체 결과 = targetResult이고 최종 결과도 같으면 그 윷 배율 ×value
+    ResultBonus,     // 일도부~모령부 — 다음 재투척의 전체 결과 = targetResult이고 최종 결과도 같으면 그 윷 배율 ×value
+    WaterComboKeep,  // 수룡부 — 이번 턴 물 외 착지에도 물 연속 기록 유지 + 현재 물 연계 배율 적용 (사용자 확정)
+    ForestDotBoost,  // 초목부 — 이번 풀 착지로 등록·증가되는 도트량 ×value (사용자 확정)
+    CatchWiden,      // 포위부 — 이번 턴 보스와 같은 칸 또는 전후 range칸 착지도 잡기 성공
+    MoveAdjust,      // 환위부 — 투척 후 확정 전 이동 거리 +1/−1 선택 보정 (백색 부적)
+    NextTurnProbBoost, // 도걸부·모윷부 — 다음 차례 최초 투척의 면 조합 추첨에서 targetResult·targetResult2 결과 조합에 가중치 ×value
+    BoardReshuffle,  // 역행부 — 말판 속성 배치를 새로 섞기 (말 위치·상태 유지)
+    BossMoveReduce,  // 족쇄부 — 사용 차례 포함 duration턴 보스 이동 거리 −value (족쇄방울과 합산)
+    ProximityBaseBoost, // 추적부 — 사용 차례 포함 duration턴 보스와 전후 range칸 이내 착지 시 윷 기본점수 ×value
+    NoRerollBaseBoost,  // 고집부 — 사용 차례 포함 duration턴 재투척 미사용 차례 공격의 윷 기본점수 ×value
+    TriAttributeCombo,  // 삼재부 — 사용 차례 포함 duration턴 불·물·풀 수집 완성 시 세 번째 착지 최종 피해 ×value
+    PrevResultMatch,    // 윤회부 — 이번 투척 최종 결과 = 직전 차례 최종 결과이면 최종 피해 ×value
+    ResultGamble        // 도박부 — 선택한 윷 결과와 최종 확정 결과 일치 시 이번 보스전 윷 배율 ×value
 }
 
 // 카드 사용 가능 시점 — 코드가 아닌 카드 데이터로 판정한다.
-// 현재는 최초 던지기 전(준비 단계)만 확정. 신규 시점(최초 투척 후 등)은
-// 사용자 확정 후 여기에 값을 추가하고 TalismanManager의 사용 판정을 확장한다.
+// 신규 시점은 끝에만 추가한다 — 기존 값의 숫자가 바뀌면 직렬화된 카드가 깨진다.
 public enum TalismanUseTiming
 {
-    BeforeFirstThrow,   // 최초 던지기 전 준비 단계에서만 사용 가능 (현재 전 카드)
+    BeforeFirstThrow,       // 최초 던지기 전 준비 단계에서만 사용 가능
+    AfterRollBeforeConfirm, // 최초 투척 후~확정 전 — 재투척 전·사이·소진 후에도 가능 (환위부, 사용자 확정)
 }
 
 // 카드 외형 분류 — 노란 부적·하얀 부적. 표시 구분용 데이터이며
@@ -76,8 +88,20 @@ public class TalismanData
     // 비조건 카드에서는 무시된다.
     public TileAttribute attribute;
 
-    // 결과별 부적(일도부~모령부)의 목표 윷 결과 — ResultBonus 종류에서만 사용
+    // 결과별 부적(일도부~모령부)의 목표 윷 결과 — ResultBonus 종류에서만 사용.
+    // 도걸부·모윷부(NextTurnProbBoost)의 첫 번째 목표 결과로도 사용
     public YutResult targetResult;
+
+    // 두 번째 목표 윷 결과 — 도걸부·모윷부(NextTurnProbBoost) 전용
+    // (도걸부 = 도+걸, 모윷부 = 모+윷). 다른 종류에서는 무시
+    public YutResult targetResult2;
+
+    // 지속 턴 수 — 족쇄부(3)·추적부(2)·고집부(3)·삼재부(3)의 유효 기간.
+    // 사용 차례를 1턴으로 센다 (사용자 확정). 0이면 지속 효과 없음
+    public int duration;
+
+    // 거리 조건 — 포위부(1)·추적부(2)의 보스 기준 전후 칸 범위. 다른 종류에서는 무시
+    public int range;
 
     // 덱 포함 여부 — false이면 카드 정의는 유지하되 새 런의 덱·선택 후보·획득 경로에서 제외된다
     public bool includeInDeck = true;

@@ -13,123 +13,171 @@ MonoBehaviour:
   m_Name: BellDatabase
   m_EditorClassIdentifier: 
   bells:
-  - bellId: b_dokkaebi
-    bellName: "도깨비방울"
-    description: "도를 최종 확정할 때마다 도의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+  - bellId: b_dogeol
+    bellName: "도걸방울"
+    description: "도 또는 걸을 최종 확정할 때마다 그 결과의 기본 배율이 +0.5 성장한다. 두 결과 합산 5회 발동 후 소멸한다."
     effect: 1
     targetResult: 1
+    targetResult2: 3
     targetAttribute: 0
     growthAmount: 0.5
-    useLimit: 5
-    buyPrice: 20
-    sellPrice: 10
-    effectEnabled: 1
-  - bellId: b_gaehwa
-    bellName: "개화방울"
-    description: "개를 최종 확정할 때마다 개의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
-    effect: 1
-    targetResult: 2
-    targetAttribute: 0
-    growthAmount: 0.5
-    useLimit: 5
-    buyPrice: 20
-    sellPrice: 10
-    effectEnabled: 1
-  - bellId: b_geoleum
-    bellName: "걸음방울"
-    description: "걸을 최종 확정할 때마다 걸의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
-    effect: 1
-    targetResult: 3
-    targetAttribute: 0
-    growthAmount: 0.5
+    chance: 0
     useLimit: 5
     buyPrice: 20
     sellPrice: 10
     effectEnabled: 1
   - bellId: b_yutryeong
     bellName: "윷령방울"
-    description: "윷을 최종 확정할 때마다 윷의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    description: "윷 또는 모를 최종 확정할 때마다 그 결과의 기본 배율이 +0.5 성장한다. 두 결과 합산 5회 발동 후 소멸한다."
     effect: 1
     targetResult: 4
+    targetResult2: 5
     targetAttribute: 0
     growthAmount: 0.5
-    useLimit: 5
-    buyPrice: 20
-    sellPrice: 10
-    effectEnabled: 1
-  - bellId: b_moryeong
-    bellName: "모령방울"
-    description: "모를 최종 확정할 때마다 모의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
-    effect: 1
-    targetResult: 5
-    targetAttribute: 0
-    growthAmount: 0.5
+    chance: 0
     useLimit: 5
     buyPrice: 20
     sellPrice: 10
     effectEnabled: 1
   - bellId: b_hwaryeong
     bellName: "화령방울"
-    description: "불 속성 칸에 최종 착지할 때마다 불 속성 전체의 기본 공격력이 +5 성장한다. 10회 발동 후 소멸한다."
-    effect: 2
+    description: "불 속성 칸에 최종 착지할 때마다 불 착지 배율이 +0.5 성장한다. 성장분은 발동한 이번 공격부터 적용된다. 5회 발동 후 소멸한다."
+    effect: 7
     targetResult: 0
+    targetResult2: 0
     targetAttribute: 1
-    growthAmount: 5
-    useLimit: 10
+    growthAmount: 0.5
+    chance: 0
+    useLimit: 5
     buyPrice: 20
     sellPrice: 10
     effectEnabled: 1
   - bellId: b_suryeong
     bellName: "수령방울"
-    description: "물 속성 칸에 최종 착지할 때마다 물 속성 전체의 기본 공격력이 +5 성장한다. 10회 발동 후 소멸한다."
-    effect: 2
+    description: "새 물 연계를 시작할 때마다 끊김 방어 1회를 제공한다. 물 연계 도중 물 외 속성 착지 시 방어를 사용해 연속 기록을 보존한다(횟수 미증가, 칸 자체 효과는 정상 적용)."
+    effect: 8
     targetResult: 0
+    targetResult2: 0
     targetAttribute: 2
-    growthAmount: 5
-    useLimit: 10
+    growthAmount: 0
+    chance: 0
+    useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 1
+    effectEnabled: 0
   - bellId: b_mogryeong
     bellName: "목령방울"
-    description: "풀 속성 칸에 최종 착지할 때마다 풀 속성 전체의 기본 공격력이 +5 성장한다. 10회 발동 후 소멸한다."
-    effect: 2
+    description: "정상 풀 도트 지급 시 20% 확률로 도트를 한 번 더 지급한다."
+    effect: 9
     targetResult: 0
+    targetResult2: 0
     targetAttribute: 3
-    growthAmount: 5
-    useLimit: 10
+    growthAmount: 0
+    chance: 0.2
+    useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 1
+    effectEnabled: 0
   - bellId: b_jokswae
     bellName: "족쇄방울"
     description: "보유하는 동안 보스 말의 이동 거리가 1칸 줄어든다. 이동 거리는 최소 1칸이다."
     effect: 3
     targetResult: 0
+    targetResult2: 0
     targetAttribute: 0
     growthAmount: 0
-    useLimit: 0
-    buyPrice: 20
-    sellPrice: 10
-    effectEnabled: 1
-  - bellId: b_frog
-    bellName: "청개구리방울"
-    description: "보유하는 동안 보스의 원래 강점 속성 상성이 ×3, 나머지 공격 속성은 ×0.5가 된다. 잡기 강제 상성보다 우선한다."
-    effect: 4
-    targetResult: 0
-    targetAttribute: 0
-    growthAmount: 0
+    chance: 0
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
     effectEnabled: 1
   - bellId: b_cheonun
     bellName: "천운방울"
-    description: "개별 재투척 시 일정 확률로 재투척 기회를 소모하지 않는다. (확률 미확정 — 현재 비활성)"
+    description: "개별 재투척 실행 시 7% 확률로 재투척 기회를 소모하지 않는다."
     effect: 5
     targetResult: 0
+    targetResult2: 0
     targetAttribute: 0
     growthAmount: 0
+    chance: 0.07
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 0
+  - bellId: b_jiryeong
+    bellName: "지령방울"
+    description: "땅 칸에 최종 착지해 정산할 때마다 +3냥을 얻는다."
+    effect: 10
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 4
+    growthAmount: 3
+    chance: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 0
+  - bellId: b_dokkaebi
+    bellName: "도깨비방울"
+    description: "도를 최종 확정할 때마다 도의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    effect: 1
+    targetResult: 1
+    targetResult2: 0
+    targetAttribute: 0
+    growthAmount: 0.5
+    chance: 0
+    useLimit: 5
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 0
+  - bellId: b_gaehwa
+    bellName: "개화방울"
+    description: "개를 최종 확정할 때마다 개의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    effect: 1
+    targetResult: 2
+    targetResult2: 0
+    targetAttribute: 0
+    growthAmount: 0.5
+    chance: 0
+    useLimit: 5
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 0
+  - bellId: b_geoleum
+    bellName: "걸음방울"
+    description: "걸을 최종 확정할 때마다 걸의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    effect: 1
+    targetResult: 3
+    targetResult2: 0
+    targetAttribute: 0
+    growthAmount: 0.5
+    chance: 0
+    useLimit: 5
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 0
+  - bellId: b_moryeong
+    bellName: "모령방울"
+    description: "모를 최종 확정할 때마다 모의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
+    effect: 1
+    targetResult: 5
+    targetResult2: 0
+    targetAttribute: 0
+    growthAmount: 0.5
+    chance: 0
+    useLimit: 5
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 0
+  - bellId: b_frog
+    bellName: "청개구리방울"
+    description: "보유하는 동안 보스의 원래 강점 속성 상성이 ×3, 나머지 공격 속성은 ×0.5가 된다. 잡기 강제 상성보다 우선한다."
+    effect: 4
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 0
+    growthAmount: 0
+    chance: 0
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
@@ -139,9 +187,11 @@ MonoBehaviour:
     description: "보스의 원래 약점 속성 칸으로 공격할 때마다 1냥을 얻는다."
     effect: 6
     targetResult: 0
+    targetResult2: 0
     targetAttribute: 0
     growthAmount: 1
+    chance: 0
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 1
+    effectEnabled: 0

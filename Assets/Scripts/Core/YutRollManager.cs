@@ -10,13 +10,15 @@ public class YutProbabilityEntry
 }
 
 // 윷 결과별 영구 스탯 — 주술 등으로 런타임에 강화하면 다음 투척부터 적용
-// basicBonus: 윷별 베이직 강화치 — 현재 공격 공식(칸 공격점수 × 윷 배율)에는 미적용, 강화 API 예약용
+// baseScore: 윷 기본점수 — 공격 공식의 출발점 (점수제 전환, 2026-10-22 확정).
+// basicBonus: 예약 필드 — 의미 변경 없이 보존 (현재 미적용)
 [System.Serializable]
 public class YutStatEntry
 {
     public YutResult result;
     public int basicBonus;
-    public float mult;   // 방울 성장(+0.5) 지원을 위한 소수 배율 — 정수화는 정산 마지막에 1회만
+    public int baseScore;   // 윷 기본점수 — 도20/개30/걸30/윷50/모60 (GameBalanceConfig 편집)
+    public float mult;      // 윷 기본 배율 — 방울 성장(+0.5) 지원을 위한 소수 배율 — 정수화는 정산 마지막에 1회만
 }
 
 // 윷 투척과 확률 담당 — 윷 4개 투척 세션(면 조합·재투척), 기본/런타임 확률 관리(예약 API),
@@ -138,6 +140,7 @@ public class YutRollManager
                 {
                     result = entry.result,
                     basicBonus = entry.basicBonus,
+                    baseScore = entry.baseScore,
                     mult = entry.mult,
                 };
             }

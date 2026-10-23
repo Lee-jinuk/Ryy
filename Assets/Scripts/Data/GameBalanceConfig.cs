@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
 // GameBalanceConfig.cs — 게임 밸런스 설정 에셋
-// 기본 투척 횟수·윷 배율·보스 이동 단계 범위의 단일 기준.
+// 기본 투척 횟수·윷 기본점수/배율·속성 착지 효과·보스 이동 단계 범위의 단일 기준.
 // 런 중 윷 강화는 복사된 런타임 스탯에만 적용된다 — 원본 미변경.
 // 에셋 생성: Assets 우클릭 → Create → RYY → Game Balance Config
 // ──────────────────────────────────────────────
@@ -12,25 +12,33 @@ public class GameBalanceConfig : ScriptableObject
 {
     public int maxThrows = 5;                 // 보스전 기본 투척 횟수
 
-    // 윷별 스탯 — mult가 배율(도4/개3/걸4/윷9/모9).
-    // basicBonus는 현재 공격 공식에 미적용(예약 필드)
+    // 윷별 스탯 — baseScore가 공격 출발점(도20/개30/걸30/윷50/모60), mult가 배율(도6/개3/걸4/윷6/모5).
+    // basicBonus는 예약 필드 — 의미 변경 없이 보존 (현재 미적용)
     public List<YutStatEntry> yutStats = new List<YutStatEntry>
     {
-        new YutStatEntry { result = YutResult.Do,   basicBonus = 0, mult = 4 },
-        new YutStatEntry { result = YutResult.Gae,  basicBonus = 0, mult = 3 },
-        new YutStatEntry { result = YutResult.Geol, basicBonus = 0, mult = 4 },
-        new YutStatEntry { result = YutResult.Yut,  basicBonus = 0, mult = 9 },
-        new YutStatEntry { result = YutResult.Mo,   basicBonus = 0, mult = 9 },
+        new YutStatEntry { result = YutResult.Do,   basicBonus = 0, baseScore = 20, mult = 6 },
+        new YutStatEntry { result = YutResult.Gae,  basicBonus = 0, baseScore = 30, mult = 3 },
+        new YutStatEntry { result = YutResult.Geol, basicBonus = 0, baseScore = 30, mult = 4 },
+        new YutStatEntry { result = YutResult.Yut,  basicBonus = 0, baseScore = 50, mult = 6 },
+        new YutStatEntry { result = YutResult.Mo,   basicBonus = 0, baseScore = 60, mult = 5 },
     };
+
+    // 속성 착지 효과 — 말판 기본공격점수 제거 후 착지 효과로 전환 (2026-10-22 확정)
+    public float fireTileMult = 1.5f;         // 불 착지 — 부적·방울 반영 후 피해에 ×1.5
+    // 물 착지 — 최종 착지 연속 횟수별 배율 (1회 ×1 / 2회 ×2 / 3회 ×4 / 4회 ×8 / 5회 ×16).
+    // 목록을 넘는 횟수는 마지막 배율로 고정 — 6회 이상 수치는 미확정이라 확장하지 않는다
+    public List<float> waterComboMults = new List<float> { 1f, 2f, 4f, 8f, 16f };
+    public float forestDotInitialPercent = 20f; // 풀 최초 도트 등록 — 이번 공격 피해의 20% (등록 시 반올림)
+    public float forestDotAddPercent = 5f;      // 풀 도트 추가 — 도트 보유 시 이번 공격 피해의 5%를 기존 도트에 합산
 
     // 누적 피해 비율 단계별 보스 이동 범위 — 단계 i는 피해 ≥ 최대 HP의 i/N
     // (기본 3단계: <1/3 → 4~7 / ≥1/3 → 3~6 / ≥2/3 → 2~5). 두 배열 길이는 같아야 함
     public int[] bossMoveStageMin = { 4, 3, 2 };
     public int[] bossMoveStageMax = { 7, 6, 5 };
 
-    // 보스 말 잡기 (사용자 확정): 잡기 성공 시 잡기 배율 ×3 + 이번 정산의 유효 상성을 ×2로 고정.
-    // 잡기 실패 시에는 실제 상성과 잡기 배율 ×1 적용. 원래 약점·강점 배정 자체는 바뀌지 않는다 —
-    // 속성 부적·천운부는 여전히 실제 착지 속성/실제 약점을 검사한다
+    // 보스 말 잡기 (사용자 확정): 잡기 성공 시 잡기 배율 ×3 + 별도 잡기 보너스 ×2 = 총 ×6.
+    // 상성 시스템과 분리된 보너스 — 상성 능력이 없는 보스에게도 동일하게 적용된다 (2026-10-22 확정).
+    // 추혼부는 잡기 배율을 대체하지 않고 추가 ×4 — 부적 배율 곱셈에 포함
     public float catchMultiplier = 3f;      // 잡기 성공 시 잡기 배율
-    public float catchAffinityMult = 2f;    // 잡기 성공 시 강제 적용되는 상성 배율
+    public float catchBonusMult = 2f;       // 잡기 성공 시 별도 잡기 보너스 배율 (구 catchAffinityMult 대체 — 상성과 무관)
 }

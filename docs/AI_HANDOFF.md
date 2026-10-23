@@ -6,9 +6,109 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ## [2026-10-20 오후 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-21 오전 (22차) 변경사항 요약 - 사용자 지시 / Devin 구현]
+[2026-10-22 오후 (31차) 변경사항 요약 - 사용자 지시 / Devin 구현]
 
-★ 최신 — 방울 UI 고정 슬롯 전환 + 상점 리프레시 (사용자 확정):
+★ 최신 — 환위부 선택 완료 불가 버그 수정 (규칙 변경 없음):
+- ChooseMoveAdjust가 CanUseAfterRoll의 isChoosingMoveAdjust 검사에
+  걸려 열린 선택창의 +1/−1이 항상 거부되던 문제 수정 —
+  개시 판정과 완료 판정 분리, delta ±1 검증 추가
+- YutGameManager에 rollButton(Button) 필드 신규 — Inspector에서
+  '윷 던지기' 버튼을 Roll Button에 연결해야 표시상 활성과 실제
+  입력 차단이 일치 (미연결 시 무시)
+- 검증: build 0·0. Unity Play 대기
+
+[이전] 2026-10-22 오후 (30차) — 방울 8종 전환 1단계 (4단계 중 1단계, 사용자 검토 후 2단계):
+- 상점 후보 8종 목표: 도걸·윷령·화령·수령·목령·족쇄·천운·지령.
+  1단계 시점 활성 = 도걸·윷령·화령·족쇄 4종 — 수령·목령·천운·
+  지령은 정의 준비·비활성(단계 구현 대기)
+- 도걸·윷령 = 쌍 결과 공유 한도(targetResult2), 화령 = 불 착지
+  배율 런타임 성장분 attrMultBonus — 설정 원본 미변경,
+  소멸·판매·보스 전환 후 성장 유지·새 런 초기화
+- 미확정: 수룡부 × 수령방울 중첩 — 사용자 결정 대기
+- 검증: build 0·0. Unity Play 대기
+
+[이전] 2026-10-22 오후 (29차) — 부적 20종 전환 2단계 (환위부 백색·±1 선택):
+- 환위부 = AfterRollBeforeConfirm 사용 시점 — 최초 투척 후~
+  확정 전(재투척 전·사이·소진 후 가능)에만 손패 버튼 활성
+- moveAdjustPanel 신규 필드 — +1/−1/취소 버튼을 사용자가 배치,
+  ChooseMoveAdjustPlus·Minus·CancelMoveAdjust OnClick 연결
+- 선택 확정 전 카드 미소모 — ChooseMoveAdjust에서 재검증 후
+  session.moveDelta 합산·소멸. 선택창 열린 동안 투척·재투척·
+  확정 차단 (isChoosingMoveAdjust)
+- 활성 덱 8종. 검증: build 0·0, Unity Play 대기
+
+[이전] 2026-10-22 오후 (28차) — 부적 20종 전환 1단계 (데이터·확정 수치):
+- TalismanEffectKind 끝에 12종 추가·AfterRollBeforeConfirm
+  사용 시점 추가·TalismanData에 targetResult2/duration/range 필드
+- 에셋: 화염부×3·탐욕부×1.5·승부부×1.5, 신규 11종 정의
+  추가(포위·환위·도걸·모윷·역행·족쇄·추적·고집·삼재·윤회·도박).
+  수룡부·초목부는 새 효과 enum으로 전환하되 미구현 → 비활성.
+  진격·후퇴·윷령·모령·천운부 덱 제외(정의 보존)
+- 현재 활성 7종 / 정의 28종. 해석 9건 사용자 확정(문서 참조)
+- 검증: build 0·0. 다음: 2단계 환위부 — 사용자 검토 후 진행
+
+[이전] 2026-10-22 오후 (27차) — 풀 도트 지급 시점 수정:
+- 도트는 정산 종료/선택창 종료 시 지급하지 않고, 다음 차례
+  정상 접수된 최초 던지기(RollYut 검사 통과 후)에서 투척·보스
+  이동 전 차례당 1회 지급 — dotPaidThisTurn 플래그로 중복 방지
+- 도트 처치 시 즉시 클리어·투척 미소모·보스 이동 없음 유지.
+  FinishPresentation/ConfirmChoice의 즉시 틱 호출 제거
+- 검증: build 0·0. Unity Play 대기 — 지급 시점·중복 없음 확인
+
+[이전] 2026-10-22 오후 (26차) — 능력치 정보판 줄바꿈:
+- currentYutStatsText·currentAttributeStatsText 항목 구분을
+  " / " → 줄바꿈(\n)으로 변경 — 윷 5행·속성 3행 세로 표시.
+  수치·계산·Inspector 연결 변경 없음
+- 검증: build 0·0. Unity Play 대기 — 줄 표시 확인
+
+[이전] 2026-10-22 오전 (25차) — 부적 덱·손패 보스전 단위 + 땅 착지 공격 허용:
+- 부적 덱·손패 = 매 보스전 새로 구성 (런 단위 폐기) —
+  BeginBossFight에서 talismanManager.ResetForBoss().
+  이전 손패·사용·소멸 카드는 다음 보스 새 덱에 복귀,
+  includeInDeck=0 카드는 계속 제외.
+  소개·상점·건너뛰기에서는 초기화 없음
+- 땅 착지 = 공격 허용 (추가 배율 ×1, 윷 기반 D 그대로) +
+  기존 부적 3택1 유지. START·쇠만 공격 0.
+  땅은 상성·속성 전용 부적 대상 아님, 물 연속 초기화·도트 없음
+- 검증: build 0·0. Unity Play 대기 — 땅 공격·새 덱 복귀 확인
+
+[이전] 2026-10-22 오전 (24차) — 점수제·속성 말판 전환 + 보스 상성 선택:
+
+★ 최신 — 점수제·속성 말판 전환 + 보스 상성 선택 적용:
+- 윷 기본점수 도입: 도20×6/개30×3/걸30×4/윷50×6/모60×5
+  (YutStatEntry.baseScore, basicBonus 예약 보존).
+  칸 공격점수·속성 공격력 성장은 공격 합산에서 제거
+- 공식: D = 윷점수×윷배율×결과부적×상성(능력 보스만)×잡기
+  ×잡기보너스×부적곱 → 속성 착지 효과가 최종 피해
+- 보스 상성 = 선택 능력(BossData.useAffinity + 데이터 지정
+  속성·배율) — 무작위 생성 삭제, 현재 전 보스 비활성
+- TileEffectManager 신규 — 불×1.5/물 연속(1·2·4·8·16, 보스전
+  단위)/풀 도트(최초20%+5%, 등록 시 반올림, 차례 시작 틱,
+  도트 처치 즉시 클리어)
+- 잡기 = ×3 + 별도 보너스 ×2 (catchBonusMult, 상성 무관).
+  땅·START·쇠 공격 0 유지
+- 방울 상점 제외: 화령·수령·목령·청개구리 (effectEnabled:0,
+  정의 보존). 천운부·재복방울은 상성 없는 보스에서 미발동
+- 정보판: 윷 "도 20 ×6", 속성 "불 ×1.5/물 N연속/풀 도트".
+  비상성 보스 상성 목록 숨김
+- 검증: build 0·0. Unity Play 대기 — 수치·도트·비상성 확인
+
+[이전] 2026-10-21 오전 (23차) — 능력치 정보판 + 보스 클리어 금전 보상
+(사용자 확정):
+- 정보판 필드 2개: currentYutStatsText(도·개·걸·윷·모 현재 기본
+  배율, 소수 지원)·currentAttributeStatsText(불·물·풀 기본
+  공격력+런 성장). 기본값 경로 = YutBoard.BaseAttackScore —
+  정산과 표시 동일 계산, 상성·잡기·부적 배율 미합산
+- 클리어 보상 = 기본 10냥 + 남은 기본 투척 × 5냥 (ShopConfig
+  bossClearBaseReward/bossClearPerThrowReward). 보스전당 1회 —
+  EconomyManager.GrantBossClearReward, BeginBossFight에서 리셋.
+  게임오버·건너뛰기 미지급, 마지막 보스 동일
+- Inspector 작업: GamePanel에 Legacy Text 2개 배치 후 두 필드 연결
+- 검증: build 0·0. Unity Play 대기 — 수치 표시·성장 갱신·
+  보상 수열(30/20/10)·중복 지급 없음 확인 필요
+
+[이전] 2026-10-21 오전 (22차) — 방울 UI 고정 슬롯 전환 + 상점 리프레시
+(사용자 확정):
 - BellSlotUI 신규 — 이름/설명/상태 Text + 행동 Button 명시
   참조. Bind로 리스너 교체(누적 없음), Clear로 빈 칸
 - 고정 슬롯 3그룹: equipBellSlots[4](전투)/

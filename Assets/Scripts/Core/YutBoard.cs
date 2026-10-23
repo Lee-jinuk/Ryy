@@ -12,11 +12,8 @@ public class BoardTile
     public int index;                    // 고유 인덱스 0~29
     public TileAttribute attribute;
 
-    // 기본 공격점수 — 불·물·풀만 50, START·땅·쇠는 0
-    public int AttackScore =>
-        attribute == TileAttribute.Fire || attribute == TileAttribute.Water || attribute == TileAttribute.Forest
-            ? 50
-            : 0;
+    // 기본 공격점수 — 불·물·풀만 50, START·땅·쇠는 0. 계산 기준은 YutBoard.BaseAttackScore로 통일
+    public int AttackScore => YutBoard.BaseAttackScore(attribute);
 }
 
 // 30칸 원형 말판 상태 — 속성 배치·말 위치·완주 횟수를 관리.
@@ -25,6 +22,13 @@ public class BoardTile
 public class YutBoard
 {
     public const int TileCount = 30;
+
+    // 속성별 기본 공격점수 — 불·물·풀 50, START·땅·쇠 0.
+    // 정산(ScoreManager의 칸 점수)과 표시(능력치 정보판)가 이 값을 공용으로 사용한다
+    public static int BaseAttackScore(TileAttribute attribute) =>
+        attribute == TileAttribute.Fire || attribute == TileAttribute.Water || attribute == TileAttribute.Forest
+            ? 50
+            : 0;
 
     public List<BoardTile> tiles = new List<BoardTile>();
     public bool layoutGenerated;   // 이번 런의 배치 생성 완료 여부 — ResetForNewRun에서 리셋

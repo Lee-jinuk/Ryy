@@ -35,6 +35,13 @@ public class BellManager
         { TileAttribute.Fire, 0 }, { TileAttribute.Water, 0 }, { TileAttribute.Forest, 0 },
     };
 
+    // 속성별 런타임 착지 배율 성장값 — GameBalanceConfig.fireTileMult 등 원본과 분리된 런 상태.
+    // 화령방울(AttrMultGrowth)이 쌓는 성장분 — 방울 소멸·판매 후에도 런 종료까지 유지 (사용자 확정)
+    public readonly Dictionary<TileAttribute, float> attrMultBonus = new Dictionary<TileAttribute, float>
+    {
+        { TileAttribute.Fire, 0f }, { TileAttribute.Water, 0f }, { TileAttribute.Forest, 0f },
+    };
+
     public BellManager(YutGameManager gm)
     {
         this.gm = gm;
@@ -54,6 +61,10 @@ public class BellManager
     public int GetAttrAttackBonus(TileAttribute attr) =>
         attrAttackBonus.TryGetValue(attr, out int bonus) ? bonus : 0;
 
+    // 속성의 런타임 성장 착지 배율 — 설정 기본 배율에 더해 정산·표시에 사용 (화령방울 성장분)
+    public float GetAttrMultBonus(TileAttribute attr) =>
+        attrMultBonus.TryGetValue(attr, out float bonus) ? bonus : 0f;
+
     // 방울 획득 — 상점 구매의 유일한 경로. 장착 한도·중복 종류는 여기서 차단 (호출 전 가격 검사 별도)
     public bool TryAddBell(BellData data)
     {
@@ -69,8 +80,10 @@ public class BellManager
             description = data.description,
             effect = data.effect,
             targetResult = data.targetResult,
+            targetResult2 = data.targetResult2,
             targetAttribute = data.targetAttribute,
             growthAmount = data.growthAmount,
+            chance = data.chance,
             remainingUses = data.useLimit > 0 ? data.useLimit : -1,   // -1 = 지속형(한도 없음)
             sellPrice = data.sellPrice,
         });
@@ -116,8 +129,10 @@ public class BellManager
             switch (bell.effect)
             {
                 case BellEffectKind.YutMultGrowth:
-                    // 해당 결과를 최종 확정한 이번 공격부터 대상 윷 런타임 배율 +성장량
-                    if (bell.targetResult != result)
+                    // 대상 결과(최대 2종 — 도걸방울은 도·걸, 윷령방울은 윷·모)를 최종 확정한
+                    // 이번 공격부터 그 결과의 런타임 배율 +성장량. 두 결과는 합산 발동 횟수를 공유한다
+                    if (bell.targetResult != result &&
+                        (bell.targetResult2 == YutResult.BackDo || bell.targetResult2 != result))
                     {
                         continue;
                     }
@@ -155,6 +170,27 @@ public class BellManager
                         });
                     }
                     break;
+                case BellEffectKind.AttrMultGrowth:
+                    // 화령방울 — 최종 착지 칸의 속성 착지 배율 +성장량 (런타임 성장분, 설정 원본 미변경).
+                    // 성장한 이번 공격부터 반영 — ApplyGrowth는 데미지 계산 전에 호출된다 (사용자 확정)
+                    if (bell.targetAttribute != tile.attribute ||
+                        !attrMultBonus.ContainsKey(tile.attribute))
+                    {
+                        continue;
+                    }
+                    {
+                        float before = attrMultBonus[tile.attribute];
+                        attrMultBonus[tile.attribute] += bell.growthAmount;
+                        triggers.Add(new GrowthTrigger
+                        {
+                            bellName = bell.bellName,
+                            note = $"{bell.bellName} — {BoardManager.AttributeName(tile.attribute)} 배율 +{bell.growthAmount}",
+                            isBasic = false,
+                            before = before,
+                            after = attrMultBonus[tile.attribute],
+                        });
+                    }
+                    break;
                 default:
                     continue;   // 지속형·비활성 방울은 성장 평가 대상이 아니다
             }
@@ -172,7 +208,7 @@ public class BellManager
     }
 
     // 청개구리방울 유효 상성 — 원래 강점 속성 ×3, 나머지 공격 속성 ×0.5.
-    // 잡기 강제 상성(catchAffinityMult)보다 우선한다 (사용자 확정). 비공격 속성은 ×1
+    // 상성 능력이 없는 보스는 '원래 강점'이 없으므로 적용하지 않는다 (2026-10-22 — 상점 후보 제외됨)
     public float FrogAffinityMult(TileAttribute attribute)
     {
         if (attribute != TileAttribute.Fire && attribute != TileAttribute.Water &&
@@ -180,7 +216,12 @@ public class BellManager
         {
             return 1f;
         }
-        return attribute == gm.bossManager.EnsureAffinity(gm.selectedBossIndex).strong ? 3f : 0.5f;
+        BossAffinity affinity = gm.bossManager.GetAffinity(gm.selectedBossIndex);
+        if (affinity == null)
+        {
+            return 1f;
+        }
+        return attribute == affinity.strong ? 3f : 0.5f;
     }
 
     // 런 초기화 — 보유 방울·성장·인스턴스 카운터 전부 정리
@@ -191,5 +232,8 @@ public class BellManager
         attrAttackBonus[TileAttribute.Fire] = 0;
         attrAttackBonus[TileAttribute.Water] = 0;
         attrAttackBonus[TileAttribute.Forest] = 0;
+        attrMultBonus[TileAttribute.Fire] = 0f;
+        attrMultBonus[TileAttribute.Water] = 0f;
+        attrMultBonus[TileAttribute.Forest] = 0f;
     }
 }

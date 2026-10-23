@@ -3,6 +3,8 @@ using UnityEngine;
 
 // 보스 데이터 — 이름·HP·특수능력 수치를 데이터로 분리해 보스별 다른 능력 추가에 대비
 // 참고: nakBonusPercent(낙 +N%p)는 신규 윷 4개 면 조합 방식에 적용 불가 — 새 작동 방식 미확정
+// 상성 = 보스별 선택 능력 (2026-10-22 확정) — useAffinity가 true인 보스만 약점·강점이 있고,
+// 비활성 보스는 모든 공격 상성 ×1. 비활성 보스에게 자동 상성을 생성하지 않는다
 [System.Serializable]
 public class BossData
 {
@@ -10,15 +12,21 @@ public class BossData
     public int maxHP = 1000;                    // 목표 점수 = 보스 최대 HP
     [TextArea] public string abilityDescription = "낙 확률 +2%p";
     public float nakBonusPercent = 2f;          // 보스 능력 수치 (신규 투척 방식 미적용 — 미확정)
+
+    // 상성 능력 — 선택적 보스 능력. 어떤 보스에 적용할지는 미확정: 현재 전 보스 비활성
+    public bool useAffinity;                    // 상성 능력 사용 여부 — false면 약점·강점 없이 상성 ×1
+    public TileAttribute affinityWeak;          // 약점 속성 (불·물·풀 중 — 강점과 달라야 함)
+    public TileAttribute affinityStrong;        // 강점 속성
+    public float affinityWeakMult = 2f;         // 약점 상성 배율
+    public float affinityStrongMult = 0.5f;     // 강점 상성 배율
 }
 
-// 런타임 보스 상성 — 불·물·풀 3속성이 기본/약점/강점 역할을 중복 없이 하나씩 맡는다
-// 보스별로 런당 1회 생성해 유지한다. 원본 BossData에는 저장하지 않는다 (런 종료 시 소멸)
+// 보스 상성 조회 결과 — 활성 보스의 데이터로 구성된다 (런타임 무작위 생성 없음)
 public class BossAffinity
 {
-    public TileAttribute normal;   // 기본 100%
-    public TileAttribute weak;     // 약점 200%
-    public TileAttribute strong;   // 강점 50%
+    public TileAttribute normal;   // 기본 100% — 약점·강점이 아닌 나머지 공격 속성
+    public TileAttribute weak;     // 약점
+    public TileAttribute strong;   // 강점
 }
 
 // 보스와 관문 담당 — 보스 데이터 접근, 보스 소개 화면 정보(순차 소개·건너뛰기), 다음 관문·최종 클리어 조건
@@ -54,12 +62,9 @@ public class BossManager
     public int PlannedDestination =>
         (bossPieceIndex + PlannedEffectiveSteps) % YutBoard.TileCount;
 
-    // 상성 대상이 되는 공격 속성 — START·땅·쇠는 상성 없이 공격점수 0 유지
+    // 상성 대상이 되는 공격 속성 — START·땅·쇠는 상성 없이 공격 0 유지
     private static readonly TileAttribute[] CombatAttributes =
         { TileAttribute.Fire, TileAttribute.Water, TileAttribute.Forest };
-
-    // 보스별 런타임 상성 — 처음 소개/사용 시점에 1회 생성 후 런 동안 유지 (UI 갱신·전투 진입·건너뛰기로 재추첨 없음)
-    private readonly Dictionary<int, BossAffinity> runAffinities = new Dictionary<int, BossAffinity>();
 
     public BossManager(YutGameManager gm)
     {
@@ -108,7 +113,6 @@ public class BossManager
         }
         pendingBossIndex = index;
         BossData boss = gm.bosses[index];
-        EnsureAffinity(index);   // 처음 소개되는 시점에 상성 1회 생성 — 이후 전투·소개에서 같은 값 사용
         gm.shopManager.ResetForBoss();   // 보스 전환 — 상품 목록·리프레시 비용 초기화 (사용자 확정: 보스 소개 시 리셋)
         if (gm.bossSelectPanel == null)
         {
@@ -122,52 +126,82 @@ public class BossManager
         Debug.Log($"--- 보스 소개: {boss.bossName} | 목표 {boss.maxHP} | {boss.abilityDescription} ---");
     }
 
-    // ============ 보스 상성 (런타임 데이터 — BossData 원본 미변경) ============
+    // ============ 보스 상성 (선택적 능력 — BossData 데이터 주도, 무작위 생성 없음) ============
 
-    // 보스 상성 조회 — 없으면 이 시점에 1회 생성해 저장한다. 조회는 추첨을 반복하지 않는다
-    public BossAffinity EnsureAffinity(int bossIndex)
+    // 보스의 상성 능력 보유 여부 — useAffinity + 약점·강점이 유효하게 설정된 경우만 true.
+    // UI·부적·방울이 각자 다른 기준을 쓰지 않도록 활성 여부 판정은 이 경로로 통일한다
+    public bool HasAffinityAbility(int bossIndex)
     {
-        if (!runAffinities.TryGetValue(bossIndex, out BossAffinity affinity))
+        if (gm.bosses == null || bossIndex < 0 || bossIndex >= gm.bosses.Count)
         {
-            // 불·물·풀을 무작위로 섞어 기본/약점/강점에 하나씩 배정 — 역할 중복 없음
-            List<TileAttribute> shuffled = new List<TileAttribute>(CombatAttributes);
-            for (int i = shuffled.Count - 1; i > 0; i--)
-            {
-                int j = Random.Range(0, i + 1);
-                (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
-            }
-            affinity = new BossAffinity { normal = shuffled[0], weak = shuffled[1], strong = shuffled[2] };
-            runAffinities[bossIndex] = affinity;
-            string bossName = gm.bosses != null && bossIndex < gm.bosses.Count ? gm.bosses[bossIndex].bossName : $"보스 {bossIndex + 1}";
-            Debug.Log($"--- {bossName} 상성 배정 (런 고정): 기본 {BoardManager.AttributeName(affinity.normal)} / 약점 {BoardManager.AttributeName(affinity.weak)} / 강점 {BoardManager.AttributeName(affinity.strong)} ---");
+            return false;
         }
-        return affinity;
+        BossData boss = gm.bosses[bossIndex];
+        if (boss == null || !boss.useAffinity)
+        {
+            return false;
+        }
+        if (boss.affinityWeak == boss.affinityStrong)
+        {
+            Debug.LogWarning($"[YutGameManager] {boss.bossName}의 상성 설정 오류 — 약점과 강점이 같아 상성 능력을 적용하지 않습니다.", gm);
+            return false;
+        }
+        return true;
     }
 
-    // 칸 속성 → 현재 전투 보스의 상성 배율 (약점 ×2 / 강점 ×0.5 / 기본 ×1)
-    // 공격 속성이 아닌 칸(START·땅·쇠)은 상성과 무관하게 ×1 반환 — 어차피 공격점수 0이라 데미지 0
+    // 보스 상성 조회 — 상성 능력이 있는 보스만 BossAffinity 반환, 없으면 null.
+    // 가짜 약점·강점을 생성하지 않으므로 천운부·재복방울·청개구리방울은 null 검사로 조건 판정한다
+    public BossAffinity GetAffinity(int bossIndex)
+    {
+        if (!HasAffinityAbility(bossIndex))
+        {
+            return null;
+        }
+        BossData boss = gm.bosses[bossIndex];
+        TileAttribute normal = TileAttribute.Fire;
+        foreach (TileAttribute attr in CombatAttributes)
+        {
+            if (attr != boss.affinityWeak && attr != boss.affinityStrong)
+            {
+                normal = attr;
+                break;
+            }
+        }
+        return new BossAffinity { normal = normal, weak = boss.affinityWeak, strong = boss.affinityStrong };
+    }
+
+    // 칸 속성 → 현재 전투 보스의 상성 배율 (데이터 지정 배율 / 비상성 보스 ×1)
+    // 공격 속성이 아닌 칸(START·땅·쇠)은 상성과 무관하게 ×1 반환 — 공격 0이라 어차피 데미지 0
     public float AffinityMultiplier(TileAttribute attribute)
     {
         if (attribute != TileAttribute.Fire && attribute != TileAttribute.Water && attribute != TileAttribute.Forest)
         {
             return 1f;
         }
-        BossAffinity affinity = EnsureAffinity(gm.selectedBossIndex);
-        if (attribute == affinity.weak)
+        if (!HasAffinityAbility(gm.selectedBossIndex))
         {
-            return 2f;
+            return 1f;
         }
-        if (attribute == affinity.strong)
+        BossData boss = gm.bosses[gm.selectedBossIndex];
+        if (attribute == boss.affinityWeak)
         {
-            return 0.5f;
+            return boss.affinityWeakMult;
+        }
+        if (attribute == boss.affinityStrong)
+        {
+            return boss.affinityStrongMult;
         }
         return 1f;
     }
 
-    // 상성 역할 이름 — 정산 기록 표시용
+    // 상성 역할 이름 — 정산 기록 표시용 (상성 능력 없으면 '기본')
     public string AffinityRoleName(TileAttribute attribute)
     {
-        BossAffinity affinity = EnsureAffinity(gm.selectedBossIndex);
+        BossAffinity affinity = GetAffinity(gm.selectedBossIndex);
+        if (affinity == null)
+        {
+            return "기본";
+        }
         if (attribute == affinity.weak)
         {
             return "약점";
@@ -179,17 +213,19 @@ public class BossManager
         return "기본";
     }
 
-    // GamePanel 상성 정보창 텍스트 — "기본: 불 100% / 약점: 물 200% / 강점: 풀 50%"
+    // GamePanel 상성 정보창 텍스트 — 상성 능력이 있는 보스만 실제 설정 정보를 표시, 없으면 빈 문자열
     public string BuildAffinityText(int bossIndex)
     {
-        BossAffinity affinity = EnsureAffinity(bossIndex);
+        BossAffinity affinity = GetAffinity(bossIndex);
+        if (affinity == null)
+        {
+            return "";
+        }
+        BossData boss = gm.bosses[bossIndex];
         return $"기본: {BoardManager.AttributeName(affinity.normal)} 100%\n" +
-               $"약점: {BoardManager.AttributeName(affinity.weak)} 200%\n" +
-               $"강점: {BoardManager.AttributeName(affinity.strong)} 50%";
+               $"약점: {BoardManager.AttributeName(affinity.weak)} {Mathf.RoundToInt(boss.affinityWeakMult * 100f)}%\n" +
+               $"강점: {BoardManager.AttributeName(affinity.strong)} {Mathf.RoundToInt(boss.affinityStrongMult * 100f)}%";
     }
-
-    // 런 종료 시 상성 전부 폐기 — 새 런에서 첫 소개/사용 시 새로 생성한다
-    public void ResetAffinities() => runAffinities.Clear();
 
     // ============ 보스 말 (표시·이동 전용 — 칸 효과·공격·방울 발동 없음) ============
 

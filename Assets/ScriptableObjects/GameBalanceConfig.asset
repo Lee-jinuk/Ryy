@@ -16,20 +16,34 @@ MonoBehaviour:
   yutStats:
   - result: 1
     basicBonus: 0
-    mult: 4
+    baseScore: 20
+    mult: 6
   - result: 2
     basicBonus: 0
+    baseScore: 30
     mult: 3
   - result: 3
     basicBonus: 0
+    baseScore: 30
     mult: 4
   - result: 4
     basicBonus: 0
-    mult: 9
+    baseScore: 50
+    mult: 6
   - result: 5
     basicBonus: 0
-    mult: 9
+    baseScore: 60
+    mult: 5
+  fireTileMult: 1.5
+  waterComboMults:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  forestDotInitialPercent: 20
+  forestDotAddPercent: 5
   bossMoveStageMin: 040000000300000002000000i
   bossMoveStageMax: 070000000600000005000000i
   catchMultiplier: 3
-  catchAffinityMult: 2
+  catchBonusMult: 2

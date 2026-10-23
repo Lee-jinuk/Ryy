@@ -17,3 +17,5 @@ MonoBehaviour:
   shopOfferCount: 4
   refreshBaseCost: 2
   refreshCostMultiplier: 2
+  bossClearBaseReward: 10
+  bossClearPerThrowReward: 5

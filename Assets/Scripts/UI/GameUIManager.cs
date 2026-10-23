@@ -58,10 +58,12 @@ public class GameUIManager
         {
             gm.bossSelectAbilityText.text = boss.abilityDescription;
         }
-        // 소개 중인 보스(pendingBossIndex) 상성 — 이미 생성된 런 고정 데이터 재사용, 건너뛰기 시 다음 보스 값으로 갱신
+        // 소개 중인 보스(pendingBossIndex) 상성 — 상성 능력이 있는 보스만 표시, 없으면 비움(숨김)
         if (gm.bossSelectAffinityText != null)
         {
-            gm.bossSelectAffinityText.text = gm.bossManager.BuildAffinityText(gm.bossManager.pendingBossIndex);
+            string affinityText = gm.bossManager.BuildAffinityText(gm.bossManager.pendingBossIndex);
+            gm.bossSelectAffinityText.text = affinityText;
+            gm.bossSelectAffinityText.gameObject.SetActive(!string.IsNullOrEmpty(affinityText));
         }
     }
 
@@ -116,7 +118,8 @@ public class GameUIManager
         // 준비 단계(rolled=false)에는 면·재투척·확정을 표시/허용하지 않는다 — 부적 사용만 가능
         YutThrowSession session = gm.rollManager.session;
         bool sessionActive = session != null && session.RollInProgress;
-        bool throwInputOpen = sessionActive && !gm.isPresenting && !gm.talismanManager.isChoosing;
+        bool throwInputOpen = sessionActive && !gm.isPresenting
+            && !gm.talismanManager.isChoosing && !gm.talismanManager.isChoosingMoveAdjust;
         for (int i = 0; i < YutThrowSession.StickCount; i++)
         {
             if (i < gm.stickFaceTexts.Length && gm.stickFaceTexts[i] != null)
@@ -171,6 +174,16 @@ public class GameUIManager
         {
             gm.confirmThrowButton.interactable = throwInputOpen;
         }
+        // '윷 던지기' 버튼 — 미투척 세션 + 입력 개방 상태에서만 활성.
+        // RollYut의 실제 차단 조건과 같은 판정 — 표시상 활성과 입력 차단의 어긋남 방지
+        if (gm.rollButton != null)
+        {
+            gm.rollButton.interactable = gm.currentState == GameState.Playing
+                && session != null && !session.rolled
+                && !gm.isPresenting && !gm.talismanManager.isChoosing
+                && !gm.talismanManager.isChoosingMoveAdjust
+                && gm.currentThrows < gm.maxThrows;
+        }
         // 판 진행도 표시는 라운드 구조 폐지와 함께 제거됨
 
         // 말판 UI — 칸 점수·방울 아이콘·완주 횟수 (Start에서는 갱신 생략)
@@ -215,9 +228,11 @@ public class GameUIManager
         }
         // 부적 선택창 패널 표시 — 선택 상태와 패널 활성을 동기화
         SetPanel(gm.talismanChoicePanel, talChoosing);
+        // 환위부 ±1 선택창 — 선택 대기 중에만 표시 (확정·취소로 닫힘)
+        SetPanel(gm.moveAdjustPanel, gm.talismanManager.isChoosingMoveAdjust);
 
-        // 손패 — 이름 표시 + 사용 버튼 활성 (최초 던지기 전 준비 구간에서만 사용 가능)
-        bool canUseTalisman = gm.talismanManager.CanUseNow();
+        // 손패 — 이름 표시 + 사용 버튼 활성. 카드별 사용 시점(useTiming)으로 개별 판정 —
+        // 준비 카드는 최초 던지기 전에만, 환위부는 투척 후~확정 전에만 활성
         for (int i = 0; i < TalismanManager.HandLimit; i++)
         {
             bool hasCard = i < gm.talismanManager.hand.Count;
@@ -231,7 +246,8 @@ public class GameUIManager
             }
             if (i < gm.talismanUseButtons.Length && gm.talismanUseButtons[i] != null)
             {
-                gm.talismanUseButtons[i].interactable = canUseTalisman && hasCard;
+                gm.talismanUseButtons[i].interactable =
+                    hasCard && gm.talismanManager.CanUseCard(gm.talismanManager.hand[i]);
             }
         }
         // 초과 획득 소멸 안내 — 다음 선택창이 열리면 지워진다
@@ -247,6 +263,29 @@ public class GameUIManager
         if (gm.moneyText != null)
         {
             gm.moneyText.text = $"{gm.economyManager.money}냥";
+        }
+
+        // 능력치 정보판 — 현재 런타임 윷 기본점수·배율 + 속성 착지 효과 상태 표시 (조회 전용)
+        if (gm.currentYutStatsText != null)
+        {
+            gm.currentYutStatsText.text =
+                $"도 {StatText(YutResult.Do)}\n" +
+                $"개 {StatText(YutResult.Gae)}\n" +
+                $"걸 {StatText(YutResult.Geol)}\n" +
+                $"윷 {StatText(YutResult.Yut)}\n" +
+                $"모 {StatText(YutResult.Mo)}";
+        }
+        if (gm.currentAttributeStatsText != null)
+        {
+            // 속성 효과 정보판 — 불 배율(기본+화령 성장) / 물 연속 횟수·배율 / 현재 풀 도트 (보스전 단위 상태)
+            float fireMult = (gm.balanceConfig != null ? gm.balanceConfig.fireTileMult : 1.5f)
+                + gm.bellManager.GetAttrMultBonus(TileAttribute.Fire);
+            int combo = gm.tileEffects.waterComboCount;
+            float waterMult = WaterComboDisplay(combo + 1);
+            gm.currentAttributeStatsText.text =
+                $"불 ×{FormatStat(fireMult)}\n" +
+                $"물 {combo}연속 → ×{FormatStat(waterMult)}\n" +
+                $"풀 도트 {gm.tileEffects.forestDot}";
         }
 
         // 장착 방울 목록 — 전투 화면 표시 (BellItem Prefab 동적 항목)
@@ -295,12 +334,14 @@ public class GameUIManager
             }
         }
 
-        // 보스 상성 정보창 — 전투 중인 보스 기준 (첫 소개 시점에 생성된 런 고정값 표시)
+        // 보스 상성 정보창 — 전투 중인 보스 기준. 상성 능력이 없는 보스는 비워서 숨긴다
         if (gm.bossAffinityText != null)
         {
-            gm.bossAffinityText.text = boardActive && boss != null
+            string affinityText = boardActive && boss != null
                 ? gm.bossManager.BuildAffinityText(gm.selectedBossIndex)
                 : "";
+            gm.bossAffinityText.text = affinityText;
+            gm.bossAffinityText.gameObject.SetActive(!string.IsNullOrEmpty(affinityText));
         }
 
         // 건너뛰기 버튼은 소개 화면이 열려 있고 다음 보스가 남아 있을 때만 표시 (마지막 보스 소개 시 숨김)
@@ -432,6 +473,28 @@ public class GameUIManager
 
     private static string BellUsesText(OwnedBell bell) =>
         bell.remainingUses >= 0 ? $"남은 발동 {bell.remainingUses}회" : "지속";
+
+    // 능력치 정보판 헬퍼 — 정수 배율은 소수점 없이 표시 (×4 / ×4.5)
+    private static string FormatStat(float v) =>
+        v % 1f == 0f ? ((int)v).ToString() : v.ToString("0.##");
+
+    // 윷 정보판 표시 — "기본점수 ×배율" (예: 도 20 ×6 / 윷 50 ×6.5)
+    private string StatText(YutResult result)
+    {
+        YutStatEntry stat = gm.rollManager.GetStat(result);
+        return $"{stat.baseScore} ×{FormatStat(stat.mult)}";
+    }
+
+    // 물 연속 정보판 표시용 배율 — 설정 목록 클램프는 TileEffectManager와 동일 기준
+    private float WaterComboDisplay(int count)
+    {
+        var mults = gm.balanceConfig != null ? gm.balanceConfig.waterComboMults : null;
+        if (mults == null || mults.Count == 0)
+        {
+            return 1f;
+        }
+        return mults[Mathf.Clamp(count - 1, 0, mults.Count - 1)];
+    }
 
     // 상점 표시 동기화 — 고정 슬롯(shopOfferSlots·shopBellSlots) + 잔액 + 리프레시 비용.
     // 슬롯의 버튼 리스너는 Bind가 매번 교체해 누적되지 않는다
@@ -573,12 +636,12 @@ public class GameUIManager
         gm.FinishPresentation(settlement);
     }
 
-    // 착지 칸 정보 문자열 설정 — "불 - 50점" (칸 기본점수, 상성·윷 배율 미적용)
+    // 착지 칸 정보 문자열 설정 — 속성 착지 효과 설명 ("물 - 3연속 ×4", "풀 - 도트 등록 +60")
     // 연출의 이동 완료 시점과 스킵 경로(FinishPresentation) 양쪽에서 호출 — 같은 값이라 중복 호출 안전
     public void ShowLandingInfo(ThrowSettlement settlement)
     {
         gm.landingTileInfo = settlement.landingTileIndex >= 0
-            ? $"{BoardManager.AttributeName(gm.board.tiles[settlement.landingTileIndex].attribute)} - {settlement.tileScore}점"
+            ? $"{BoardManager.AttributeName(gm.board.tiles[settlement.landingTileIndex].attribute)} - {settlement.tileEffectNote}"
             : "";
         UpdateUI();
     }

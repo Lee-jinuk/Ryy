@@ -13,4 +13,6 @@ public class ShopConfig : ScriptableObject
     public int shopOfferCount = 4;      // 상점 무작위 상품 후보 수 (고정 슬롯 수와 맞춘다)
     public int refreshBaseCost = 2;     // 상점 리프레시 시작 비용(냥)
     public int refreshCostMultiplier = 2;   // 리프레시 성공마다 다음 비용에 곱하는 배수 (2→4→8→…)
+    public int bossClearBaseReward = 10;    // 보스 클리어 기본 보상(냥)
+    public int bossClearPerThrowReward = 5; // 남은 기본 투척 횟수당 추가 보상(냥)
 }

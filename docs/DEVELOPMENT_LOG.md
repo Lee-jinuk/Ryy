@@ -11,6 +11,101 @@
 - `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
 - 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
 
+### [2026-10-22 오후 (31차) - 사용자 지시 / Devin 구현 — 환위부 선택 완료 불가 버그 수정]
+
+**버그 수정 (규칙 변경 없음)**: `ChooseMoveAdjust`가 `CanUseAfterRoll()`을 재호출했는데, 그 안의 `isChoosingMoveAdjust` 검사가 열린 선택창 자체를 거부 사유로 만들어 +1/−1 선택이 항상 실패.
+
+- `TalismanManager.ChooseMoveAdjust` — '사용 개시' 판정과 '선택 완료' 판정 분리: `isChoosingMoveAdjust` 검사 없이 Playing·세션 투척 완료·미확정·연출 중 아님·땅 선택창 없음·대기 카드 유효만 재검증. `delta != ±1` 거부 추가. 성공 시 보정·기록·소모 1회 후 선택 해제, 취소는 기존 경로 유지
+- `YutGameManager` — `rollButton`(Button) 필드 신규: 기존에 최초 던지기 버튼은 참조 경로가 없어 표시상 활성 ↔ 실제 차단이 어긋났음
+- `GameUIManager` — `rollButton.interactable`을 `RollYut`의 차단 조건과 동일 판정으로 제어 (Playing·미투척 세션·연출/선택창 없음·남은 횟수)
+- **Inspector 작업 필요**: '윷 던지기' 버튼을 `YutGameManager.Roll Button`에 연결 (미연결 시 기존 동작 유지 — 실제 차단은 `RollYut` 검사가 처리)
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: +1/−1 선택 후 창 닫힘·확정 가능 / 취소 후 세션 그대로 / 재투척 소진 후 환위부 사용 가능 / 연타 중복 없음 / 선택창 중 투척 입력 차단
+
+### [2026-10-22 오후 (30차) - 사용자 지시 / Devin 구현 — 방울 8종 전환 1단계]
+
+**상점 후보 8종 전환 + 성장형 방울 3종 구현** (사용자 지시서, 4단계 중 1단계):
+
+- `BellData`/`OwnedBell` — `targetResult2`(쌍 대상 결과)·`chance`(확률 효과) 필드 추가. `BellEffectKind` 끝에 `AttrMultGrowth`·`WaterComboGuard`·`DotDoubleChance`·`GoldOnEarth` 추가 — 기존 값·순서 보존
+- `BellManager` — `attrMultBonus`(속성 착지 배율 런타임 성장분) 신규 + `GetAttrMultBonus`. `YutMultGrowth` 쌍 대상 지원(targetResult2 ≠ BackDo이면 두 결과 공유 한도), `AttrMultGrowth` 케이스 — 발동 정산당 1회 성장·발동 횟수 소모는 기존 공용 경로. `ResetForNewRun`에 성장분 초기화 추가
+- `TileEffectManager` — 불 배율 = `fireTileMult` + `GetAttrMultBonus(Fire)`. `GameUIManager` 속성 정보판 동일 계산
+- `BellDatabase` — 도걸방울(b_dogeol)·지령방울(b_jiryeong) 신규. b_yutryeong 쌍 대상(윷+모)·b_hwaryeong AttrMultGrowth 전환 활성. 수령·목령·천운·지령 = 정의 준비·비활성(2~4단계 대기). 도깨비·개화·걸음·모령·재복 제외(정의 보존)
+- **활성 상점 후보(1단계 시점): 도걸·윷령·화령·족쇄 4종** — 나머지 4종은 단계 구현 후 활성화
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 상점 후보 / 도·걸·윷·모 각각 해당 결과만 성장·합산 5회 소멸 / 화령 첫 불 착지 ×2(1.5→2) / 소멸·판매·보스 전환 후 성장 유지·새 런 초기화 / 정보판·남은 횟수 일치
+- 미확정: 수룡부 × 수령방울 중첩 — 사용자 결정 대기
+
+### [2026-10-22 오후 (29차) - 사용자 지시 / Devin 구현 — 부적 20종 전환 2단계]
+
+**환위부(백색 부적) 사용 시점 + ±1 선택 UI** (사용자 승인):
+
+- `TalismanManager` — `isChoosingMoveAdjust` + `pendingMoveAdjustHandIndex` 선택 대기 상태. `CanUseAfterRoll()` 신규 — `AfterRollBeforeConfirm` 카드는 `session.rolled && !confirmed` 구간(재투척 전·사이·소진 후 포함)에만 사용 가능. `CanUseCard` public 전환 — 손패 버튼 활성화와 실행 재검증이 같은 판정 공유. `UseTalisman`의 MoveAdjust 경로는 선택창만 열고 카드 미소모 → `ChooseMoveAdjust(delta)`에서 세션·카드 재검증 후 `session.moveDelta += delta`·`RecordUse`·소멸(기존 MoveDelta 합산 경로 재사용 — 최소 이동 0칸 처리 유지), `CancelMoveAdjust`로 미소모 취소
+- `YutGameManager` — `moveAdjustPanel`(GameObject) 필드 + `ChooseMoveAdjustPlus`/`ChooseMoveAdjustMinus`/`CancelMoveAdjust` 버튼 진입점. `RollYut`·`RerollStick`·`ConfirmThrow`에 `isChoosingMoveAdjust` 차단 추가, 패널 전환 지점 4곳에서 선택창 숨김
+- `GameUIManager` — 손패 사용 버튼을 카드별 `CanUseCard`로 개별 판정(기존: 전부 준비 단계 한정). `throwInputOpen`에 선택창 차단 추가, `SetPanel(moveAdjustPanel, …)` 동기화
+- `TalismanDatabase` — t_hwanwi `includeInDeck: 1` 활성화 (활성 8종)
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 환위부가 준비 단계에서 비활성·투척 후 활성 / +1·−1 최종 착지 변경 / 후퇴 시 최소 0칸 현재 칸 정산 / 재투척 소진 후에도 사용 가능 / 선택창 열린 동안 투척·재투척·확정 차단 / 취소 시 미소모·재사용 가능 / 정상·스킵 결과 일치
+
+### [2026-10-22 오후 (28차) - 사용자 지시 / Devin 구현 — 부적 20종 전환 1단계]
+
+**부적 20종 전환 1단계 — 데이터 정리·확정 수치 변경** (사용자 지시서 + 해석 확정 9건):
+
+- `TalismanData.cs` — `TalismanEffectKind` 끝에 신규 12종 추가(기존 enum 값 불변): `WaterComboKeep`·`ForestDotBoost`·`CatchWiden`·`MoveAdjust`·`NextTurnProbBoost`·`BoardReshuffle`·`BossMoveReduce`·`ProximityBaseBoost`·`NoRerollBaseBoost`·`TriAttributeCombo`·`PrevResultMatch`·`ResultGamble`. `TalismanUseTiming.AfterRollBeforeConfirm` 추가(환위부 전용). 필드 신규: `targetResult2`(도걸·모윷부 두 번째 목표)·`duration`(지속 턴 수)·`range`(거리 조건)
+- `TalismanDatabase.asset` — 정의 총 28종(기존 17 + 신규 11). 수치 변경: 화염부 ×4→×3 / 탐욕부·승부부 ×2→×1.5. 수룡부·초목부 효과를 WaterComboKeep·ForestDotBoost로 전환(구현 전 비활성). 덱 제외: 진격부·후퇴부·윷령부·모령부·천운부(정의·효과 보존). 신규 11종 정의 추가 — 전부 `includeInDeck: 0`
+- 활성 덱 7종: 화염부·추혼부·탐욕부·재기부·인연부·봉쇄부·승부부. 미구현 효과는 `ApplyEffect`가 false 반환 — 강제 사용 시도도 카드 미소모로 안전
+- 해석 확정(사용자 답변): 수룡부=물 외 착지 시 연속 기록 유지+현재 연계 배율 적용 / 초목부=이번 등록·증가분만 ×2 / 족쇄부=사용 차례 포함 3턴·족쇄방울과 합산 / 추적부=전후 각 2칸 이내 / 고집부=차례별 판정 / 삼재부=3턴 내 불·물·풀 수집 완성 시 세 번째 착지 ×6 / 도걸·모윷부=면 조합 가중 추첨 / 역행부=속성 재섞기 / 도박부=결과 선택→최종 일치 시 보스전 윷 배율 ×1.2
+- 카드 ID 대응: 기존 유지 t_fire·t_water·t_forest·t_pursuit·t_greed·t_retry·t_bond·t_seal·t_allinnothing. 신규 t_siege(포위부)·t_hwanwi(환위부)·t_dogeol·t_moyut·t_reverse·t_shackle·t_chase·t_stubborn·t_samjae·t_cycle·t_gamble
+- 검증: `dotnet build` 오류 0·경고 0. **사용자 검토 후 2단계(환위부 백색·±1 선택 UI) 진행 예정**
+
+### [2026-10-22 오후 (27차) - 사용자 지시 / Devin 구현]
+
+**풀 도트 첫 발동 시점 수정** (사용자 지시):
+
+- 도트 지급 시점을 **정산 종료 → 다음 최초 던지기 정상 접수 시점**으로 이동 — `FinishPresentation`의 즉시 틱과 `TalismanManager.ConfirmChoice`의 지연 틱 호출 제거, `ApplyTurnStartDot`은 `RollYut`에서만 호출
+- `YutGameManager` — `dotPaidThisTurn` 필드 신규: `PrepareTurn`에서 리셋, `RollYut`의 모든 검사(상태·연출·선택창·남은 횟수·미투척) 통과 후 `InitialRoll`·`MoveBossPiece` 전에 차례당 1회 지급. 도트로 처치 시 `EnterClear` 후 즉시 return — 투척 소모·보스 이동 없음
+- 풀 착지는 즉시 피해 D + 도트 등록/누적만 처리 — 정산 종료 직후 추가 피해 없음. 땅 선택창이 열려 있으면 투척 자체가 차단되므로 "선택 완료 후 도트" 순서 유지
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 풀 착지 직후 도트 미지급 / 다음 최초 던지기 1회 지급 / 재투척·확정·선택창·거부 입력 미지급 / 도트 처치 즉시 클리어·투척 미소모 / 보스 전환 잔류 없음 / 정상·스킵 일치
+
+### [2026-10-22 오후 (26차) - 사용자 지시 / Devin 구현]
+
+**능력치 정보판 줄바꿈** (사용자 지시):
+
+- `GameUIManager` — `currentYutStatsText`·`currentAttributeStatsText` 항목 구분자를 `" / "`에서 `"\n"`으로 변경 — 윷 5행·속성 3행 세로 표시. 수치·조회 경로·계산·Inspector 연결 변경 없음
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기 — 각 항목이 줄 단위로 표시되는지 확인
+
+### [2026-10-22 오전 (25차) - 사용자 지시 / Devin 구현]
+
+**부적 덱·손패 보스전 단위 초기화 + 땅 착지 공격 허용** (사용자 확정 지시 2건):
+
+- `TalismanManager` — `ResetForBoss()` 신규(기존 런 초기화와 같은 정리: 덱 재구성 예약·손패·후보·선택·사용 기록·세션 효과 비움), `ResetForNewRun()`은 `ResetForBoss()` 위임. 헤더 주석·미확정 목록 정리(손패 유지 임시 규칙 → 확정 해제)
+- `YutGameManager` — `BeginBossFight`에서 `talismanManager.ResetForBoss()` 호출 — 실제 전투 진입 시 보스전당 1회. `OpenStartPick`은 새 덱 위에서 동작(사용·소멸 카드 복귀). 돈·방울·런 성장·말판은 유지
+- `ScoreManager` — `attackLanded`에 `Earth` 추가(땅 공격 허용). 상성 기록 단계는 공격 속성에서만 — `tile.attribute != Earth` 조건 추가
+- `TileEffectManager` — `ResolveLandingEffect`에 `Earth` 케이스: 물 연속 초기화 + 피해 ×1 + "공격 ×1 — 부적 선택" 정보 단계. 도트 등록·증가 없음. default는 START·쇠만 0
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 땅 공격 도=120·승부부=240·탐욕 취소=0 / 땅 부적 선택 유지 / 다음 보스 새 덱 복귀·손패 미유지 / 소개·상점·건너뛰기 미초기화 / 돈·방울·성장 유지
+
+### [2026-10-22 오전 (24차) - 사용자 지시 / Devin 구현]
+
+**점수제·속성 말판 전환 + 보스 상성 선택 적용** (사용자 지시서 + 정책 확정 8건):
+
+- `YutStatEntry` — `baseScore` 추가(도20/개30/걸30/윷50/모60) + 배율 변경(6/3/4/6/5), `basicBonus` 예약 보존. `BuildYutStats` 복사 경로 포함
+- `BossData` — `useAffinity`+`affinityWeak`/`affinityStrong`/`affinityWeakMult`/`affinityStrongMult` 추가, BossDatabase 전 보스 `useAffinity: 0`. `BossManager`: `EnsureAffinity` 무작위 생성·`runAffinities` 삭제 → `HasAffinityAbility`/`GetAffinity`(null=비상성) 데이터 주도로 전환, `AffinityMultiplier`/`BuildAffinityText` 데이터 사용, 상성 없는 보스 상성 텍스트 숨김
+- `TileEffectManager.cs` 신규 — 물 연속(보스전)·풀 도트(보스전) 상태 + `ResolveLandingEffect`(불×1.5·물 연계·풀 도트·비공격 0+물 초기화, 착지 효과 단계 기록) + `TurnStartDotDamage`
+- `ScoreManager` — 공식 전환: baseBasic = 윷 기본점수, 칸 점수·속성 성장 합산 제거, `attackLanded` 판정(구 tileScore>0 대체), 잡기 보너스(`catchBonusMult`) 별도 단계, 상성 단계는 능력 보스만, 천운부·재복방울은 `GetAffinity` null 시 조건 불충족, 최종 = `tileEffects.ResolveLandingEffect`. `EffectSourceType.TileEffect` 추가, `settlement.tileScore` 제거 → `attackLanded`/`tileEffectMult`/`tileEffectNote`/`catchBonusMult`
+- `YutGameManager` — `tileEffects` 등록, `ApplyTurnStartDot()`(도트 틱→totalScore, 처치 시 즉시 클리어), `FinishPresentation`에서 땅 선택창 없으면 즉시 틱 / `TalismanManager.ConfirmChoice`에서 지연 틱, `BeginBossFight`·`ResetRunState`에서 리셋, `ResetAffinities` 호출 제거
+- `BellManager` — `FrogAffinityMult` null 안전, `GameUIManager` — 정보판(윷 점수×배율 / 속성 효과 상태)·착지 설명·상성 숨김 전환
+- `GameBalanceConfig`+에셋 — `fireTileMult 1.5`·`waterComboMults {1,2,4,8,16}`·`forestDotInitialPercent 20`·`forestDotAddPercent 5`·`catchBonusMult 2`(catchAffinityMult 대체)
+- `BellDatabase` — 화령·수령·목령·청개구리 `effectEnabled: 0`
+- 확정 정책: 잡기 보너스 ×2 별도 유지 / 땅·START 공격 0 / 물 연속 보스전 단위 / 도트 처치 즉시 클리어 / 땅 선택 후 도트 / 등록 시 반올림 / 피해0 풀 미등록 / 청개구리 상점 제외
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 도 불 180 / 개 물 90→180→360→720→1440 / 풀 300→도트60,400→80,200→90 / 도트 틱 중복 없음 / 비상성 보스 상성 ×1·잡기 ×6 / 천운부·재복 미발동 / 보스 전환 상태 제거
+
+### [2026-10-21 오전 (23차) - 사용자 지시 / Devin 구현]
+
+**능력치 정보판 + 보스 클리어 금전 보상** (사용자 지시):
+
+- `YutBoard.BaseAttackScore(attr)` 정적 접근자 신규 — `BoardTile.AttackScore`가 위임. 정산과 표시가 같은 기본값 경로 사용 (UI에 50점 계산식 복제 없음)
+- `YutGameManager` — `currentYutStatsText`·`currentAttributeStatsText` 필드 추가, `BeginBossFight`에 `economyManager.ResetClearReward()`, `EnterClear`에 `GrantBossClearReward()` 호출
+- `GameUIManager` — 정보판 표시(도·개·걸·윷·모 배율 / 불·물·풀 공격력) + `FormatStat`(정수면 소수점 생략)·`AttrAttack` 헬퍼 — 조회 전용
+- `EconomyManager` — `clearRewardPaid` 플래그·`ResetClearReward`·`GrantBossClearReward()` — 보스전당 1회 지급, 기본+남은 투척 보상 로그 기록
+- `ShopConfig` + 에셋 — `bossClearBaseReward=10`·`bossClearPerThrowReward=5` 추가
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 새 런 기본값(도4/개3/걸4/윷9/모9·불물풀50) / 성장 +0.5·+5 갱신 / 판매·소멸 후 유지 / 보상 4회남음=30·2회=20·0회=10 / 연출 스킵 동일 / 재진입·게임오버·건너뛰기 미지급
+
 ### [2026-10-21 오전 (22차) - 사용자 지시 / Devin 구현]
 
 **방울 UI 고정 슬롯 전환 + 상점 리프레시** (사용자 승인 + 정책 확정 3건):

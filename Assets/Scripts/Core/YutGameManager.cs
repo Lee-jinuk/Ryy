@@ -90,6 +90,8 @@ public class YutGameManager : MonoBehaviour
     public BellSlotUI[] shopBellSlots = new BellSlotUI[4];     // 상점 장착/판매 슬롯 — 고정 4칸, 판매 버튼 포함
     public Button refreshButton;                               // 상점 리프레시 버튼 — OnClick = RefreshShop (미연결 시 무시)
     public Text refreshCostText;                               // 다음 리프레시 비용 표시 — "새로고침 N냥" (미연결 시 무시)
+    public Text currentYutStatsText;                           // 능력치 정보판 — 현재 런타임 윷별 기본 배율 (도·개·걸·윷·모, 미연결 시 표시 생략)
+    public Text currentAttributeStatsText;                     // 능력치 정보판 — 속성별 기본 공격력 + 런 성장 (불·물·풀, 미연결 시 표시 생략)
 
     // 부적 카드 정의 — 기준은 TalismanDatabase 에셋(talismanDatabase.cards).
     // Scene에 목록을 저장하지 않는다 — 에셋 하나만 편집하면 모든 씬에 동일 적용.
@@ -98,6 +100,7 @@ public class YutGameManager : MonoBehaviour
 
     [Header("Talisman UI — 부적 선택창·손패")]
     public GameObject talismanChoicePanel;                       // 부적 후보 선택창 — 시작 5택3·땅 3택1 공용
+    public GameObject moveAdjustPanel;                           // 환위부 ±1 이동 보정 선택창 — +1/−1/취소 버튼 배치용
     public Text[] talismanOptionNameTexts = new Text[5];         // 후보 카드 이름 (5칸 — 3택1은 앞 3칸 사용)
     public Text[] talismanOptionDescTexts = new Text[5];         // 후보 카드 설명
     public Text[] talismanOptionRarityTexts = new Text[5];       // 후보 카드 레어도
@@ -117,6 +120,7 @@ public class YutGameManager : MonoBehaviour
     public Button[] rerollButtons = new Button[4];   // 윷별 재투척 버튼 — 재투척 가능할 때만 interactable
     public Text throwStatusText;                     // 투척 상태창 — "현재 결과: 개 / 재투척 가능: 2" 또는 확정 결과
     public Text rerollRemainText;                    // 남은 재투척 수 (숫자만, 미연결 시 무시)
+    public Button rollButton;                        // '윷 던지기' 버튼 — 미투척 세션에서만 interactable (미연결 시 무시)
     public Button confirmThrowButton;                // '결과 확정' 버튼 — 세션 진행 중에만 interactable (미연결 시 무시)
 
     [Header("Buttons")]
@@ -184,6 +188,7 @@ public class YutGameManager : MonoBehaviour
     internal EconomyManager economyManager;  // 냥(화폐) — 시작 자금·구매·판매·수입
     internal ShopManager shopManager;        // 방울 상점 — 보스 소개 화면의 구매·판매
     internal TalismanManager talismanManager; // 부적 카드 — 뽑기 덱·손패·선택·사용·세션 효과
+    internal TileEffectManager tileEffects;  // 속성 착지 효과 — 불×1.5·물 연속·풀 도트 (보스전 단위 상태)
     internal GameUIManager uiManager;        // UI 표시·연출
 
     // 표시·연출용 런타임 상태 (매니저들이 접근)
@@ -193,6 +198,7 @@ public class YutGameManager : MonoBehaviour
     internal bool isPresenting;
     internal Coroutine activePresentation;
     internal string landingTileInfo = "";   // 착지 칸 표시 문자열 — 연출이 말 이동 완료 시점에 채운다
+    internal bool dotPaidThisTurn;      // 이번 차례 풀 도트 지급 여부 — 차례 준비 시 리셋, 정상 최초 던지기 접수 시 1회 지급
 
     // 일반 결과 5종 — 저주(백도·낙) 제외. 보스 특수능력의 비례 차감 대상 등에 사용
     internal static readonly YutResult[] NormalResults =
@@ -293,6 +299,7 @@ public class YutGameManager : MonoBehaviour
         GameUIManager.SetPanel(clearPanel, false);
         GameUIManager.SetPanel(gameOverPanel, false);
         GameUIManager.SetPanel(talismanChoicePanel, false);
+        GameUIManager.SetPanel(moveAdjustPanel, false);
         GameUIManager.SetPanel(bossSelectPanel, false);
         GameUIManager.SetPanel(shopPanel, false);
         GameUIManager.SetPanel(gamePanel, false);
@@ -307,6 +314,7 @@ public class YutGameManager : MonoBehaviour
     {
         rollManager.PrepareSession();
         talismanManager.ClearSessionEffects();
+        dotPaidThisTurn = false;             // 새 차례 — 풀 도트 지급 여부 리셋 (정상 최초 던지기에서 1회 지급)
         bossManager.PrepareBossMove();   // 다음 보스 이동 계획 — 거리를 1회 추첨해 예고 표시, 실제 이동은 최초 투척 시
     }
 
@@ -318,9 +326,9 @@ public class YutGameManager : MonoBehaviour
             Debug.Log("윷을 던질 수 있는 상태가 아닙니다. (GameState.Playing 아님)");
             return;
         }
-        if (isPresenting || talismanManager.isChoosing)
+        if (isPresenting || talismanManager.isChoosing || talismanManager.isChoosingMoveAdjust)
         {
-            return;   // 정산 연출 재생 중 또는 부적 선택창 표시 중 연타 방지 — 중복 투척/득점 불가
+            return;   // 정산 연출·부적 선택창·환위부 선택창 표시 중 연타 방지 — 중복 투척/득점 불가
         }
         if (currentThrows >= maxThrows)
         {
@@ -334,6 +342,17 @@ public class YutGameManager : MonoBehaviour
         {
             return;   // 이미 던진 세션 — 재투척 선택 또는 '결과 확정' 필요
         }
+        // 풀 도트 — 정상 접수된 최초 던지기에서 차례당 1회, 투척·보스 이동 전에 지급.
+        // 도트로 보스 처치 시 즉시 클리어 → 이번 투척 소모·보스 이동 없이 종료 (사용자 확정)
+        if (!dotPaidThisTurn)
+        {
+            dotPaidThisTurn = true;
+            ApplyTurnStartDot();
+            if (currentState != GameState.Playing)
+            {
+                return;
+            }
+        }
         rollManager.session.InitialRoll();   // 면만 던진다 — 준비 단계 부적 효과는 세션에 보존
         bossManager.MoveBossPiece();   // 최초 투척 성공 시 보스 말 1회 이동 (재투척·확정에서는 이동 없음)
         hasRolled = false;   // 이전 확정 결과 표시 지우기 — 새 세션은 확정 전까지 결과 미표시
@@ -343,7 +362,7 @@ public class YutGameManager : MonoBehaviour
     // 윷별 재투척 버튼(int): index 0~3 — 선택한 윷 하나만 다시 던진다
     public void RerollStick(int index)
     {
-        if (currentState != GameState.Playing || isPresenting || talismanManager.isChoosing)
+        if (currentState != GameState.Playing || isPresenting || talismanManager.isChoosing || talismanManager.isChoosingMoveAdjust)
         {
             return;
         }
@@ -360,7 +379,7 @@ public class YutGameManager : MonoBehaviour
     // '결과 확정' 버튼 — 확정된 결과로 말 이동·공격 정산 시작 (기본 투척 1회 소모는 여기서만)
     public void ConfirmThrow()
     {
-        if (currentState != GameState.Playing || isPresenting || talismanManager.isChoosing)
+        if (currentState != GameState.Playing || isPresenting || talismanManager.isChoosing || talismanManager.isChoosingMoveAdjust)
         {
             return;
         }
@@ -426,6 +445,11 @@ public class YutGameManager : MonoBehaviour
     public void UseTalisman9() => UseTalisman(8);
     public void UseTalisman10() => UseTalisman(9);
 
+    // 환위부 ±1 선택창 버튼 — +1/−1 보정 확정 또는 취소 (확정 전에는 카드 미소모)
+    public void ChooseMoveAdjustPlus() => talismanManager.ChooseMoveAdjust(+1);
+    public void ChooseMoveAdjustMinus() => talismanManager.ChooseMoveAdjust(-1);
+    public void CancelMoveAdjust() => talismanManager.CancelMoveAdjust();
+
     // 보스 특수능력·방울·주술의 확률 조작용 API — runtimeWeights만 변경되고 baseProbabilities는 오염되지 않음
     public void ModifyProbability(YutResult result, float deltaPercent) =>
         rollManager.ModifyProbability(result, deltaPercent);
@@ -450,6 +474,7 @@ public class YutGameManager : MonoBehaviour
         economyManager = new EconomyManager(this);
         shopManager = new ShopManager(this);
         talismanManager = new TalismanManager(this);
+        tileEffects = new TileEffectManager(this);
         uiManager = new GameUIManager(this);
 
         currentState = GameState.Start;
@@ -535,11 +560,14 @@ public class YutGameManager : MonoBehaviour
         hasRolled = false;
         currentSettlement = null;
         bossManager.pendingMoveSeal = false;            // 미소비 봉쇄부는 보스전을 넘기지 않는다 (미확정 임시 규칙)
+        talismanManager.ResetForBoss();                 // 부적 덱·손패는 보스전 단위 — 이전 손패·효과 정리 후 새 덱 구성 예약
         landingTileInfo = "";
         bossManager.ResetBossPiece();                   // 모든 보스전 시작 시 보스 말을 START로 초기화 + 이전 이동 계획 폐기
         boardManager.SetupBoard();                      // 배치는 런당 1회 생성·유지, 말 위치·완주만 초기화
         boardManager.MovePieceVisual(board.pieceIndex); // 말을 시작점(START) 위치에 배치
         PrepareTurn();                                  // 이전 투척 세션·부적 효과 정리 + 첫 차례 준비 — 보스 말 초기화 후 이동 계획을 세운다
+        economyManager.ResetClearReward();              // 이번 보스의 클리어 보상 지급 여부 초기화 — 보스전당 1회 지급
+        tileEffects.ResetForBoss();                     // 물 연속·풀 도트는 보스전 단위 — 보스 전환 시 제거
         rollManager.BuildWeights();                     // 기본 확률로 재구축 → 보스 효과 중복 누적 방지
         // 보스 낙 확률 능력은 신규 윷 4개 면 조합 방식에 적용 불가 — 적용 호출을 하지 않는다 (미확정 사항 보고)
         if (boss != null && boss.nakBonusPercent > 0f)
@@ -559,6 +587,7 @@ public class YutGameManager : MonoBehaviour
         GameUIManager.SetPanel(bossSelectPanel, false);
         GameUIManager.SetPanel(shopPanel, false);
         GameUIManager.SetPanel(talismanChoicePanel, false);
+        GameUIManager.SetPanel(moveAdjustPanel, false);
         hasRolled = false;
         currentState = GameState.Playing;
         uiManager.UpdateUI();
@@ -567,9 +596,11 @@ public class YutGameManager : MonoBehaviour
     // 보스 클리어: TotalScore >= GoalScore
     private void EnterClear()
     {
+        economyManager.GrantBossClearReward();   // 클리어 보상 — 기본+남은 투척 보상, 보스전당 1회 (게임오버·건너뛰기는 이 경로 미도달)
         currentState = GameState.Cleared;
         GameUIManager.SetPanel(gameOverPanel, false);            // 클리어/게임오버 동시 표시 방지
         GameUIManager.SetPanel(talismanChoicePanel, false);
+        GameUIManager.SetPanel(moveAdjustPanel, false);
         GameUIManager.ActivatePanel(clearPanel, nameof(clearPanel));
         // 다음 관문 버튼: 마지막 보스 클리어(최종 클리어)면 숨기고 메시지 표시
         GameUIManager.SetPanel(nextBossButton, !bossManager.IsFinalClear);
@@ -588,6 +619,7 @@ public class YutGameManager : MonoBehaviour
         currentState = GameState.GameOver;
         GameUIManager.SetPanel(clearPanel, false);
         GameUIManager.SetPanel(talismanChoicePanel, false);
+        GameUIManager.SetPanel(moveAdjustPanel, false);
         GameUIManager.SetPanel(shopPanel, false);
         GameUIManager.ActivatePanel(gameOverPanel, nameof(gameOverPanel));
         uiManager.UpdateUI();
@@ -627,9 +659,10 @@ public class YutGameManager : MonoBehaviour
     internal void FinishPresentation(ThrowSettlement settlement)
     {
         basicScore = settlement.finalBasic;
-        // 실효 배율 (윷 × 결과별 부적 × 상성 × 잡기 × 부적) — 탐욕부 잡기 취소 시 0 (정상 연출·스킵 모두 표시 일치)
+        // 실효 배율 (윷 × 결과별 부적 × 상성 × 잡기 × 잡기 보너스 × 부적 × 착지 효과) — 탐욕부 잡기 취소 시 0
         multiplier = settlement.talismanCancelled ? 0f
-            : settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult * settlement.catchMult * settlement.talismanMult;
+            : settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult
+                * settlement.catchMult * settlement.catchBonusMult * settlement.talismanMult * settlement.tileEffectMult;
         throwScore = settlement.throwScore;
         displayTotal = totalScore;
         isPresenting = false;
@@ -665,6 +698,33 @@ public class YutGameManager : MonoBehaviour
         uiManager.UpdateUI();   // 최종 상태로 갱신 — 새 준비 세션·선택창 반영 후 CanUseNow 기준으로 손패 버튼 활성 판정
     }
 
+    // 풀 도트 차례 지급 — 정상 접수된 최초 던지기에서 차례당 1회 (윷 투척·보스 이동 전).
+    // 정산 종료·재투척·확정·선택창 닫기·UI 갱신에서는 지급하지 않는다 (2026-10-22 오후 변경).
+    // 도트는 소모되지 않고 차례마다 반복 적용, 등록한 차례에는 틱 없음.
+    // 도트 피해로 보스를 처치하면 즉시 클리어 — 그 차례 투척은 소모되지 않는다 (사용자 확정)
+    internal void ApplyTurnStartDot()
+    {
+        if (currentState != GameState.Playing)
+        {
+            return;
+        }
+        int dot = tileEffects.TurnStartDotDamage;
+        if (dot <= 0)
+        {
+            return;
+        }
+        totalScore += dot;
+        displayTotal = totalScore;
+        uiManager.SetMultiplierReason($"풀 도트 피해 +{dot}");   // 이번 윷 공격과 구분된 별도 표시
+        Debug.Log($"풀 도트 틱: {dot} 피해 (등록 도트 {tileEffects.forestDot}) | Total {totalScore}/{goalScore}");
+        if (totalScore >= goalScore)
+        {
+            EnterClear();
+            return;
+        }
+        uiManager.UpdateUI();
+    }
+
     // 런 전체 초기화 — 게임오버/보스 선택 복귀로 런이 끝날 때 호출
     // 관문 이동(GoToNextBoss→EnterBossBattle)은 여기를 거치지 않으므로 런 성장 요소가 유지된다
     private void ResetRunState()
@@ -681,8 +741,8 @@ public class YutGameManager : MonoBehaviour
         landingTileInfo = "";
         selectedBossIndex = 0;                 // 새 런은 첫 번째 보스부터 — 전투·소개 인덱스 모두 초기화
         bossManager.pendingBossIndex = 0;
-        bossManager.ResetAffinities();       // 보스 상성은 런 단위 — 새 런에서 새로 생성
         bossManager.ResetBossPiece();        // 보스 말 위치 초기화 — 이전 런 상태 잔존 방지
+        tileEffects.ResetForBoss();          // 물 연속·풀 도트는 런 종료에도 제거
         currentThrows = 0;
         totalScore = 0;
         displayTotal = 0;

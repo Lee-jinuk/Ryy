@@ -15,35 +15,44 @@ MonoBehaviour:
   cards:
   - cardId: t_fire
     talismanName: "화염부"
-    description: "이번 투척에서 불 칸 착지 시 최종 피해 ×4"
+    description: "이번 투척에서 불 칸 착지 시 최종 피해 ×3"
     rarity: 4
     effect: 0
-    value: 4
+    value: 3
     attribute: 1
     targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
     includeInDeck: 1
     useTiming: 0
     appearance: 0
   - cardId: t_water
     talismanName: "수룡부"
-    description: "이번 투척에서 물 칸 착지 시 최종 피해 ×4"
+    description: "이번 턴 물 외 칸에 착지해도 물 연속 기록이 유지되고 그 공격에 현재 물 연계 배율이 적용된다"
     rarity: 4
-    effect: 1
-    value: 4
+    effect: 12
+    value: 0
     attribute: 2
     targetResult: 0
-    includeInDeck: 1
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
     useTiming: 0
     appearance: 0
   - cardId: t_forest
     talismanName: "초목부"
-    description: "이번 투척에서 풀 칸 착지 시 최종 피해 ×4"
+    description: "이번 투척에서 풀 칸 착지 시 이번에 등록·증가되는 도트 피해 ×2"
     rarity: 4
-    effect: 2
-    value: 4
+    effect: 13
+    value: 2
     attribute: 3
     targetResult: 0
-    includeInDeck: 1
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
     useTiming: 0
     appearance: 0
   - cardId: t_pursuit
@@ -54,17 +63,23 @@ MonoBehaviour:
     value: 4
     attribute: 0
     targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
     includeInDeck: 1
     useTiming: 0
     appearance: 0
   - cardId: t_greed
     talismanName: "탐욕부"
-    description: "이번 투척 최종 피해 ×2. 단, 보스말 잡기 성공 시 최종 피해 0"
+    description: "이번 투척 최종 피해 ×1.5. 단, 보스말 잡기 성공 시 최종 피해 0"
     rarity: 4
     effect: 4
-    value: 2
+    value: 1.5
     attribute: 0
     targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
     includeInDeck: 1
     useTiming: 0
     appearance: 0
@@ -76,6 +91,9 @@ MonoBehaviour:
     value: 1
     attribute: 0
     targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
     includeInDeck: 1
     useTiming: 0
     appearance: 0
@@ -87,6 +105,9 @@ MonoBehaviour:
     value: 2
     attribute: 0
     targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
     includeInDeck: 1
     useTiming: 0
     appearance: 0
@@ -98,7 +119,178 @@ MonoBehaviour:
     value: 0
     attribute: 0
     targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
     includeInDeck: 1
+    useTiming: 0
+    appearance: 0
+  - cardId: t_siege
+    talismanName: "포위부"
+    description: "이번 턴 보스 말과 같은 칸 또는 앞뒤 1칸에 착지해도 잡기 성공으로 처리한다"
+    rarity: 4
+    effect: 14
+    value: 0
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 1
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_allinnothing
+    talismanName: "승부부"
+    description: "사용 후 남은 재투척을 전부 포기하면 이번 투척 최종 피해 ×1.5"
+    rarity: 4
+    effect: 9
+    value: 1.5
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 1
+    useTiming: 0
+    appearance: 0
+  - cardId: t_hwanwi
+    talismanName: "환위부"
+    description: "최초 투척 후 결과 확정 전 사용 — 이동 거리를 +1 또는 −1 선택 보정한다. 윷 결과·배율은 유지한다"
+    rarity: 4
+    effect: 15
+    value: 0
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 1
+    useTiming: 1
+    appearance: 2
+  - cardId: t_dogeol
+    talismanName: "도걸부"
+    description: "다음 차례 최초 투척에서 도·걸 결과가 나올 확률이 ×1.5가 된다"
+    rarity: 4
+    effect: 16
+    value: 1.5
+    attribute: 0
+    targetResult: 1
+    targetResult2: 3
+    duration: 0
+    range: 0
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_moyut
+    talismanName: "모윷부"
+    description: "다음 차례 최초 투척에서 모·윷 결과가 나올 확률이 ×1.2가 된다"
+    rarity: 4
+    effect: 16
+    value: 1.2
+    attribute: 0
+    targetResult: 5
+    targetResult2: 4
+    duration: 0
+    range: 0
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_reverse
+    talismanName: "역행부"
+    description: "사용 시 말판의 속성 배치를 새로 섞는다. 말·보스 위치와 물 연속·도트 등 상태는 유지된다"
+    rarity: 4
+    effect: 17
+    value: 0
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_shackle
+    talismanName: "족쇄부"
+    description: "사용 차례 포함 3턴 동안 보스 말 이동 거리 −1. 족쇄방울과 합산된다"
+    rarity: 4
+    effect: 18
+    value: 1
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 3
+    range: 0
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_chase
+    talismanName: "추적부"
+    description: "사용 차례 포함 2턴 동안 보스와 전후 2칸 이내에 착지한 공격의 윷 기본점수 ×1.5"
+    rarity: 4
+    effect: 19
+    value: 1.5
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 2
+    range: 2
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_stubborn
+    talismanName: "고집부"
+    description: "사용 차례 포함 3턴 동안 개별 재투척을 한 번도 하지 않고 확정한 차례의 공격에 윷 기본점수 ×1.5"
+    rarity: 4
+    effect: 20
+    value: 1.5
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 3
+    range: 0
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_samjae
+    talismanName: "삼재부"
+    description: "사용 차례 포함 3턴 동안 불·물·풀을 모두 착지하면 세 번째 속성 착지 공격의 최종 피해 ×6"
+    rarity: 4
+    effect: 21
+    value: 6
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 3
+    range: 0
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_cycle
+    talismanName: "윤회부"
+    description: "이번 투척의 최종 확정 결과가 직전 차례의 최종 결과와 같으면 최종 피해 ×3"
+    rarity: 4
+    effect: 22
+    value: 3
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
+    useTiming: 0
+    appearance: 0
+  - cardId: t_gamble
+    talismanName: "도박부"
+    description: "도·개·걸·윷·모 중 하나를 선택한다 — 이번 투척의 최종 확정 결과와 일치하면 이번 보스전 동안 모든 윷 배율 ×1.2"
+    rarity: 4
+    effect: 23
+    value: 1.2
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
     useTiming: 0
     appearance: 0
   - cardId: t_fortune
@@ -109,18 +301,10 @@ MonoBehaviour:
     value: 4
     attribute: 0
     targetResult: 0
-    includeInDeck: 1
-    useTiming: 0
-    appearance: 0
-  - cardId: t_allinnothing
-    talismanName: "승부부"
-    description: "사용 후 남은 재투척을 전부 포기하면 이번 투척 최종 피해 ×2"
-    rarity: 4
-    effect: 9
-    value: 2
-    attribute: 0
-    targetResult: 0
-    includeInDeck: 1
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
     useTiming: 0
     appearance: 0
   - cardId: t_advance
@@ -131,7 +315,10 @@ MonoBehaviour:
     value: 1
     attribute: 0
     targetResult: 0
-    includeInDeck: 1
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
     useTiming: 0
     appearance: 0
   - cardId: t_retreat
@@ -142,7 +329,10 @@ MonoBehaviour:
     value: -1
     attribute: 0
     targetResult: 0
-    includeInDeck: 1
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
     useTiming: 0
     appearance: 0
   - cardId: t_do
@@ -153,6 +343,9 @@ MonoBehaviour:
     value: 2
     attribute: 0
     targetResult: 1
+    targetResult2: 0
+    duration: 0
+    range: 0
     includeInDeck: 0
     useTiming: 0
     appearance: 0
@@ -164,6 +357,9 @@ MonoBehaviour:
     value: 2
     attribute: 0
     targetResult: 2
+    targetResult2: 0
+    duration: 0
+    range: 0
     includeInDeck: 0
     useTiming: 0
     appearance: 0
@@ -175,6 +371,9 @@ MonoBehaviour:
     value: 2
     attribute: 0
     targetResult: 3
+    targetResult2: 0
+    duration: 0
+    range: 0
     includeInDeck: 0
     useTiming: 0
     appearance: 0
@@ -186,7 +385,10 @@ MonoBehaviour:
     value: 2
     attribute: 0
     targetResult: 4
-    includeInDeck: 1
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
     useTiming: 0
     appearance: 0
   - cardId: t_mo
@@ -197,6 +399,9 @@ MonoBehaviour:
     value: 2
     attribute: 0
     targetResult: 5
-    includeInDeck: 1
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 0
     useTiming: 0
     appearance: 0

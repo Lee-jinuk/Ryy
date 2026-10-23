@@ -2,14 +2,14 @@
 // TalismanManager.cs — 소모형 부적 시스템
 //
 // 담당:
-//   - 런 동안 유지되는 뽑기 덱(drawPile)과 손패(hand)
+//   - 보스전 동안 유지되는 뽑기 덱(drawPile)과 손패(hand) — 매 보스전 시작 시 재구성
 //   - 후보 선택 창 상태 (시작 5택3 / 땅 3택1 공용)
 //   - 사용 가능 구간 검증, 효과 발동, 카드 소모
 //   - '이번 투척' 효과의 세션별 보관·해제
 //
 // 덱 규칙 (사용자 확정):
-//   - 덱 = includeInDeck 활성 카드 각 1장, 런 시작 시 섞어서 구성 (손패 한도 10은 별도)
-//   - 사용한 카드는 런에서 소멸 (버림 더미·재섞기 없음)
+//   - 덱 = includeInDeck 활성 카드 각 1장, **매 보스전 시작 시** 섞어서 새로 구성 (2026-10-22 변경)
+//   - 사용한 카드는 그 보스전에서 소멸 — 다음 보스전의 새 덱에는 다시 포함
 //   - 시작 선택은 매 보스전 시작 시 후보 5장 중 3장
 //   - 땅 착지 = 부적 후보 3장 중 1장 (기존 방울 대체)
 //
@@ -20,7 +20,6 @@
 //   - 봉쇄부 중복 사용 시 중첩 없음, 보스 전환 시 미소비 봉쇄 해제
 //   - 승부부는 남은 재투척이 0이면 사용 불가
 //   - 인연부: 덱이 획득 장수보다 적으면 카드 미소모·미발동 (덱 1장 경계 미확정)
-//   - 보스 전환 시 손패 유지
 // ──────────────────────────────────────────────
 using System.Collections.Generic;
 using UnityEngine;
@@ -30,12 +29,12 @@ public class TalismanManager
     private YutGameManager gm;
     private System.Random rng = new System.Random();
 
-    public const int HandLimit = 10;   // 손패 최대 보유 수 — 초과 획득분은 덱 복귀 없이 런에서 소멸
+    public const int HandLimit = 10;   // 손패 최대 보유 수 — 초과 획득분은 덱 복귀 없이 해당 보스전에서 소멸 (다음 보스전 새 덱에는 복귀)
 
     // 초과 소멸 안내 — 마지막 획득 처리에서 소멸한 카드 수. UI가 읽어 안내 문구 표시
     public int pendingOverflowNotice;
 
-    // 런 단위 덱 — 카드 원본(TalismanData) 참조 목록.
+    // 보스전 단위 덱 — 카드 원본(TalismanData) 참조 목록, 보스전 시작마다 재구성.
     // 사용·획득 시 목록이 변하며 원본 데이터 자체는 불변.
     public readonly List<TalismanData> drawPile = new List<TalismanData>();
     public readonly List<TalismanData> hand = new List<TalismanData>();
@@ -43,6 +42,11 @@ public class TalismanManager
 
     // 선택 창 상태 — 시작 5택3·땅 3택1이 같은 구조를 공유
     public bool isChoosing = false;
+
+    // 환위부 ±1 선택창 상태 — 후보 선택과 별도 창. 열려 있는 동안 투척·재투척·확정 입력 차단.
+    // 선택 확정 전에는 카드를 소모하지 않으며 취소로 닫을 수 있다
+    public bool isChoosingMoveAdjust = false;
+    private int pendingMoveAdjustHandIndex = -1;   // 선택 대기 중인 카드의 손패 인덱스
     public readonly List<TalismanData> candidates = new List<TalismanData>();
     public readonly List<int> selectedIndices = new List<int>();
     public int requiredPicks = 0;
@@ -69,8 +73,13 @@ public class TalismanManager
     public TalismanManager(YutGameManager gameManager) { gm = gameManager; }
 
     // ── 덱 초기화 ──
-    // 새 런에서 원본 풀을 1장씩 복사해 섞는다. 카드 원본은 불변.
-    public void ResetForNewRun()
+    // 새 런 초기화 — 보스전 초기화와 같은 내용 (덱·손패 모두 보스전 단위)
+    public void ResetForNewRun() => ResetForBoss();
+
+    // 보스전 초기화 — 이전 손패·후보 선택·사용 기록·투척 한정 효과를 정리하고
+    // 덱을 다음 OpenPick에서 새로 구성하게 한다 (사용·소멸 카드도 새 덱에 복귀).
+    // 실제 전투 진입(BeginBossFight)에서만 호출 — 소개·상점·건너뛰기에서는 호출되지 않는다 (2026-10-22 확정)
+    public void ResetForBoss()
     {
         drawPile.Clear();
         hand.Clear();
@@ -80,6 +89,8 @@ public class TalismanManager
         usedThisThrow.Clear();
         nextUseId = 1;
         isChoosing = false;
+        isChoosingMoveAdjust = false;
+        pendingMoveAdjustHandIndex = -1;
         requiredPicks = 0;
         pendingOverflowNotice = 0;
         deckInitialized = false;
@@ -189,17 +200,31 @@ public class TalismanManager
     public bool CanUseNow()
     {
         if (gm.currentState != GameState.Playing) return false;
-        if (isChoosing || gm.isPresenting) return false;
+        if (isChoosing || isChoosingMoveAdjust || gm.isPresenting) return false;
         var session = gm.rollManager.session;
         return session != null && !session.rolled && !session.confirmed;
     }
 
-    // 카드별 사용 판정 — 구간 검사 + 카드 데이터의 사용 시점.
-    // 신규 사용 시점(최초 투척 후 등)이 확정되면 이 판정을 확장한다
-    private bool CanUseCard(TalismanData card)
+    // 최초 투척 후~확정 전 사용 구간 — 환위부(백색 부적) 전용.
+    // 재투척 전·사이·소진 후에도 확정 전이면 사용 가능 (사용자 확정)
+    public bool CanUseAfterRoll()
     {
-        if (!CanUseNow()) return false;
-        return card.useTiming == TalismanUseTiming.BeforeFirstThrow;
+        if (gm.currentState != GameState.Playing) return false;
+        if (isChoosing || isChoosingMoveAdjust || gm.isPresenting) return false;
+        var session = gm.rollManager.session;
+        return session != null && session.rolled && !session.confirmed;
+    }
+
+    // 카드별 사용 판정 — 카드 데이터의 사용 시점에 따라 구간 검사를 나눈다.
+    // 손패 버튼 활성화와 실제 실행이 이 한 경로를 공유한다 (public — UI가 카드별 조회)
+    public bool CanUseCard(TalismanData card)
+    {
+        if (card == null) return false;
+        if (card.useTiming == TalismanUseTiming.AfterRollBeforeConfirm)
+        {
+            return CanUseAfterRoll();
+        }
+        return CanUseNow() && card.useTiming == TalismanUseTiming.BeforeFirstThrow;
     }
 
     // 사용 성공한 카드의 표시 기록 생성 — 사용 시점 데이터를 복사해 보관.
@@ -250,12 +275,60 @@ public class TalismanManager
             gm.uiManager.UpdateUI();
             return true;
         }
+        // 환위부 — ±1 선택창을 먼저 연다. 선택 확정 전에는 카드 소모·효과 적용 없음 (취소 가능)
+        if (card.effect == TalismanEffectKind.MoveAdjust)
+        {
+            isChoosingMoveAdjust = true;
+            pendingMoveAdjustHandIndex = handIndex;
+            gm.uiManager.UpdateUI();
+            return true;
+        }
         if (!ApplyEffect(card, nextUseId, out string resultNote)) return false;
         RecordUse(card, resultNote);
         hand.RemoveAt(handIndex); // 사용 즉시 소멸 — 런에서 제거
         Debug.Log($"부적 사용: {card.talismanName} ({card.cardId})");
         gm.uiManager.UpdateUI();
         return true;
+    }
+
+    // 환위부 ±1 선택 확정 — 여기서만 이동 보정 적용·카드 소모·기록 (delta = +1 또는 −1).
+    // 재검증은 '사용 개시' 판정(CanUseAfterRoll)과 분리한다 — 열려 있는 선택창
+    // 자체(isChoosingMoveAdjust)는 완료 거부 사유가 아니다 (2026-10-22 오후 버그 수정)
+    public bool ChooseMoveAdjust(int delta)
+    {
+        if (!isChoosingMoveAdjust) return false;
+        if (delta != 1 && delta != -1) return false;   // ±1 외 보정 거부
+        var session = gm.rollManager.session;
+        if (pendingMoveAdjustHandIndex < 0 || pendingMoveAdjustHandIndex >= hand.Count || session == null)
+        {
+            CancelMoveAdjust();   // 대기 카드·세션이 사라진 비정상 상태 — 소모 없이 닫기
+            return false;
+        }
+        TalismanData card = hand[pendingMoveAdjustHandIndex];
+        // 나머지 상태 재검증 — Playing·투척 완료·미확정·연출 중 아님·땅 선택창 없음
+        if (card.effect != TalismanEffectKind.MoveAdjust ||
+            gm.currentState != GameState.Playing || isChoosing || gm.isPresenting ||
+            !session.rolled || session.confirmed)
+        {
+            return false;   // 창은 열린 채 유지 — 취소로 닫을 수 있다
+        }
+        session.moveDelta += delta;   // 기존 진격부·후퇴부 보정과 같은 합산 경로 (최소 이동 0칸 처리 유지)
+        RecordUse(card, $"{card.talismanName} — 이동 {(delta > 0 ? "+" : "")}{delta}칸 보정");
+        hand.RemoveAt(pendingMoveAdjustHandIndex);
+        pendingMoveAdjustHandIndex = -1;
+        isChoosingMoveAdjust = false;
+        Debug.Log($"부적 사용: {card.talismanName} ({card.cardId}) — 이동 {delta:+0;-0}칸");
+        gm.uiManager.UpdateUI();
+        return true;
+    }
+
+    // 환위부 선택 취소 — 카드 소모·효과 적용 없이 창만 닫는다
+    public void CancelMoveAdjust()
+    {
+        if (!isChoosingMoveAdjust) return;
+        pendingMoveAdjustHandIndex = -1;
+        isChoosingMoveAdjust = false;
+        gm.uiManager.UpdateUI();
     }
 
     private bool ApplyEffect(TalismanData card, int useId, out string resultNote)
