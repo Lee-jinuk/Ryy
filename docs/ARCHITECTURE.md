@@ -19,11 +19,12 @@
 | `YutThrowSession.cs` | Scripts/Core | 윷 4개 투척 세션 — 차례 준비에 생성(`rolled=false` = 준비 단계, 부적 사용 가능) → `InitialRoll`은 면만 던짐(준비 효과 보존) → 재투척(기본: 서로 다른 윷 최대 1개·각 1회 + 재기부 `specialRerolls` 특별 기회·`speciallyRerolled` 윷당 1회), `rerollsForfeited` 포기, `moveDelta` 이동 보정, 결과별 부적 `armedResultBonus`/`succeededResultBonus`, 확정 상태 |
 | `BoardManager.cs` | Scripts/Core | 30칸 속성 말판 생성(런당 1회)·말 이동 연출·말판 UI 갱신 |
 | `YutBoard.cs` | Scripts/Core | 말판 데이터 (`YutBoard`, `BoardTile`, `TileAttribute` — UI 참조 없는 순수 데이터) |
-| `ScoreManager.cs` | Scripts/Core | 점수 정산·저주 처리 (`ScoreEffectStep`, `ThrowSettlement`, `EffectSourceType/Target/Op` 타입 정의 포함) |
+| `ScoreManager.cs` | Scripts/Core | 점수 정산·저주 처리 (`ScoreEffectStep`, `ThrowSettlement`, `EffectSourceType/Target/Op` 타입 정의 포함). 기초 피해(기본점수×윷 배율)와 전체배율을 분리 계산 — `EffectTarget.YutMult`/`TotalMult`로 단계 기록 단위 구분, 런타임 `baseTotalMult` 소유 |
 | `BossManager.cs` | Scripts/Core | 보스 데이터 접근·순차 소개·건너뛰기 판별·보스 상성 능력(`useAffinity` 데이터 주도 — 무작위 생성 없음)·보스 말 위치·피해 단계별 이동 (`BossData`, `BossAffinity` 타입 정의 포함) |
 | `BellManager.cs` | Scripts/Core | 방울 장착·효과 — 보유 인스턴스(`ownedBells`)·성장 처리(`ApplyGrowth`)·속성 런 성장(`attrAttackBonus` 공격력·`attrMultBonus` 착지 배율)·지속 효과 조회·청개구리 유효 상성 |
+| `FortuneUpgradeManager.cs` | Scripts/Core | 복주머니 점괘 강화 — 획득 횟수(`acquiredCounts`)·누적 강화 `(kind,target)` 키의 `cumulativeBonus`(윷 배율은 `YutStatEntry.mult` 가산, 나머지는 조회 시 합산)·선택 대기(`isChoosingFortune`·`pendingCandidates`)·런 초기화. `IsSupported` = 후보·적용 공통 유효성 검사 (종류 + 대상 — YutMult는 도~모, AttrMult는 불만), `SupportedCandidateCount` = 판매 가능 후보 수 |
 | `EconomyManager.cs` | Scripts/Core | 냥(화폐) — `money`·`AddMoney`/`TrySpend` 단일 경로·시작 자금 런당 1회·보스 클리어 보상(`GrantBossClearReward` — `clearRewardPaid`로 보스전당 1회, `BeginBossFight`에서 리셋) |
-| `ShopManager.cs` | Scripts/Core | 상점 — 진입 조건(Cleared+보스 소개 화면)·상품 후보(보스 구간 유지)·구매/판매 거래·유료 리프레시·연타 차단 |
+| `ShopManager.cs` | Scripts/Core | 상점 — 진입 조건(Cleared+보스 소개 화면)·상품 후보(보스 구간 유지)·구매/판매 거래·유료 리프레시·연타 차단. 상품은 `ShopOffer` 런타임 자료형(ShopOfferKind enum) — 방울·복주머니 혼합 추첨, 복주머니 구매는 `FortuneUpgradeManager.BeginChoice`와 연결. 복주머니 판매 가능·선택창 구성은 `CanSellFortunePouch`/`FortuneChoiceReady` 공통 판정 — 새로고침과 구매가 같은 기준 |
 | `TileEffectManager.cs` | Scripts/Core | 속성 착지 효과 — 불×1.5·물 연속(보스전)·풀 도트(보스전, 차례 시작 틱). `ResolveLandingEffect`는 확정 정산에서만 호출 |
 | `BellSlotUI.cs` | Scripts/UI | 방울 고정 슬롯 표시 컴포넌트 — name/desc/status Text + actionButton 명시 참조, `Bind`/`Clear`로 표시·클릭 전달만 (계산 없음) |
 | `TalismanData.cs` | Scripts/Data | 부적 카드 정의 자료형 — `TalismanRarity`/`TalismanEffectKind`/`TalismanUseTiming`/`TalismanAppearance`/`TalismanData` (cardId·이름·설명·레어도·효과·수치·속성·`includeInDeck`·`useTiming`·`appearance`) |
@@ -50,7 +51,9 @@
 | 부적 덱 `drawPile`·손패 `hand`·선택 상태 `isChoosing`/`candidates` | TalismanManager | **보스전 단위** — `BeginBossFight`→`ResetForBoss()`가 이전 손패·후보·사용 기록·세션 효과를 정리하고 `EnsureDeck`이 활성 카드 1장씩 새로 셔플(사용·소멸 카드도 복귀, `includeInDeck` 활성 카드 — 2026-10-22 오후 20종 전환 진행 중으로 현재 7종). `OpenStartPick`·`OpenLandPick` / `SelectCandidate`·`ConfirmChoice` / `UseTalisman` — 같은 보스전 안에서 사용 카드 소멸, 원본 `TalismanData`(에셋) 불변. 후보 부족 시 `Mathf.Min` 축소·0장 생략. 손패 한도 `HandLimit=10` — 모든 획득은 `AcquireCard` 경유, 초과분 보스전에서 소멸 |
 | '이번 투척' 부적 효과 `sessionEffects` | TalismanManager | TalismanManager(준비 단계 발동 시 추가 / `ClearSessionEffects` — `PrepareTurn` 차례 준비·보스전·런 경계에서 1회) → ScoreManager가 정산에서 조건 검사·적용. 추혼부는 `caught` 조건의 곱셈 카드로 루프에서 1회 적용, `fx.mult` = 최종 피해 배율 |
 | 사용 부적 표시 기록 `usedThisThrow` (`UsedTalismanRecord`) | TalismanManager | 표시 전용 — 사용 성공 시 useId·이름·설명·효과·결과 안내 복사. `ScoreEffectStep.useId`로 정산 단계와 연결 → GameUIManager가 동적 항목 생성·단계별 제거. 기록 삭제가 실제 효과·덱·손패를 바꾸지 않음. 새 세션·보스전·런에서 정리 |
-| 잡기 판정 `caught`/`catchMult`/`actualAffinityMult` | ThrowSettlement | ScoreManager (확정 정산에서 도착 칸 = bossPieceIndex 비교 → 잡기 성공 시 `catchMultiplier`·`catchAffinityMult` 에셋값 적용, 추혼부는 `caught` 조건의 부적 곱셈 — 연출은 기록 재생) |
+| 잡기 판정 `caught`/`catchMult`/`actualAffinityMult` | ThrowSettlement | ScoreManager (확정 정산에서 도착 칸 = bossPieceIndex 비교 → 잡기 성공 시 `catchMultiplier`·`catchBonusMult` 에셋값 적용, 추혼부는 `caught` 조건의 부적 곱셈 — 연출은 기록 재생) |
+| 런타임 기본 전체배율 `baseTotalMult` | ScoreManager | ScoreManager (`GameBalanceConfig.baseTotalMult`의 런 복사본 — 보스 전환 유지·`ResetForNewRun`에서만 설정값 초기화. 정산 시 `settlement.baseTotalMult`로 복사해 전체배율 출발점으로 사용) |
+| 별도 방울 피해 배율 `bellDamageMult` | ThrowSettlement | ScoreManager (현재 ×1 — 효과 없음). 추후 방울 피해 배율 효과 추가 시 이 필드에 설정하면 실제 피해(`preEffectDamage`)·최종 전체배율(`totalMult`)에 자동 반영, 연출 단계는 `ScoreEffectStep`(TotalMult)으로 별도 기록 필요 |
 | 런타임 확률 가중치 `runtimeWeights` | YutRollManager | YutRollManager (`BuildWeights`/`ModifyProbability`) — 신규 면 조합 투척은 미사용, API 호환용 |
 | 런타임 윷 스탯 `yutStats` | YutRollManager | YutRollManager (`BuildYutStats` — 기본값을 **새 객체로 복사**, `UpgradeYutStat`) / BellManager(결과 성장 방울이 `mult` float +0.5 누적) |
 | 말 위치·완주·칸 배치 `board` | YutGameManager.board (Inspector 노출) | YutBoard.MovePiece(데이터 이동) / BoardManager(배치 생성·말 위치 초기화·시각 위치) — 배치(`layoutGenerated`)와 말 위치 초기화 분리 |

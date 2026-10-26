@@ -1,0 +1,143 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5a11be11da7a0000c0ffee000000b00b, type: 3}
+  m_Name: FortuneUpgradeDatabase
+  m_EditorClassIdentifier: 
+  upgrades:
+  - upgradeId: u_do_mult
+    upgradeName: "도 배율 강화"
+    description: "도의 기본 배율이 +0.5 성장한다."
+    kind: 0
+    targetResult: 1
+    targetAttribute: 0
+    amount: 0.5
+    effectEnabled: 1
+  - upgradeId: u_gae_mult
+    upgradeName: "개 배율 강화"
+    description: "개의 기본 배율이 +0.5 성장한다."
+    kind: 0
+    targetResult: 2
+    targetAttribute: 0
+    amount: 0.5
+    effectEnabled: 1
+  - upgradeId: u_geol_mult
+    upgradeName: "걸 배율 강화"
+    description: "걸의 기본 배율이 +0.5 성장한다."
+    kind: 0
+    targetResult: 3
+    targetAttribute: 0
+    amount: 0.5
+    effectEnabled: 1
+  - upgradeId: u_yut_mult
+    upgradeName: "윷 배율 강화"
+    description: "윷의 기본 배율이 +0.5 성장한다."
+    kind: 0
+    targetResult: 4
+    targetAttribute: 0
+    amount: 0.5
+    effectEnabled: 1
+  - upgradeId: u_mo_mult
+    upgradeName: "모 배율 강화"
+    description: "모의 기본 배율이 +0.5 성장한다."
+    kind: 0
+    targetResult: 5
+    targetAttribute: 0
+    amount: 0.5
+    effectEnabled: 1
+  - upgradeId: u_fire_mult
+    upgradeName: "불 배율 강화"
+    description: "불 착지 배율이 +0.5 성장한다."
+    kind: 1
+    targetResult: 0
+    targetAttribute: 1
+    amount: 0.5
+    effectEnabled: 1
+  - upgradeId: u_water_combo
+    upgradeName: "물 연계 강화"
+    description: "물 연계 각 단계 배율이 +0.5 성장한다."
+    kind: 2
+    targetResult: 0
+    targetAttribute: 2
+    amount: 0.5
+    effectEnabled: 1
+  - upgradeId: u_forest_dot
+    upgradeName: "풀 도트 강화"
+    description: "풀 도트 최초·추가 등록 비율이 각각 +0.5%p 성장한다."
+    kind: 3
+    targetResult: 0
+    targetAttribute: 3
+    amount: 0.5
+    effectEnabled: 1
+  - upgradeId: u_do_prob
+    upgradeName: "도 확률 강화"
+    description: "도 발생 확률이 +5%p 성장한다."
+    kind: 4
+    targetResult: 1
+    targetAttribute: 0
+    amount: 5
+    effectEnabled: 0
+  - upgradeId: u_gae_prob
+    upgradeName: "개 확률 강화"
+    description: "개 발생 확률이 +5%p 성장한다."
+    kind: 4
+    targetResult: 2
+    targetAttribute: 0
+    amount: 5
+    effectEnabled: 0
+  - upgradeId: u_geol_prob
+    upgradeName: "걸 확률 강화"
+    description: "걸 발생 확률이 +5%p 성장한다."
+    kind: 4
+    targetResult: 3
+    targetAttribute: 0
+    amount: 5
+    effectEnabled: 0
+  - upgradeId: u_yut_prob
+    upgradeName: "윷 확률 강화"
+    description: "윷 발생 확률이 +5%p 성장한다."
+    kind: 4
+    targetResult: 4
+    targetAttribute: 0
+    amount: 5
+    effectEnabled: 0
+  - upgradeId: u_mo_prob
+    upgradeName: "모 확률 강화"
+    description: "모 발생 확률이 +5%p 성장한다."
+    kind: 4
+    targetResult: 5
+    targetAttribute: 0
+    amount: 5
+    effectEnabled: 0
+  - upgradeId: u_fire_prob
+    upgradeName: "불 확률 강화"
+    description: "불 칸 발생 확률이 +5%p 성장한다."
+    kind: 5
+    targetResult: 0
+    targetAttribute: 1
+    amount: 5
+    effectEnabled: 0
+  - upgradeId: u_water_prob
+    upgradeName: "물 확률 강화"
+    description: "물 칸 발생 확률이 +5%p 성장한다."
+    kind: 5
+    targetResult: 0
+    targetAttribute: 2
+    amount: 5
+    effectEnabled: 0
+  - upgradeId: u_forest_prob
+    upgradeName: "풀 확률 강화"
+    description: "풀 칸 발생 확률이 +5%p 성장한다."
+    kind: 5
+    targetResult: 0
+    targetAttribute: 3
+    amount: 5
+    effectEnabled: 0

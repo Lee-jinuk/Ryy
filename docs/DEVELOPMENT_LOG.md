@@ -11,6 +11,109 @@
 - `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
 - 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
 
+### [2026-10-23 오전 (40차) - 사용자 지시 / Devin 구현 — 점검 발견 오류 4건 보완]
+
+**전체 점검에서 발견한 검증 누락 4건 수정** (규칙 변경 없음 — 정상 후보 8종 동작 보존):
+
+- **A. 윷 강화 대상 검증** — `IsSupported`가 `YutMult`의 `targetResult`가 도·개·걸·윷·모인지 확인 — 백도·낙 대상 강화 데이터는 활성화해도 후보·적용에서 제외 (이전엔 무의미하게 누적만 됨)
+- **B. 속성 강화 대상 검증** — `AttrMult`를 불만 유효로 제한 — 물·풀 속성 배율 강화는 적용 경로(`CurrentAttrMult` 호출 지점)가 없어 효과 없는 후보가 됨. 물·풀 배율 경로 신설 여부는 사용자 결정 대기
+- **C. 후보 수 검사 불일치 해소** — `HasSupportedCandidates`(≥1) → `SupportedCandidateCount`로 교체, `CanSellFortunePouch` 신규: 출현 확률>0 + 데이터 연결 + **선택창 UI 준비(`FortuneChoiceReady`) + 후보 수 ≥ fortuneCandidateCount**를 구매와 동일 기준으로 검사. 활성 강화가 1~2개거나 점괘 UI 미연결이면 복주머니는 "생성 불가" — 새로고침이 구매 불가 상품만 만드는 경우 차감 없이 실패
+- **D. 선택창 UI 판정 공통화·중첩 경고** — `FortuneChoiceReady(need, warn)`로 패널·슬롯·선택 버튼 검사를 구매 거부와 상품 추첨 판정이 공유. `WarnIfPanelNested`가 `fortuneChoicePanel`의 clearPanel 자식 배치를 경고 (부모 비활성 시 선택 잠금 방지)
+- **설정 경고** — `ValidateDataAssets`에 점괘 검사 추가: 활성이지만 지원되지 않는 정의(`IsSupported` 실패)를 개별 경고 + 지원 후보가 1~`need-1`개면 후보 부족 경고
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 백도 대상·물 속성 배율 데이터 추가 시 후보 미등장 + 경고 / 활성 강화 2개 구성에서 복주머니 새로고침·구매 차단
+
+### [2026-10-23 오전 (39차) - 사용자 지시 / Devin 구현 — 후속 오류 4건 + 회귀 정정]
+
+**복주머니·상점·탐욕부 취소·첫 실행 초기화 오류 수정** (규칙 변경 없음):
+
+- **1단계: 복주머니 선택 불가 상태 방지** — `FortuneUpgradeManager.IsSupported` 공통 경로 신규 (적용 가능 종류만 인정: 미구현 YutProb·AttrProb·비공격 속성 AttrMult는 활성화해도 후보 제외·적용 거부) + `HasSupportedCandidates` 조회. `BeginChoice`가 `candidateCount <= 0` 거부 — `BeginChoice(0)`의 후보 없는 대기 상태 제거. `BuyFortunePouch`가 후보 수만큼의 슬롯·선택 버튼 연결을 사전 검사 — 패널만 연결·슬롯 누락·버튼 누락이면 돈 미차감으로 구매 거부
+- **2단계: 보스 소개 재진입·상점 상태 보호** — `GoToNextBoss`에 상점 열림·점괘 선택 가드 추가. `ShowBossSelect`가 이미 표시 중인 동일 보스 재표시(`bossSelectPanel` 활성 + 같은 인덱스)면 `ResetForBoss` 생략 — 소개 재진입으로 상품·리프레시 비용이 초기화되지 않음. 실제 보스 구간 전환(다른 인덱스)은 기존대로 초기화
+- **3단계: 탐욕부 취소 정산·표시 통일** — `settlement.totalMult`를 취소 시 0으로 확정 (이후 말판 단계가 양수 복귀하지 않음 — 착지 단계 기록도 취소 후 0→0). `FinishPresentation`의 윷 배율 표시를 취소 시에도 `finalMult` 유지로 정정 (윷 배율은 정산값, 취소는 전체배율만 0). 풀 도트는 기존 `preEffectDamage > 0` 가드로 피해 0 시 미등록 유지 — 변경 없음 확인
+- **4단계-A: 기본 전체배율 첫 실행 초기화** — `ScoreManager` 생성자에서 `balanceConfig.baseTotalMult`로 초기화 — 첫 실행부터 설정값 반영 (기존엔 새 런 재시작 후에만 반영). `ResetForNewRun`과 동일 경로·중복 없음
+- **4단계-B: 생성 가능 상품 기준 새로고침** — `CanGenerateOffers` 공통 판정 신규: 복주머니(출현 확률>0 + `HasSupportedCandidates`) 또는 방울(복주머니 확률<1 + 미보유·활성 후보). `CanRefresh`·`RefreshShop`이 같은 판정 사용 — 방울 후보 없음+복주머니 확률 0%라도 차감 없이 실패
+- **5단계 정정**: 이전 보고의 "도·불·화염부·잡기 → 전체배율 36·피해 4,320"은 오기 — 정답은 전체배율 27·피해 3,240 (잡기 ×3 + 보너스 ×2)
+- 검증: `dotnet build` 오류 0·경고 0 + 회귀 사례 8건 수식 대조 (도·땅 120 / 도·불 180 / +화염부 540 / +잡기 3,240 / 윷·땅·잡기 1,800 / +추혼부 7,200 / 윷·불·탐욕 675 / 탐욕+잡기 0). Unity Play 대기
+
+### [2026-10-23 오전 (38차) - 사용자 지시 / Devin 구현 — 전체배율 개편 2단계: UI 표시 연결]
+
+- **`YutGameManager.totalMultText` 필드 신규** — 전체배율 표시 Text (미연결 시 무시). 화면 구성이 `윷 기본점수(basicScoreText) × 윷 배율(multScoreText) × 전체배율(totalMultText)`로 정리됨
+- 연출 재생은 1단계 라우팅으로 자동 동작 — 윷 배율 성장 단계는 윷 배율 표시에, 상성·잡기·부적·착지 단계는 전체배율 표시에 전후값을 반영. 전체배율은 기본값(×1)에서 시작해 발동 효과별로 갱신
+- 탐욕부 잡기 취소는 취소 단계의 전체배율 → 0 + 이유 "탐욕부 — 잡기 성공으로 피해 0"으로 명확히 표시 — 양수 배율만 남아 성공처럼 보이지 않음
+- 잡기는 내부 기록 `×3`+보너스 `×2`를 보존하고 화면 이유에 각각 표시 (묶어서 `×6` 표시는 선택 사항이라 기존 2단계 유지)
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: `totalMultText` 연결 후 `기본점수×윷 배율×전체배율`과 최종 피해 일치 확인. (39차에서 정정: 이전 보고 예시 "도·불·화염부·잡기 = 전체배율 36·피해 4,320"은 오기 — 정답은 잡기 ×3·보너스 ×2 반영 전체배율 **27**, 피해 **3,240**)
+
+### [2026-10-23 오전 (37차) - 사용자 지시 / Devin 구현 — 전체배율 계산·표시 구조 개편 1단계]
+
+**기초 피해 × 전체배율 계산 구조 명문화** — 최종 피해 결과·발동 조건·규칙 전부 불변, 계산 단위 분리만:
+
+- **`GameBalanceConfig.baseTotalMult`** (×1) + `ScoreManager.baseTotalMult` 런타임 복사본 — 보스 전환 유지·`ResetForNewRun`에서만 설정값 초기화. 추후 전체배율 강화 경로 예약
+- **`ThrowSettlement` 필드 추가** — `baseTotalMult`(이번 정산 출발 전체배율)·`totalMult`(말판 배율까지 포함한 최종 전체배율)·`bellDamageMult`(별도 방울 피해 배율, 현재 ×1). `finalMult`는 성장 반영 윷 배율 의미로 유지
+- **`EffectTarget` 재정의** — `Multiplier` → `YutMult`(윷 배율 단계: 방울 윷 성장·화령 안내) / `TotalMult`(전체배율 단계: 결과별 부적·상성·잡기·잡기보너스·부적·말판·재복 안내·탐욕 취소). `ScoreManager`의 runningMult 시작값에서 `stat.mult` 제거 — 윷 배율과 전체배율을 같은 수치로 섞지 않음
+- **피해 공식 재배치** — `preEffectDamage = finalBasic × finalMult × runningMult(전체배율) × bellDamageMult`, 말판 배율은 `ResolveLandingEffect` 경유 후 `settlement.totalMult` 확정. 수치상 `baseTotalMult=1`·`bellDamageMult=1`로 기존 공식과 동치
+- 표시 저장소 분리 — `gm.multiplier`=윷 배율, `gm.totalMult`=전체배율 (신규 런타임 필드). 연출 재생은 단계 `target`으로 라우팅, `FinishPresentation`은 정산 데이터만 읽음. **전체배율 Text 필드는 2단계에서 추가** — 현재 `multScoreText`는 윷 배율 표시로 의미 정리됨
+- 검증: `dotnet build` 오류 0·경고 0. 기대 사례 수식 대조: 도·땅=120 / 도·불=180 / 도·불+화염부=540 / 윷·땅·잡기=1800 / +추혼부=7200 / 윷·불·탐욕=675 / 탐욕+잡기=0 — 전부 유지. Unity Play 대기: 물 연계·풀 도트·성장 중첩·보스 전환 유지·새 런 초기화
+
+### [2026-10-23 오전 (36차) - 사용자 지시 / Devin 구현 — 혼합 상점·점괘 선택 구현 (지시서 1~3단계)]
+
+**혼합 상점 + 복주머니 구매·점괘 3택1 UI** — 데이터·거래·표시가 하나의 기능이라 연동 구현:
+
+- **`ShopOffer` 런타임 자료형 신규** (`Data/ShopOffer.cs`) — `ShopOfferKind`(Bell/FortunePouch) enum으로 상품 종류를 구분 (이름 문자열·임시 방울 판정 없음). `ShopManager.offers`를 `List<BellData>` → `List<ShopOffer>`로 전환
+- **`ShopConfig` 확장** — `fortunePouchPrice: 20`, `fortunePouchChance: 0.5`, `fortuneCandidateCount: 3`, 복주머니 이름·설명 필드 (에셋 YAML에 실제 저장값 반영)
+- **혼합 추첨** — `RollOffers`가 슬롯당 복주머니 확률로 독립 추첨 (구성 보장 없음, 4칸 전부 같은 종류 가능). 방울 칸은 미보유·활성 후보에서 목록 내 중복 없이 뽑고 **방울 후보가 없으면 그 칸을 비움** — 복주머니 대체 여부는 미확정으로 사용자 결정 대기. 목록 수명·구매 완료·리프레시 규칙 보존
+- **복주머니 구매** (`ShopManager.BuyFortunePouch`) — 장착 한도와 무관하게 잔액·선택창·후보 확보 순서로 검사. `BeginChoice`로 후보 3개를 먼저 확보한 뒤 `TrySpend` — 실패 시 `ClearChoice`로 후보만 정리하고 돈·구매 완료 표시 없음. 성공 시 차감·구매 완료 각 1회, 선택 대기 상태로 상점 잠금
+- **선택 중 차단** — `isChoosingFortune` 동안 `BuyOffer`·`SellBellInstance`·`RefreshShop`·`CloseShop`·`EnterBossBattle`·`SkipBoss`를 메서드 수준에서 거부 + UI 버튼 비활성 (양쪽 차단)
+- **점괘 UI** — `YutGameManager`에 `fortuneChoicePanel`·`fortuneOptionSlots[3]`(BellSlotUI 재사용)·`fortuneChoiceText` 필드 추가. `GameUIManager.SyncFortuneChoicePanel`이 `pendingCandidates`를 표시만 — 선택 버튼 리스너는 `Bind`가 교체 방식으로 코드 자동 연결 (수동 OnClick 불필요). 상점 구매 슬롯은 `ShopOffer` 종류별 이름·설명·가격 표시, 복주머니는 방울 한도 무관 잔액만 검사
+- 검증: `dotnet build` 오류 0·경고 0. **Unity Play 대기 — 사용자 Inspector 작업 필요** (패널·슬롯 3칸 배치). 확률 강화 8종·말판 재배치는 미구현 유지
+
+### [2026-10-23 오전 (35차) - 사용자 지시 / Devin 구현 — 후속 지시서 1단계: 문제 3건 수정]
+
+**복주머니 추가 후 확인된 문제 3건 수정** (규칙 변경 없음):
+
+- **A. 화령방울 성장 안내에 복주머니 강화 누락** — `TileEffectManager.CurrentAttrMult(attr)` 공통 조회 경로 신규 (설정 기본 + 화령 성장 + 복주머니). `BellManager`의 AttrMultGrowth 안내가 성장 전후를 이 경로로 조회 → 복주머니로 2.0인 상태면 "2 → 2.5"로 표시. 정보판·실제 계산도 같은 경로 사용 — 계산식 복제 제거
+- **B. 물·풀 강화의 특정 ID 의존 제거** — `FortuneUpgradeManager`의 누적 저장소를 `(kind, target)` 키의 `cumulativeBonus`로 재구성. `upgradeId`는 정의 식별·획득 기록 전용, 같은 kind의 새 ID 데이터도 자동 누적. `GetDef`·`CountedBonus`·하드코딩 ID 조회 제거
+- **C. 후보 0개 선택 대기 진입 방지** — `BeginChoice`가 bool 반환: 대기 중 재호출·활성 후보가 candidateCount 미만이면 후보를 비우고 false — 끝낼 수 없는 선택 상태 미생성. 구매 연결 시 실패면 돈 미차감·상품 미처리 경로로 사용
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 복주머니+화령 조합 안내 일치 / 동일 kind 다른 ID 적용 / 후보 부족 시 상태 정리
+
+### [2026-10-23 오전 (34차) - 사용자 지시 / Devin 구현 — 복주머니 강화·혼합 상점·말판 재배치 1단계]
+
+**점괘 강화 데이터·런타임 상태·확정 수치 적용** (지시서 5단계 중 1단계):
+
+- 신규: `FortuneUpgradeData`(`FortuneUpgradeKind` 6종 + 대상·수치·활성 필드) / `FortuneUpgradeDatabase`(SO) / `FortuneUpgradeManager`(획득 횟수·누적 강화·선택 대기·조회·런 초기화) / `FortuneUpgradeDatabase.asset` 16종
+- `YutGameManager` — `fortuneDatabase` 에셋 필드 + `fortuneManager` 생성 + `ResetForNewRun`에 리셋 연결 (보스 전환에서는 미호출 — 런 단위 수명)
+- 확정 수치 적용 경로: 윷 배율 = 런타임 `stat.mult` 가산(도걸·윷령방울과 동일 경로·원본 미변경) / 불 = `fortuneManager.attrMultBonus` 별도 보관 → `TileEffectManager`가 `fireTileMult`+화령+복주머니 합산 / 물 연계·풀 도트 비율 = 횟수×수치 `CountedBonus` 조회
+- `GameUIManager` — 불 배율·물 연계 표시에 복주머니 강화분 합산 (표시=계산 일치)
+- **활성 강화 8종**: 도/개/걸/윷/모 배율·불 배율·물 연계·풀 도트. **비활성 8종**: 윷·속성 확률 — 추첨 정책(차감 방식·상한·적용 범위 등) 사용자 확인 대기
+- **Inspector 작업**: `FortuneUpgradeDatabase` 에셋 → `YutGameManager.Fortune Database` 연결
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: 같은 강화 2회 누적 / 물 단계 전체·풀 비율 / 보스 전환 유지·새 런 초기화 / 방울 성장 합산
+
+### [2026-10-23 오전 (33차) - 사용자 지시 / Devin 구현 — 유지보수 정리 1단계]
+
+**확인된 오류 5건 수정** (규칙 변경 없음, 동작 보존 — 표시·방어 정합성 개선):
+
+- **A. 잡기 후 부적 배율 표시 누락** — `ScoreManager.SettleNormalThrow`의 `runningMult` 시작값에 `catchBonusMult` 추가. 윷·땅·잡기·추혼부에서 단계 전후가 36→144로 실제 피해(7200)와 일치
+- **B. 화령방울 성장 표시 단위 혼동** — `GrowthTrigger.isInfo` 신규: `AttrMultGrowth` 단계는 안내 전용으로 점수판 배율을 바꾸지 않고, 기록 수치는 속성 배율 단위(before/after = 1.5→2)로 보존. 이유 표시 "화령방울 — 불 착지 배율 1.5 → 2". `AddBellStep`에 `displayedMult` 인자 추가
+- **C. 빈 상점 목록 무료 갱신** — `ShopManager.offersGenerated` 플래그 신규: 목록 생성 여부와 상품 개수를 구분. 빈 목록도 보스 구간 동안 유지, 판매 후 새 상품은 유료 리프레시 경로만. `ResetForBoss`에서만 초기화
+- **D. 보스 이동 배열 방어** — `DrawBossMoveSteps`가 null·빈 배열·길이 불일치를 검사하고 `-1` 반환 → `PrepareBossMove`가 계획을 만들지 않고 `MoveBossPiece`가 이동을 생략(봉쇄부도 미소모). `ValidateDataAssets` 경고 문구를 실제 동작(이동 차단)과 일치
+- **E. 보스 상성 검증** — `HasAffinityAbility`가 약점·강점을 `CombatAttributes`(불·물·풀) 멤버십 + 서로 다름으로 검사. 비공격 속성 상성은 조회·적용·표시 모두에서 거부 — 임의 대체 없음
+- 검증: `dotnet build` 오류 0·경고 0. Unity Play 대기: A~C 재현 케이스 / 빈 상점 판매→재진입 / 정상 배열 이동 단계 유지
+
+### [2026-10-23 오전 (32차) - 사용자 지시 / Devin 구현 — 유지보수 정리 0단계]
+
+**현재 동작 기준 확보** — 코드 변경 없이 기준점 기록만 수행:
+
+- **Git 기준점**: `develop` 커밋 `0a0f7c9` — 방울 8종 1단계·환위부 선택 수정까지의 동작 확정본 (미수정 오류 포함 상태를 식별 가능하게 보존)
+- **테스트 Scene**: `Assets/test2.unity` — `moveAdjustPanel` 연결 + 환위부 +1/−1/취소 OnClick 연결 **이미 완료** 확인. `rollButton`은 `{fileID: 0}` 미연결 (실제 차단은 `RollYut` 검사가 처리). `SampleScene.unity`에는 신규 연결 없음 — 실제 사용 Scene은 test2로 간주, 사용자 확인 필요
+- **활성 구성**: 부적 8종(화염·추혼·탐욕·재기·인연·봉쇄·승부·환위) / 방울 4종(도걸·윷령·화령·족쇄). 수령·목령·천운·지령 = 정의 준비·비활성
+- **기준 사례 검증** (코드 대조 — 사용자 지시서와 일치): 도·불=180 / 윷·땅·잡기=1800 / +추혼부=7200 / 윷·불·탐욕부=675 / 탐욕부+잡기=0 / 풀 300→400→200 도트 60→80→90 / 물 90 연속 90→180→360→720→1440 / 화령 첫 발동 불×2·도=240 / 보상 10+남은 투척×5냥
+- **확인된 오류 (1단계 수정 대상 — 코드 확인 완료)**:
+  - A. `ScoreManager` 부적 곱셈의 `runningMult` 시작값에 `catchBonusMult` 누락 — 잡기 성공 시 부적 단계의 전후 배율이 실제와 불일치 (실제 피해는 정상)
+  - B. 화령방울 성장 단계가 누적 성장분(0→0.5)을 전체 실효 배율 before/after로 기록 — 표시 단위 혼동
+  - C. `ShopManager`가 `offers.Count == 0`을 미생성으로 판단 — 빈 목록도 재진입 시 재생성 경유 → 방울 판매 후 무료 상품 갱신 가능
+  - D. `DrawBossMoveSteps`가 `bossMoveStageMin[stage]`를 null/빈 배열 방어 없이 접근 — `BossMoveStage`는 min 길이로 방어하나 null 자체는 미방어
+  - E. `HasAffinityAbility`가 `weak != strong`만 검사 — 땅·쇠 등 비공격 상성도 유효 통과
+- **문서-코드 충돌 없음 확인**: 상점 후보는 규칙 문서에 '8종 목표·1단계 시점 4종 활성'으로 기록돼 구현 상태와 일치
+- 미확정 유지: 수룡부 × 수령방울 중첩, 인연부 덱 1장 부족 처리, 탐욕부 충돌=잡기 임시 해석 — 임의 변경 없음
+
 ### [2026-10-22 오후 (31차) - 사용자 지시 / Devin 구현 — 환위부 선택 완료 불가 버그 수정]
 
 **버그 수정 (규칙 변경 없음)**: `ChooseMoveAdjust`가 `CanUseAfterRoll()`을 재호출했는데, 그 안의 `isChoosingMoveAdjust` 검사가 열린 선택창 자체를 거부 사유로 만들어 +1/−1 선택이 항상 실패.

@@ -51,9 +51,8 @@ public class TileEffectManager
             case TileAttribute.Fire:
             {
                 waterComboCount = 0;
-                // 불 착지 배율 = 설정 기본 + 화령방울 런타임 성장분 (설정 원본 미변경, 성장분은 런 단위 유지)
-                float mult = (gm.balanceConfig != null ? gm.balanceConfig.fireTileMult : 1.5f)
-                    + gm.bellManager.GetAttrMultBonus(TileAttribute.Fire);
+                // 불 착지 배율 = 설정 기본 + 화령방울 성장 + 복주머니 강화 — 공통 조회 경로 사용
+                float mult = CurrentAttrMult(TileAttribute.Fire);
                 settlement.tileEffectMult = mult;
                 settlement.tileEffectNote = $"피해 ×{mult}";
                 AddTileStep(settlement, $"불 착지 효과 ×{mult}", mult);
@@ -119,6 +118,19 @@ public class TileEffectManager
         }
     }
 
+    // 속성 착지 배율 현재값 — 설정 기본 + 화령방울 성장 + 복주머니 강화의 유일한 조회 경로.
+    // 불만 설정 기본값(fireTileMult)이 있고 나머지 공격 속성은 기본 ×1.
+    // 실제 데미지 계산·정보판 표시·방울 성장 안내가 모두 이 경로를 사용한다
+    public float CurrentAttrMult(TileAttribute attr)
+    {
+        float baseMult = attr == TileAttribute.Fire
+            ? (gm.balanceConfig != null ? gm.balanceConfig.fireTileMult : 1.5f)
+            : 1f;
+        return baseMult
+            + gm.bellManager.GetAttrMultBonus(attr)
+            + gm.fortuneManager.GetAttrMultBonus(attr);
+    }
+
     // 차례 시작 도트 틱 피해 — 등록된 도트는 차례 시작마다 적용되고 소모되지 않는다
     public int TurnStartDotDamage => forestDotActive ? forestDot : 0;
 
@@ -130,34 +142,42 @@ public class TileEffectManager
         {
             return 1f;
         }
-        return mults[Mathf.Clamp(count - 1, 0, mults.Count - 1)];
+        // 복주머니 물 연계 강화 — 각 단계 배율에 같은 양을 합산 (설정 원본 미변경)
+        return mults[Mathf.Clamp(count - 1, 0, mults.Count - 1)]
+            + gm.fortuneManager.GetWaterComboBonus();
     }
 
+    // 풀 도트 등록 비율 = 설정 기본 + 복주머니 강화(%p) — 이후 등록분부터 적용, 기존 저장분 재계산 없음
     private float DotInitialPercent =>
-        gm.balanceConfig != null ? gm.balanceConfig.forestDotInitialPercent : 20f;
+        (gm.balanceConfig != null ? gm.balanceConfig.forestDotInitialPercent : 20f)
+            + gm.fortuneManager.GetForestDotBonus();
 
     private float DotAddPercent =>
-        gm.balanceConfig != null ? gm.balanceConfig.forestDotAddPercent : 5f;
+        (gm.balanceConfig != null ? gm.balanceConfig.forestDotAddPercent : 5f)
+            + gm.fortuneManager.GetForestDotBonus();
 
-    // 속성 착지 배율 단계 기록 — 배율이 실제로 변한 효과 (불 ×1.5 / 물 연계)
+    // 속성 착지 배율 단계 기록 — 배율이 실제로 변한 효과 (불 ×1.5 / 물 연계).
+    // 탐욕부 취소 확정 후에는 유효 전체배율 0을 유지 — 말판 단계가 양수로 되돌리지 않는다
     private void AddTileStep(ThrowSettlement settlement, string note, float mult)
     {
+        float before = settlement.talismanCancelled
+            ? 0f
+            : settlement.baseTotalMult * settlement.resultBonusMult * settlement.affinityMult
+                * settlement.catchMult * settlement.catchBonusMult * settlement.talismanMult;
         settlement.steps.Add(new ScoreEffectStep
         {
             source = EffectSourceType.TileEffect,
             sourceId = $"tile_{settlement.landingTileIndex}",
             displayName = note,
             reasonText = note,
-            target = EffectTarget.Multiplier,
+            target = EffectTarget.TotalMult,
             op = EffectOp.Multiply,
             opValue = 0,
-            opValueF = mult,
+            opValueF = mult,   // 실제 적용된 말판 배율 기록 — 취소 시에도 전후 0은 유지되나 효과 자체의 배율은 정확히 남긴다
             beforeValue = 0,
-            beforeValueF = settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult
-                * settlement.catchMult * settlement.catchBonusMult * settlement.talismanMult,
+            beforeValueF = before,
             afterValue = 0,
-            afterValueF = settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult
-                * settlement.catchMult * settlement.catchBonusMult * settlement.talismanMult * mult,
+            afterValueF = before * mult,
             delta = 0,
             order = settlement.steps.Count,
         });
@@ -166,15 +186,17 @@ public class TileEffectManager
     // 속성 착지 안내 단계 기록 — 배율 ×1 (풀 도트 등록·미등록 안내)
     private void AddInfoTileStep(ThrowSettlement settlement, string note)
     {
-        float running = settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult
-            * settlement.catchMult * settlement.catchBonusMult * settlement.talismanMult;
+        float running = settlement.talismanCancelled
+            ? 0f
+            : settlement.baseTotalMult * settlement.resultBonusMult * settlement.affinityMult
+                * settlement.catchMult * settlement.catchBonusMult * settlement.talismanMult;
         settlement.steps.Add(new ScoreEffectStep
         {
             source = EffectSourceType.TileEffect,
             sourceId = $"tile_{settlement.landingTileIndex}",
             displayName = note,
             reasonText = note,
-            target = EffectTarget.Multiplier,
+            target = EffectTarget.TotalMult,
             op = EffectOp.Multiply,
             opValue = 0,
             opValueF = 1f,

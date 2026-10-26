@@ -47,3 +47,4 @@ MonoBehaviour:
   bossMoveStageMax: 070000000600000005000000i
   catchMultiplier: 3
   catchBonusMult: 2
+  baseTotalMult: 1

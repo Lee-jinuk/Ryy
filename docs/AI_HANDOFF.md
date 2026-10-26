@@ -6,9 +6,119 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ## [2026-10-20 오후 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-22 오후 (31차) 변경사항 요약 - 사용자 지시 / Devin 구현]
+[2026-10-23 오전 (40차) 변경사항 요약 - 사용자 지시 / Devin 구현]
 
-★ 최신 — 환위부 선택 완료 불가 버그 수정 (규칙 변경 없음):
+★ 최신 — 점검 발견 검증 누락 4건 보완:
+- IsSupported 대상 검증: YutMult는 도~모만, AttrMult는 불만
+  유효 (백도·낙·물/풀 속성 배율은 활성이어도 후보·적용 제외)
+- SupportedCandidateCount + CanSellFortunePouch — 복주머니
+  판매 가능 = 확률>0 + 데이터 + 선택창 UI(FortuneChoiceReady
+  공통 판정) + 후보 수 ≥ fortuneCandidateCount. 후보 1~2개면
+  새로고침도 구매 불가 상품 생성 안 함
+- FortuneChoiceReady(need,warn)로 구매 거부·추첨 판정 공통화,
+  WarnIfPanelNested에 fortuneChoicePanel 중첩 경고 추가
+- ValidateDataAssets: 활성이지만 미지원 정의 개별 경고 +
+  후보 부족 경고
+- 검증: build 0·0. Unity Play 대기
+- 미확정 유지: 물·풀 속성 배율 적용 경로 신설 여부·방울 후보
+  없을 때 칸 대체·확률 강화 정책·말판 재배치
+
+[이전] 2026-10-23 오전 (39차) — 후속 오류 4건 수정 + 회귀 정정:
+- 복주머니: IsSupported 공통 경로(미구현 효과 후보 제외),
+  BeginChoice(0) 거부, 슬롯·선택 버튼 미연결 시 구매 거부
+- 상점: GoToNextBoss 선택 중 가드, 동일 보스 소개 재표시는
+  ResetForBoss 생략(목록·리프레시 비용 유지), CanGenerateOffers
+  공통 판정으로 CanRefresh·RefreshShop 일치
+- 탐욕부 취소: settlement.totalMult=0 확정, 말판 단계 양수
+  복귀 없음, 윷 배율 표시는 finalMult 유지 (취소=전체배율만 0)
+- 기본 전체배율: ScoreManager 생성자에서 설정값 초기화 —
+  첫 실행부터 반영 (이전엔 재시작 후에만)
+- 정정: 도·불·화염부·잡기 = 전체배율 27·피해 3,240
+  (이전 보고 36·4,320 오기)
+- 검증: build 0·0 + 사례 8건 수식 일치. Unity Play 대기
+- 미확정 유지: 방울 후보 없을 때 칸 대체·확률 강화 정책·말판 재배치
+
+[이전] 2026-10-23 오전 (38차) — 전체배율 개편 2단계: UI 표시 연결:
+- YutGameManager.totalMultText 필드 신규 — 전체배율 표시
+  (미연결 시 무시). 사용자 Inspector 연결 대기
+- 화면 구성: 기본점수(basicScoreText) × 윷 배율(multScoreText,
+  의미 = 성장 반영 윷 배율로 변경됨) × 전체배율(totalMultText)
+- 연출 라우팅은 1단계 구조로 자동 — 전체배율은 기본값×1에서
+  효과별 갱신, 탐욕부 취소는 전체배율 0+이유 표시
+- 검증: build 0·0. Unity Play 대기 — 연결 후
+  기본점수×윷배율×전체배율=최종 피해 일치 확인
+- 남은 복주머니 작업: 확률 강화 정책 5건·말판 재배치·
+  방울 후보 없을 때 칸 처리 미확정
+
+[이전] 2026-10-23 오전 (37차) — 전체배율 계산·표시 구조 개편 1단계:
+- 기초 피해(기본점수×윷 배율) × 전체배율(기본×결과부적×부적곱
+  ×말판×잡기×잡기보너스×상성×방울피해) 구조 명문화
+- GameBalanceConfig.baseTotalMult(×1) → ScoreManager 런타임
+  복사본 — 보스 전환 유지, 새 런 ResetForNewRun 초기화
+- EffectTarget 재정의: YutMult(윷 배율 단계) / TotalMult(전체배율
+  단계) — 단계 기록의 두 단위 분리, runningMult에서 stat.mult 제거
+- ThrowSettlement: baseTotalMult·totalMult·bellDamageMult 추가,
+  gm.totalMult 표시 필드 신규 (multScoreText는 윷 배율 의미로 확정)
+- 검증: build 0·0 + 기대 피해 7건 수식 일치. Unity Play 대기.
+  2단계(전체배율 Text 필드·연출 정리)는 승인 대기
+
+[이전] 2026-10-23 오전 (36차) — 혼합 상점·점괘 선택 구현 (지시서 1~3단계 연동):
+- ShopOffer 런타임 자료형(ShopOfferKind enum)으로 offers 전환,
+  슬롯당 방울·복주머니 50:50 독립 추첨 — ShopConfig에
+  복주머니 가격20·확률·후보수3·이름/설명 추가
+- 복주머니 구매: BeginChoice로 후보 3개 확보 → TrySpend 순서,
+  실패 시 ClearChoice로 돈·상품 보존. 장착 한도 무관
+- 선택 대기 중 구매·판매·리프레시·닫기·보스 진입·건너뛰기
+  메서드+버튼 양쪽 차단
+- 신규 Inspector 필드: fortuneChoicePanel·fortuneOptionSlots[3]
+  (BellSlotUI 재사용, 선택 버튼은 Bind 코드 자동 연결)·
+  fortuneChoiceText — 사용자 배치·연결 대기
+- 미확정: 방울 후보 없을 때 칸 처리(현재 빈칸)·확률 강화
+  정책 5건·말판 재배치는 후속 단계
+- 검증: build 0·0. Unity Play 대기 (패널 미연결 시 복주머니
+  구매가 거부되어 안전)
+
+[이전] 2026-10-23 오전 (35차) — 복주머니 문제 3건 수정:
+- 불 배율 공통 조회 CurrentAttrMult(설정+화령+복주머니) —
+  성장 안내·정보판·실제 계산이 같은 기준 (2.0 상태면 2→2.5 표시)
+- 강화 누적을 (kind,target) 키로 재구성 — upgradeId와 무관하게
+  같은 종류 데이터 자동 합산 (물·풀 하드코딩 ID 제거)
+- BeginChoice가 bool 반환 — 후보 부족·대기 중 재호출 시
+  끝낼 수 없는 선택 상태를 만들지 않음
+
+[이전] 2026-10-23 오전 (34차) — 복주머니 강화·혼합 상점·말판 재배치 지시서 1단계:
+- 신규 FortuneUpgradeData/Database/Manager + 에셋 16종
+  (수치 8종 활성, 확률 8종은 정책 미확정 비활성)
+- 윷 배율=런타임 스탯 가산, 불=fortuneManager.attrMultBonus로
+  화령과 별도 합산, 물 연계·풀 도트=횟수×수치 조회.
+  런 단위 수명 — ResetForNewRun에서만 초기화
+- 사용자 Inspector 작업: FortuneUpgradeDatabase 에셋을
+  YutGameManager.Fortune Database에 연결
+- 검증: build 0·0. 2단계(혼합 상품·구매)는 승인 대기
+
+[이전] 2026-10-23 오전 (33차) — 유지보수 정리 1단계: 확인된 오류 5건 수정(규칙 변경 없음):
+- 잡기 보너스 누락으로 부적 단계 배율이 실제와 어긋나던 표시 수정
+  (runningMult에 catchBonusMult 포함 — 36→144)
+- 화령방울 성장 단계는 isInfo 안내 전용 — 속성 배율(1.5→2) 표시,
+  점수판 배율 미변경
+- ShopManager.offersGenerated — 빈 목록도 생성 상태로 유지,
+  판매 후 재진입 무료 갱신 차단
+- 보스 이동 배열 null/빈/길이 불일치 → 계획·이동 차단 + LogError
+  (임의 기본값 없음), 상성 약점·강점을 불·물·풀 멤버십으로 검증
+- 검증: build 0·0. Unity Play 대기. 2단계(차례 진행·입력 판정)
+  진행은 사용자 승인 대기
+
+[이전] 2026-10-23 오전 (32차) — 유지보수·확장성 정리 지시서 접수, 0단계(기준 확보) 완료:
+- Git 기준점: develop 커밋 0a0f7c9 — 현재 동작 확정본(미수정
+  오류 포함)을 식별 가능하게 보존
+- 테스트 Scene = Assets/test2.unity: moveAdjustPanel·환위부
+  ±1/취소 OnClick 연결 완료 확인, rollButton 미연결({fileID:0})
+- 활성: 부적8종·방울4종. 확인된 오류 5건 코드 확인
+  (잡기 보너스 표시·화령 단위·빈 상점 재진입·보스 이동 배열·
+  상성 속성 검증) — 1단계 수정 대상
+- 단계별 완료 후 사용자 승인 대기 원칙 — 1단계 진행 대기 중
+
+[이전] 2026-10-22 오후 (31차) — 환위부 선택 완료 불가 버그 수정 (규칙 변경 없음):
 - ChooseMoveAdjust가 CanUseAfterRoll의 isChoosingMoveAdjust 검사에
   걸려 열린 선택창의 +1/−1이 항상 거부되던 문제 수정 —
   개시 판정과 완료 판정 분리, delta ±1 검증 추가

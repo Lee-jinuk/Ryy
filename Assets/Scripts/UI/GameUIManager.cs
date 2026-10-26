@@ -86,6 +86,11 @@ public class GameUIManager
         {
             gm.multScoreText.text = gm.multiplier.ToString();
         }
+        // 전체배율 — 기본 전체배율(×1)에서 발동 효과별로 갱신. 미연결 시 표시 생략 (계산에는 영향 없음)
+        if (gm.totalMultText != null)
+        {
+            gm.totalMultText.text = gm.totalMult.ToString();
+        }
         // 총점 표시는 연출 단계에 맞춰 displayTotal 사용 — '토탈 합산' 단계에서만 증가
         if (gm.totalScoreText != null)
         {
@@ -277,9 +282,8 @@ public class GameUIManager
         }
         if (gm.currentAttributeStatsText != null)
         {
-            // 속성 효과 정보판 — 불 배율(기본+화령 성장) / 물 연속 횟수·배율 / 현재 풀 도트 (보스전 단위 상태)
-            float fireMult = (gm.balanceConfig != null ? gm.balanceConfig.fireTileMult : 1.5f)
-                + gm.bellManager.GetAttrMultBonus(TileAttribute.Fire);
+            // 속성 효과 정보판 — 불 배율(기본+화령 성장+복주머니) / 물 연속 횟수·배율 / 현재 풀 도트 (보스전 단위 상태)
+            float fireMult = gm.tileEffects.CurrentAttrMult(TileAttribute.Fire);
             int combo = gm.tileEffects.waterComboCount;
             float waterMult = WaterComboDisplay(combo + 1);
             gm.currentAttributeStatsText.text =
@@ -291,6 +295,7 @@ public class GameUIManager
         // 장착 방울 목록 — 전투 화면 표시 (BellItem Prefab 동적 항목)
         SyncBellPanel();
         SyncShopPanel();   // 상점 열림 시 상품·보유 목록·잔액 표시
+        SyncFortuneChoicePanel();   // 점괘 선택 대기 중 후보 3칸 표시 (선택 중 상점 패널 위에 겹침)
 
         // 착지 칸 정보 — "불 - 50점" (상성·윷 배율 적용 전 칸 기본점수). 새 보스전·새 런에서 비워진다
         if (gm.landingTileText != null)
@@ -485,15 +490,14 @@ public class GameUIManager
         return $"{stat.baseScore} ×{FormatStat(stat.mult)}";
     }
 
-    // 물 연속 정보판 표시용 배율 — 설정 목록 클램프는 TileEffectManager와 동일 기준
+    // 물 연속 정보판 표시용 배율 — 설정 목록 클램프 + 복주머니 강화, TileEffectManager와 동일 기준
     private float WaterComboDisplay(int count)
     {
         var mults = gm.balanceConfig != null ? gm.balanceConfig.waterComboMults : null;
-        if (mults == null || mults.Count == 0)
-        {
-            return 1f;
-        }
-        return mults[Mathf.Clamp(count - 1, 0, mults.Count - 1)];
+        float baseMult = mults != null && mults.Count > 0
+            ? mults[Mathf.Clamp(count - 1, 0, mults.Count - 1)]
+            : 1f;
+        return baseMult + gm.fortuneManager.GetWaterComboBonus();
     }
 
     // 상점 표시 동기화 — 고정 슬롯(shopOfferSlots·shopBellSlots) + 잔액 + 리프레시 비용.
@@ -501,6 +505,7 @@ public class GameUIManager
     private void SyncShopPanel()
     {
         bool open = gm.shopManager.isOpen;
+        bool choosing = gm.fortuneManager.isChoosingFortune;   // 점괘 선택 대기 중 — 구매·판매·리프레시 버튼 비활성
         if (gm.shopMoneyText != null)
         {
             gm.shopMoneyText.text = open ? $"{gm.economyManager.money}냥" : "";
@@ -520,17 +525,30 @@ public class GameUIManager
             if (slot == null) continue;
             if (open && i < gm.shopManager.offers.Count)
             {
-                BellData offer = gm.shopManager.offers[i];
+                ShopOffer offer = gm.shopManager.offers[i];
                 int index = i;   // 클로저용 — 람다가 인덱스 변수를 공유하지 않게 고정
                 bool sold = gm.shopManager.soldOfferIndices.Contains(index);
+                string name = offer.kind == ShopOfferKind.FortunePouch
+                    ? (gm.shopConfig != null ? gm.shopConfig.fortunePouchName : "복주머니")
+                    : offer.bell.bellName;
+                string desc = offer.kind == ShopOfferKind.FortunePouch
+                    ? (gm.shopConfig != null ? gm.shopConfig.fortunePouchDescription : "")
+                    : offer.bell.description;
                 if (sold)
                 {
-                    slot.Bind(offer.bellName, offer.description, $"{offer.buyPrice}냥", "구매 완료", false, null);
+                    slot.Bind(name, desc, $"{offer.price}냥", "구매 완료", false, null);
+                }
+                else if (offer.kind == ShopOfferKind.FortunePouch)
+                {
+                    // 복주머니 — 장착 슬롯 미점유: 방울 한도와 무관하게 잔액만 검사
+                    slot.Bind(name, desc, $"{offer.price}냥", "구매",
+                        !choosing && gm.economyManager.money >= offer.price,
+                        () => gm.shopManager.BuyOffer(index));
                 }
                 else
                 {
-                    slot.Bind(offer.bellName, offer.description, $"{offer.buyPrice}냥", "구매",
-                        gm.economyManager.money >= offer.buyPrice && gm.bellManager.ownedBells.Count < gm.bellManager.MaxBells,
+                    slot.Bind(name, desc, $"{offer.price}냥", "구매",
+                        !choosing && gm.economyManager.money >= offer.price && gm.bellManager.ownedBells.Count < gm.bellManager.MaxBells,
                         () => gm.shopManager.BuyOffer(index));
                 }
             }
@@ -549,8 +567,44 @@ public class GameUIManager
                 OwnedBell bell = gm.bellManager.ownedBells[i];
                 int instanceId = bell.instanceId;
                 slot.Bind(bell.bellName, bell.description,
-                    $"{bell.sellPrice}냥 · {BellUsesText(bell)}", "판매", true,
+                    $"{bell.sellPrice}냥 · {BellUsesText(bell)}", "판매", !choosing,
                     () => gm.shopManager.SellBellInstance(instanceId));
+            }
+            else
+            {
+                slot.Clear();
+            }
+        }
+    }
+
+    // 점괘 선택 표시 동기화 — pendingCandidates는 FortuneUpgradeManager가 보관, UI는 표시만.
+    // 재표시로 후보를 재추첨하지 않고, 선택 버튼 리스너는 Bind가 매번 교체해 누적되지 않는다
+    private void SyncFortuneChoicePanel()
+    {
+        bool choosing = gm.fortuneManager.isChoosingFortune;
+        SetPanel(gm.fortuneChoicePanel, choosing);
+        if (!choosing)
+        {
+            return;
+        }
+        if (gm.fortuneChoiceText != null)
+        {
+            gm.fortuneChoiceText.text = "복주머니 — 점괘 1개를 선택하세요";
+        }
+        if (gm.fortuneOptionSlots == null)
+        {
+            return;
+        }
+        for (int i = 0; i < gm.fortuneOptionSlots.Length; i++)
+        {
+            BellSlotUI slot = gm.fortuneOptionSlots[i];
+            if (slot == null) continue;
+            if (i < gm.fortuneManager.pendingCandidates.Count)
+            {
+                FortuneUpgradeData candidate = gm.fortuneManager.pendingCandidates[i];
+                int index = i;   // 클로저용 — 람다가 인덱스 변수를 공유하지 않게 고정
+                slot.Bind(candidate.upgradeName, candidate.description, "", "선택", true,
+                    () => gm.fortuneManager.ChooseUpgrade(index));
             }
             else
             {
@@ -589,12 +643,14 @@ public class GameUIManager
         }
         ShowLandingInfo(settlement);   // 최종 착지 후 칸 정보 표시 ("불 - 50점")
 
-        // 3) 도착 칸 베이직 → 윷 멀티플 순서로 표시 ("개 기본 배율 ×3" 이유 표시)
+        // 3) 도착 칸 베이직 → 윷 배율 순서로 표시 ("개 기본 배율 ×3" 이유 표시).
+        //    전체배율은 기본 전체배율(×1)에서 시작 — 이후 효과 단계가 TotalMult로 갱신한다
         gm.basicScore = settlement.baseBasic;
         UpdateUI();
         yield return new WaitForSeconds(gm.effectStepDelay);
         SetMultiplierReason($"{YutGameManager.ToKorean(settlement.result)} 기본 배율 ×{settlement.baseMult}");
         gm.multiplier = settlement.baseMult;
+        gm.totalMult = settlement.baseTotalMult;
         UpdateUI();
 
         // 4) 발동 효과를 기록 순서대로 재생 — 이유 표시 → Mult 갱신 → 간격 → 카드 표시 제거
@@ -611,9 +667,13 @@ public class GameUIManager
             {
                 gm.basicScore = step.afterValue;
             }
+            else if (step.target == EffectTarget.YutMult)
+            {
+                gm.multiplier = hasFloat ? step.afterValueF : step.afterValue;   // 윷 배율 단위 — 방울·복주머니 성장 단계
+            }
             else
             {
-                gm.multiplier = hasFloat ? step.afterValueF : step.afterValue;
+                gm.totalMult = hasFloat ? step.afterValueF : step.afterValue;    // 전체배율 단위 — 상성·잡기·부적·착지 단계
             }
             float opShown = hasFloat ? step.opValueF : step.opValue;
             float afterShown = hasFloat ? step.afterValueF : step.afterValue;

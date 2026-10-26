@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 // 보스 데이터 — 이름·HP·특수능력 수치를 데이터로 분리해 보스별 다른 능력 추가에 대비
@@ -111,9 +112,16 @@ public class BossManager
             Debug.LogWarning($"ShowBossSelect: 잘못된 인덱스 {index} (0~{(gm.bosses?.Count ?? 0) - 1})");
             return;
         }
+        // 동일 보스 소개 화면의 재표시와 실제 보스 구간 전환을 구분한다 —
+        // 이미 소개 중인 같은 보스를 다시 표시하는 호출로 상품·리프레시 비용이 초기화되지 않게 한다
+        bool isReshow = gm.bossSelectPanel != null && gm.bossSelectPanel.activeSelf
+            && pendingBossIndex == index;
         pendingBossIndex = index;
         BossData boss = gm.bosses[index];
-        gm.shopManager.ResetForBoss();   // 보스 전환 — 상품 목록·리프레시 비용 초기화 (사용자 확정: 보스 소개 시 리셋)
+        if (!isReshow)
+        {
+            gm.shopManager.ResetForBoss();   // 보스 전환 — 상품 목록·리프레시 비용 초기화 (사용자 확정: 보스 소개 시 리셋)
+        }
         if (gm.bossSelectPanel == null)
         {
             // 소개 화면은 필수 단계 — 패널 미연결 시 경고 후 대기 (자동 전투 진입 없음)
@@ -139,6 +147,12 @@ public class BossManager
         BossData boss = gm.bosses[bossIndex];
         if (boss == null || !boss.useAffinity)
         {
+            return false;
+        }
+        // 상성 대상은 공격 속성(불·물·풀)만 — 땅·쇠·START 같은 비공격 속성은 유효 상성으로 받아들이지 않는다
+        if (!CombatAttributes.Contains(boss.affinityWeak) || !CombatAttributes.Contains(boss.affinityStrong))
+        {
+            Debug.LogWarning($"[YutGameManager] {boss.bossName}의 상성 설정 오류 — 약점·강점은 불·물·풀 중에서만 지정할 수 있어 상성 능력을 적용하지 않습니다.", gm);
             return false;
         }
         if (boss.affinityWeak == boss.affinityStrong)
@@ -253,12 +267,20 @@ public class BossManager
         }
     }
 
-    // 보스 이동 거리 추첨 — 현재 피해 단계의 최소~최대 정수 균등 (상한 포함). 잘못된 설정은 보정 후 경고
+    // 보스 이동 거리 추첨 — 현재 피해 단계의 최소~최대 정수 균등 (상한 포함). 잘못된 설정은 보정 후 경고.
+    // 이동 배열 자체가 비어 있거나 길이가 맞지 않으면 -1 반환 — 임의 기본값을 만들지 않고 계획을 차단한다
     private int DrawBossMoveSteps()
     {
+        int[] mins = gm.bossMoveStageMin;
+        int[] maxs = gm.bossMoveStageMax;
+        if (mins == null || maxs == null || mins.Length == 0 || maxs.Length == 0 || mins.Length != maxs.Length)
+        {
+            Debug.LogError("[YutGameManager] 보스 이동 단계 배열이 비어 있거나 최소/최대 길이가 일치하지 않습니다 — 보스 말 이동이 차단됩니다. GameBalanceConfig의 bossMoveStageMin/bossMoveStageMax를 확인하세요.", gm);
+            return -1;
+        }
         int stage = BossMoveStage;
-        int min = gm.bossMoveStageMin[stage];
-        int max = gm.bossMoveStageMax[stage];
+        int min = mins[stage];
+        int max = maxs[stage];
         if (min > max)
         {
             Debug.LogWarning($"[YutGameManager] 보스 이동 {stage}단계 최소값({min}) > 최대값({max}) — 순서를 바꿔 적용합니다.", gm);
@@ -285,7 +307,13 @@ public class BossManager
     // UI 갱신·재호출에서는 재추첨하지 않는다 (계획 소비는 MoveBossPiece에서만)
     public void PrepareBossMove()
     {
-        plannedBaseSteps = DrawBossMoveSteps();
+        int steps = DrawBossMoveSteps();
+        if (steps < 0)
+        {
+            movePlanReady = false;   // 이동 설정 오류 — 계획 없음. 예고 표시도 만들지 않는다
+            return;
+        }
+        plannedBaseSteps = steps;
         movePlanReady = true;
     }
 
@@ -297,6 +325,10 @@ public class BossManager
         if (!movePlanReady)
         {
             PrepareBossMove();   // 안전망 — 정상 흐름에서는 차례 준비에 이미 계획돼 있다
+        }
+        if (!movePlanReady)
+        {
+            return;   // 이동 설정 오류 — 계획이 만들어지지 않아 이동 생략 (봉쇄부·족쇄 보정도 소모하지 않음)
         }
         movePlanReady = false;
         if (pendingMoveSeal)

@@ -24,6 +24,7 @@ public class YutGameManager : MonoBehaviour
     public PresentationConfig presentationConfig;  // 연출 딜레이 — Assets/ScriptableObjects/PresentationConfig
     public BellDatabase bellDatabase;              // 방울 정의 12종 — Assets/ScriptableObjects/BellDatabase
     public ShopConfig shopConfig;                  // 시작 자금·장착 한도·상점 상품 수 — Assets/ScriptableObjects/ShopConfig
+    public FortuneUpgradeDatabase fortuneDatabase; // 복주머니 점괘 강화 정의 — Assets/ScriptableObjects/FortuneUpgradeDatabase
 
     // 설정 에셋이 모두 연결됐는지 — Awake에서 경고, 게임 진입 경로에서 차단
     internal bool ConfigReady =>
@@ -33,7 +34,8 @@ public class YutGameManager : MonoBehaviour
     [Header("UI Texts")]
     public Text mainResultText;    // 중앙 결과: 윷 결과 이름만 표시 (전투 중에만 보임) 
     public Text basicScoreText;    // 이번 투척 베이직 (숫자만 출력)
-    public Text multScoreText;     // 이번 투척 멀티플 (숫자만 출력)
+    public Text multScoreText;     // 이번 투척 윷 배율 — 성장 반영값 (숫자만 출력). 전체배율은 totalMultText
+    public Text totalMultText;     // 이번 투척 전체배율 — 기본 전체배율에서 발동 효과별로 갱신 (숫자만 출력, 미연결 시 무시)
     public Text totalScoreText;    // 누적 총점 (숫자만 출력)
     public Text goalScoreText;     // 목표 점수 = 보스 최대 HP (숫자만 출력)
     public Text remainText;        // 남은 투척 기회 (숫자만 출력)
@@ -115,6 +117,11 @@ public class YutGameManager : MonoBehaviour
     public Transform usedTalismanContent;                        // 사용 부적 목록 부모 — 항목 Prefab이 자식으로 생성 (미연결 시 표시 생략)
     public GameObject usedTalismanItemPrefab;                    // 사용 부적 항목 Prefab — 자식 Text 첫 번째=이름, 두 번째=설명(선택)
 
+    [Header("복주머니 점괘 선택")]
+    public GameObject fortuneChoicePanel;            // 점괘 선택 패널 — 미연결 시 복주머니 구매가 거부된다 (돈만 차감되는 상태 방지)
+    public BellSlotUI[] fortuneOptionSlots = new BellSlotUI[3];  // 점괘 후보 슬롯 고정 3칸 — BellSlotUI 재사용 (이름·설명·선택 버튼)
+    public Text fortuneChoiceText;                   // 선택 안내 텍스트 (미연결 시 무시)
+
     [Header("Throw Session UI — 윷 4개 재투척")]
     public Text[] stickFaceTexts = new Text[4];      // 각 윷의 앞/뒤 표시 (재투척 여부는 표시하지 않음 — 제한은 rerolled[]가 판별)
     public Button[] rerollButtons = new Button[4];   // 윷별 재투척 버튼 — 재투척 가능할 때만 interactable
@@ -137,8 +144,9 @@ public class YutGameManager : MonoBehaviour
     public int goalScore = 1000;     // 현재 보스 목표 점수 = 보스 최대 HP
 
     [Header("Score — 이번 투척 표시용 임시값 (투척마다 초기화)")]
-    public int basicScore = 0;      // 이번 투척 계산의 베이직 (효과 단계마다 갱신)
-    public float multiplier = 0f;   // 이번 투척 계산의 멀티플 — 윷 배율에 보스 상성까지 반영된 실효 배율 표시 (소수 가능)
+    public int basicScore = 0;      // 이번 투척 계산의 베이직 = 윷 기본점수 (효과 단계마다 갱신)
+    public float multiplier = 0f;   // 이번 투척 윷 배율 — 성장 반영값 표시 (소수 가능). 전체배율은 totalMult에 분리
+    public float totalMult = 0f;    // 이번 투척 전체배율 — 발동 효과 곱셈 단계마다 갱신 (소수 가능)
     public int throwScore = 0;    // 이번 투척 확정 점수
     public int totalScore = 0;    // 보스전 전체 누적 총점 (보스 HP와 대응 — 백도 차감 기준이기도 함)
 
@@ -189,6 +197,7 @@ public class YutGameManager : MonoBehaviour
     internal ShopManager shopManager;        // 방울 상점 — 보스 소개 화면의 구매·판매
     internal TalismanManager talismanManager; // 부적 카드 — 뽑기 덱·손패·선택·사용·세션 효과
     internal TileEffectManager tileEffects;  // 속성 착지 효과 — 불×1.5·물 연속·풀 도트 (보스전 단위 상태)
+    internal FortuneUpgradeManager fortuneManager;  // 복주머니 점괘 강화 — 획득 횟수·누적 강화·선택 대기 (런 단위 상태)
     internal GameUIManager uiManager;        // UI 표시·연출
 
     // 표시·연출용 런타임 상태 (매니저들이 접근)
@@ -244,9 +253,9 @@ public class YutGameManager : MonoBehaviour
         {
             return;
         }
-        if (shopManager.isOpen)
+        if (shopManager.isOpen || fortuneManager.isChoosingFortune)
         {
-            return;   // 상점 이용 중 — 상점을 닫아야 보스전에 진입할 수 있다
+            return;   // 상점 이용 중이거나 점괘 선택 대기 중 — 선택을 완료해야 보스전에 진입할 수 있다
         }
         if (!ConfigReady)
         {
@@ -266,9 +275,9 @@ public class YutGameManager : MonoBehaviour
     // 보스 소개 화면의 '건너뛰기' 버튼 — 전투 없이 다음 보스 소개로 이동 (판별·제한은 BossManager)
     public void SkipBoss()
     {
-        if (shopManager.isOpen)
+        if (shopManager.isOpen || fortuneManager.isChoosingFortune)
         {
-            return;   // 상점 이용 중 — 상점을 닫아야 건너뛸 수 있다
+            return;   // 상점 이용 중이거나 점괘 선택 대기 중 — 선택을 완료해야 건너뛸 수 있다
         }
         bossManager.SkipBoss();
     }
@@ -287,6 +296,10 @@ public class YutGameManager : MonoBehaviour
         if (currentState != GameState.Cleared || !bossManager.HasNextBoss)
         {
             return;   // 클리어 상태에서만, 다음 보스가 있을 때만
+        }
+        if (shopManager.isOpen || fortuneManager.isChoosingFortune)
+        {
+            return;   // 상점 이용 중이거나 점괘 선택 대기 중 — 미완료 거래·선택을 초기화하지 않는다
         }
         GameUIManager.SetPanel(clearPanel, false);
         bossManager.ShowBossSelect(selectedBossIndex + 1);
@@ -475,6 +488,7 @@ public class YutGameManager : MonoBehaviour
         shopManager = new ShopManager(this);
         talismanManager = new TalismanManager(this);
         tileEffects = new TileEffectManager(this);
+        fortuneManager = new FortuneUpgradeManager(this);
         uiManager = new GameUIManager(this);
 
         currentState = GameState.Start;
@@ -533,7 +547,7 @@ public class YutGameManager : MonoBehaviour
         if (balanceConfig.bossMoveStageMin == null || balanceConfig.bossMoveStageMax == null ||
             balanceConfig.bossMoveStageMin.Length != balanceConfig.bossMoveStageMax.Length)
         {
-            Debug.LogWarning("GameBalanceConfig의 보스 이동 단계 배열 길이가 맞지 않습니다 — 이동 단계를 찾지 못하면 기본 1단계로 동작합니다.", balanceConfig);
+            Debug.LogWarning("GameBalanceConfig의 보스 이동 단계 배열이 비어 있거나 길이가 맞지 않습니다 — 보스 말 이동이 차단됩니다.", balanceConfig);
         }
         if (bellDatabase == null)
         {
@@ -542,6 +556,24 @@ public class YutGameManager : MonoBehaviour
         if (shopConfig == null)
         {
             Debug.LogWarning("ShopConfig 에셋 미연결 — 시작 자금 50·장착 4·상품 4 기본값으로 동작합니다.", this);
+        }
+        // 점괘 강화 — 활성인데 적용 가능하지 않은 정의를 미리 경고한다
+        // (미구현 확률 종류·백도/낙 대상 윷 배율·불 외 속성 배율 — 후보에서 자동 제외되지만 설정 실수를 알린다)
+        if (fortuneDatabase != null && fortuneDatabase.upgrades != null)
+        {
+            foreach (FortuneUpgradeData u in fortuneDatabase.upgrades)
+            {
+                if (u != null && u.effectEnabled && !FortuneUpgradeManager.IsSupported(u))
+                {
+                    Debug.LogWarning($"FortuneUpgrade '{u.upgradeId}'가 활성이지만 적용 가능한 효과·대상이 아닙니다 — 점괘 후보에서 제외됩니다. kind·targetResult·targetAttribute를 확인하세요.", fortuneDatabase);
+                }
+            }
+            int supported = fortuneManager != null ? fortuneManager.SupportedCandidateCount() : 0;
+            int need = shopConfig != null ? shopConfig.fortuneCandidateCount : 3;
+            if (supported > 0 && supported < need)
+            {
+                Debug.LogWarning($"점괘 후보 부족 — 활성·적용 가능 강화가 {supported}개로 {need}택1을 구성할 수 없습니다. 복주머니 구매가 거부됩니다.", fortuneDatabase);
+            }
         }
     }
 
@@ -556,6 +588,7 @@ public class YutGameManager : MonoBehaviour
         displayTotal = 0;
         basicScore = 0;
         multiplier = 0;
+        totalMult = 0;
         throwScore = 0;
         hasRolled = false;
         currentSettlement = null;
@@ -644,6 +677,7 @@ public class YutGameManager : MonoBehaviour
         // 이전 투척의 표시용 임시값만 초기화 (윷별 영구 스탯·누적 총점은 유지)
         basicScore = 0;
         multiplier = 0f;
+        totalMult = 0f;
         throwScore = 0;
 
         ThrowSettlement settlement = new ThrowSettlement
@@ -659,10 +693,8 @@ public class YutGameManager : MonoBehaviour
     internal void FinishPresentation(ThrowSettlement settlement)
     {
         basicScore = settlement.finalBasic;
-        // 실효 배율 (윷 × 결과별 부적 × 상성 × 잡기 × 잡기 보너스 × 부적 × 착지 효과) — 탐욕부 잡기 취소 시 0
-        multiplier = settlement.talismanCancelled ? 0f
-            : settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult
-                * settlement.catchMult * settlement.catchBonusMult * settlement.talismanMult * settlement.tileEffectMult;
+        multiplier = settlement.finalMult;   // 윷 배율 표시 — 성장 반영값. 탐욕부 취소는 전체배율만 0이고 윷 배율은 정산값 유지
+        totalMult = settlement.talismanCancelled ? 0f : settlement.totalMult;    // 전체배율 표시 — 취소 시 유효 배율 0
         throwScore = settlement.throwScore;
         displayTotal = totalScore;
         isPresenting = false;
@@ -731,6 +763,7 @@ public class YutGameManager : MonoBehaviour
     {
         StopPresentation();                  // 이전 보스전의 잔여 연출 정리
         bellManager.ResetForNewRun();        // 보유 방울·속성 성장 등 런 단위 장착 상태 정리
+        fortuneManager.ResetForNewRun();     // 점괘 강화 횟수·누적 강화·선택 대기 정리 — 보스 전환에서는 호출되지 않음
         shopManager.ResetForNewRun();        // 상점 열림 상태·상품 후보 정리
         economyManager.ResetForNewRun();     // 돈 초기화 + 시작 자금 재지급 (런당 1회)
         talismanManager.ResetForNewRun();    // 부적 덱 재구성·손패·선택창·세션 효과 전부 초기화
@@ -748,8 +781,10 @@ public class YutGameManager : MonoBehaviour
         displayTotal = 0;
         basicScore = 0;
         multiplier = 0f;
+        totalMult = 0f;
         throwScore = 0;
         boardManager.ResetForNewRun();       // 말판 배치·말 위치·완주 초기화 (다음 런 첫 보스전에서 새 배치 생성)
+        scoreManager.ResetForNewRun();       // 런타임 기본 전체배율을 설정값으로 초기화 (보스 전환에는 유지)
         // 런 전체 성장 요소 초기화 — 런이 끝났으므로 윷 강화·보스 특수능력 원복
         rollManager.BuildYutStats();
         rollManager.ResetProbabilities();
@@ -770,6 +805,10 @@ public class YutGameManager : MonoBehaviour
         if (shopPanel != null && clearPanel != null && shopPanel.transform.IsChildOf(clearPanel.transform))
         {
             Debug.LogWarning("[YutGameManager] shopPanel이 clearPanel의 자식입니다. 결과 화면이 꺼지면 함께 숨겨지니 Canvas 바로 아래로 분리하세요.", shopPanel);
+        }
+        if (fortuneChoicePanel != null && clearPanel != null && fortuneChoicePanel.transform.IsChildOf(clearPanel.transform))
+        {
+            Debug.LogWarning("[YutGameManager] fortuneChoicePanel이 clearPanel의 자식입니다. 부모가 꺼지면 선택창이 보이지 않아 점괘 선택이 잠길 수 있으니 Canvas 바로 아래로 분리하세요.", fortuneChoicePanel);
         }
     }
 

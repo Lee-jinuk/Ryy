@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public enum EffectSourceType { YutResult, Talisman, Bell, Spell, Boss, TileEffect }
-public enum EffectTarget { Basic, Multiplier }
+public enum EffectTarget { Basic, YutMult, TotalMult }   // YutMult = 윷 배율(성장 반영), TotalMult = 전체배율 — 두 단위를 섞지 않는다
 public enum EffectOp { Add, Multiply }
 
 // 효과 적용 1단계 기록 — 향후 부적/방울/주술/피버 발동 연출은 이 목록을 순서대로 재생한다
@@ -37,8 +37,11 @@ public class ThrowSettlement
     public int baseBasic;            // 효과 적용 전 초기 베이직 = 확정 윷의 기본점수 (점수제 전환 — 칸 공격점수 폐지)
     public float baseMult;           // 효과 적용 전 초기 멀티플 (방울 성장 전)
     public int finalBasic;           // 모든 효과 적용 후 베이직
-    public float finalMult;          // 모든 효과 적용 후 멀티플 — 방울 성장(+0.5) 포함 소수 가능
-    public int throwScore;           // D에 속성 착지 효과까지 적용한 최종 피해 — TotalScore에 1회만 합산
+    public float finalMult;          // 성장 반영 윷 배율 — 방울·복주머니 성장(+0.5) 포함 소수 가능. 전체배율이 아니다
+    public float baseTotalMult = 1f; // 런타임 기본 전체배율 — GameBalanceConfig.baseTotalMult의 런 복사본 (보스 전환 유지, 새 런 초기화)
+    public float totalMult = 1f;     // 최종 전체배율 = 기본 × 결과별 부적 × 부적 곱 × 상성 × 잡기 × 잡기 보너스 × 말판 × 별도 방울 피해 배율
+    public float bellDamageMult = 1f;// 별도 방울 피해 배율 — 해당 효과가 없으면 ×1 (향후 방울 피해 배율 효과용)
+    public int throwScore;           // 기초 피해(기본점수×윷 배율) × 전체배율의 최종 피해 — TotalScore에 1회만 합산
     public int landingTileIndex = -1;    // 말판 도착 칸 (-1 = 이동 없음 — 저주)
     public bool attackLanded;            // 공격 칸(불·물·풀·땅) 착지 — START·쇠는 공격 0. 땅은 추가 배율 ×1 공격 허용 (2026-10-22 확정, 구 tileScore>0 대체)
     public float affinityMult = 1f;      // 이번 정산의 유효 상성 배율 — 상성 능력이 있는 보스만 적용, 없으면 ×1
@@ -67,15 +70,29 @@ public class ScoreManager
 
     public int lastBackDoLoss;   // 최근 백도 차감량 (디버그/연출용)
 
+    // 런타임 기본 전체배율 — 설정 기본값의 런 복사본. 보스 전환에 유지되고 새 런에서 설정값으로 초기화.
+    // 개별 효과 배율과 별개 — 이번 공격의 전체배율은 매번 정산에서 새로 계산한다
+    public float baseTotalMult = 1f;
+
+    // 새 런 초기화 — 런타임 기본 전체배율을 설정값으로 되돌린다 (보스 전환에서는 호출하지 않음)
+    internal void ResetForNewRun()
+    {
+        baseTotalMult = gm.balanceConfig != null ? gm.balanceConfig.baseTotalMult : 1f;
+    }
+
     public ScoreManager(YutGameManager gm)
     {
         this.gm = gm;
+        baseTotalMult = gm.balanceConfig != null ? gm.balanceConfig.baseTotalMult : 1f;   // 첫 실행도 설정값과 같은 기준 — ResetForNewRun과 동일 경로
     }
 
     // 확정 결과(도~모) 투척 정산: 말 이동(+이동 보정) → 잡기 판정 → 상성(능력 보스만)
     //   → 결과별 부적 → 부적 배율 곱셈 → D 확정 → 속성 착지 효과(불×1.5/물 연계/풀 도트) → 총점 합산
-    // 공식: D = 윷 기본점수 × 윷 배율 × 결과별 부적 × 보스 능력 배율 × 잡기 × 잡기 보너스 × 부적 곱
-    //   → 착지 효과 적용이 최종 피해. START·땅·쇠는 공격 0 (사용자 확정). 모든 결과는 투척 1회를 소모
+    // 공식: 기초 피해 = 윷 기본점수 × 성장 반영 윷 배율
+    //   전체배율 = 기본 전체배율(×1, 런타임) × 결과별 부적 × 부적 곱 × 보스 능력(상성) × 잡기 × 잡기 보너스
+    //     × 별도 방울 피해 배율(현재 ×1) × 말판 배율(불×1.5/물 연계/풀·땅×1)
+    //   최종 피해 = 기초 피해 × 전체배율 → 곱셈 후 최종 정수화. START·쇠는 공격 0 (사용자 확정).
+    //   모든 결과는 투척 1회를 소모
     public void SettleNormalThrow(ThrowSettlement settlement, YutResult selected)
     {
         // 1) 말 이동 → 도착 칸 확정 — 진격부·후퇴부의 세션 이동 보정을 합산 (윷 결과·배율 미변경).
@@ -96,9 +113,10 @@ public class ScoreManager
         YutStatEntry stat = gm.rollManager.GetStat(selected);
         settlement.baseBasic = stat.baseScore;
         settlement.baseMult = stat.mult;
+        settlement.baseTotalMult = baseTotalMult;   // 런타임 기본 전체배율 — 이번 정산의 출발점
         foreach (BellManager.GrowthTrigger growth in gm.bellManager.ApplyGrowth(selected, tile))
         {
-            AddBellStep(settlement.steps, growth);
+            AddBellStep(settlement.steps, growth, stat.mult);
         }
         settlement.finalBasic = settlement.baseBasic;
         settlement.finalMult = stat.mult;
@@ -142,30 +160,32 @@ public class ScoreManager
         {
             if (settlement.resultBonusMult != 1f)
             {
-                AddResultBonusStep(settlement.steps, resultBonusName, selected, stat.mult, settlement.resultBonusMult, resultBonusUseId);
+                AddResultBonusStep(settlement.steps, resultBonusName, selected, settlement.baseTotalMult, settlement.resultBonusMult, resultBonusUseId);
             }
             // 상성 단계는 공격 속성(불·물·풀) 착지에서만 — 땅은 상성 대상이 아니다
             if ((affinity != null || frogActive) &&
                 tile.attribute != TileAttribute.Earth)
             {
-                AddAffinityStep(settlement.steps, tile, affinity, stat.mult * settlement.resultBonusMult,
+                AddAffinityStep(settlement.steps, tile, affinity, settlement.baseTotalMult * settlement.resultBonusMult,
                     settlement.affinityMult, frogActive);
             }
         }
         if (settlement.caught)
         {
             AddCatchStep(settlement.steps,
-                stat.mult * settlement.resultBonusMult * settlement.affinityMult, settlement.catchMult);
+                settlement.baseTotalMult * settlement.resultBonusMult * settlement.affinityMult, settlement.catchMult);
             AddCatchStep(settlement.steps,
-                stat.mult * settlement.resultBonusMult * settlement.affinityMult * settlement.catchMult,
+                settlement.baseTotalMult * settlement.resultBonusMult * settlement.affinityMult * settlement.catchMult,
                 settlement.catchBonusMult, "잡기 보너스");
         }
 
         // 4) 부적 피해 효과 — 조건을 만족한 카드의 최종 피해 배율을 곱셈으로 중첩
         //    조건은 확정된 도착 속성·보스 약점 속성·잡기 여부로만 검사 — 통과 칸에는 미적용
         //    추혼부는 잡기 성공 조건의 추가 배율로 이 루프에서 1회 곱한다.
-        //    조건 불충족 카드도 안내 단계로 기록한다 — 표시된 카드를 순차 제거하는 재생 단계
-        float runningMult = stat.mult * settlement.resultBonusMult * settlement.affinityMult * settlement.catchMult;
+        //    조건 불충족 카드도 안내 단계로 기록한다 — 표시된 카드를 순차 제거하는 재생 단계.
+        //    runningMult는 전체배율 단위 — 윷 배율은 기초 피해 쪽이고 여기에 곱하지 않는다
+        float runningMult = settlement.baseTotalMult * settlement.resultBonusMult * settlement.affinityMult
+            * settlement.catchMult * settlement.catchBonusMult;   // 잡기 보너스까지 포함 — 실제 전체배율 공식과 동일한 시작값
         var steppedUseIds = new HashSet<int>();
         if (resultBonusUseId > 0)
         {
@@ -246,7 +266,7 @@ public class ScoreManager
                 sourceId = "bell_jaebok",
                 displayName = "재복방울 — 약점 공격 수입",
                 reasonText = "재복방울 — 약점 공격 +1냥",
-                target = EffectTarget.Multiplier,
+                target = EffectTarget.TotalMult,
                 op = EffectOp.Multiply,
                 opValueF = 1f,
                 beforeValueF = runningMult,
@@ -278,14 +298,23 @@ public class ScoreManager
         //    D = 윷 기본점수 × 윷 배율 × 결과별 부적 × 상성 × 잡기 × 잡기 보너스 × 부적 곱.
         //    불×1.5·물 연계·풀 도트는 TileEffectManager가 적용하고 물 연속·도트 기록을 갱신한다.
         //    표시용 throwScore 필드는 여기서 갱신하지 않는다 — '투척 점수 표시' 단계에서만 보인다
+        // 5) 기초 피해 × 전체배율 확정 → 속성 착지 효과 적용 → 총점 1회 합산.
+        //    기초 피해 = 윷 기본점수 × 성장 반영 윷 배율.
+        //    전체배율 = 기본 전체배율 × 결과별 부적 × 상성 × 잡기 × 잡기 보너스 × 부적 곱 × 별도 방울 배율.
+        //    불×1.5·물 연계·풀 도트는 TileEffectManager가 말판 배율로 적용하고 물 연속·도트 기록을 갱신한다.
+        //    표시용 throwScore 필드는 여기서 갱신하지 않는다 — '투척 점수 표시' 단계에서만 보인다
         float preEffectDamage = settlement.talismanCancelled
             ? 0f
-            : settlement.finalBasic * settlement.finalMult * settlement.resultBonusMult * settlement.affinityMult
-                * settlement.catchMult * settlement.catchBonusMult * settlement.talismanMult;
+            : settlement.finalBasic * settlement.finalMult * runningMult * settlement.bellDamageMult;
         settlement.throwScore = gm.tileEffects.ResolveLandingEffect(tile, preEffectDamage, settlement);
+        // 최종 전체배율 — 말판 배율까지 포함. 탐욕부 취소 확정 시 유효 전체배율은 0으로 유지
+        // (이후 말판 안내 단계도 0으로 기록돼 양수로 복귀하지 않는다)
+        settlement.totalMult = settlement.talismanCancelled
+            ? 0f
+            : runningMult * settlement.bellDamageMult * settlement.tileEffectMult;
         gm.totalScore += settlement.throwScore;
 
-        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x {settlement.finalMult}{(settlement.resultBonusMult != 1f ? $" x 결과부적{settlement.resultBonusMult}" : "")}{(settlement.affinityMult != 1f ? $" x 상성{settlement.affinityMult}" : "")}{(settlement.caught ? $" x 잡기{settlement.catchMult} x 보너스{settlement.catchBonusMult}" : "")}{(settlement.talismanMult != 1f ? $" x 부적{settlement.talismanMult}" : "")}{(settlement.talismanCancelled ? " → 취소" : "")} x 착지{settlement.tileEffectMult} = {settlement.throwScore} | Throws: {gm.currentThrows}/{gm.maxThrows} | Total: {gm.totalScore}");
+        Debug.Log($"Yut Result: {YutGameManager.ToKorean(selected)} | {settlement.finalBasic} x 윷{settlement.finalMult}{(settlement.resultBonusMult != 1f ? $" x 결과부적{settlement.resultBonusMult}" : "")}{(settlement.affinityMult != 1f ? $" x 상성{settlement.affinityMult}" : "")}{(settlement.caught ? $" x 잡기{settlement.catchMult} x 보너스{settlement.catchBonusMult}" : "")}{(settlement.talismanMult != 1f ? $" x 부적{settlement.talismanMult}" : "")}{(settlement.talismanCancelled ? " → 취소" : "")} x 착지{settlement.tileEffectMult} = {settlement.throwScore} | 전체배율 {settlement.totalMult} | Throws: {gm.currentThrows}/{gm.maxThrows} | Total: {gm.totalScore}");
     }
 
     // 저주 계열 결과 처리: 백도와 낙은 별개 결과이며 둘 다 투척 1회 소모
@@ -316,7 +345,7 @@ public class ScoreManager
     // 보스 상성 단계 기록 — 상성 능력이 있는 보스(또는 청개구리 적용)에서만 호출된다.
     // 비상성 보스는 상성 ×1로 단계를 남기지 않는다
     private void AddAffinityStep(List<ScoreEffectStep> steps, BoardTile tile, BossAffinity affinity,
-        float yutMult, float affinityMult, bool frogActive)
+        float before, float affinityMult, bool frogActive)
     {
         string attrName = BoardManager.AttributeName(tile.attribute);
         string role = gm.bossManager.AffinityRoleName(tile.attribute);
@@ -330,14 +359,14 @@ public class ScoreManager
             reasonText = frogActive
                 ? $"청개구리방울 — {(affinity != null && tile.attribute == affinity.strong ? "강점" : "")} 상성 ×{affinityMult}"
                 : (role == "약점" || role == "강점" ? $"{role} 상성 ×{affinityMult}" : $"일반 상성 ×{affinityMult}"),
-            target = EffectTarget.Multiplier,
+            target = EffectTarget.TotalMult,
             op = EffectOp.Multiply,
             opValue = 0,                    // 소수 배율은 opValueF에 기록
             opValueF = affinityMult,
             beforeValue = 0,
-            beforeValueF = yutMult,                // 윷 배율 × 결과별 부적까지 반영된 멀티플
+            beforeValueF = before,                // 기본 전체배율 × 결과별 부적까지 반영된 전체배율
             afterValue = 0,
-            afterValueF = yutMult * affinityMult,   // 상성 반영 실효 멀티플 (예: 3×0.5=1.5)
+            afterValueF = before * affinityMult,   // 상성 반영 전체배율
             delta = 0,
             order = steps.Count,
         });
@@ -353,31 +382,50 @@ public class ScoreManager
             sourceId = $"talisman_result_{result}",
             displayName = $"{cardName} — {YutGameManager.ToKorean(result)} ×{bonusMult}",
             reasonText = $"{cardName} ×{bonusMult}",
-            target = EffectTarget.Multiplier,
+            target = EffectTarget.TotalMult,
             op = EffectOp.Multiply,
             opValue = 0,
             opValueF = bonusMult,
             beforeValue = 0,
-            beforeValueF = before,                 // 윷 배율 (결과별 부적 적용 전)
+            beforeValueF = before,                 // 전체배율 (결과별 부적 적용 전 = 기본 전체배율)
             afterValue = 0,
-            afterValueF = before * bonusMult,      // 보너스 반영 멀티플
+            afterValueF = before * bonusMult,      // 보너스 반영 전체배율
             delta = 0,
             order = steps.Count,
             useId = useId,
         });
     }
 
-    // 방울 성장 단계 기록 — 윷 배율 성장(Multiplier)·속성 공격력 성장(Basic)을 정산 기록에 남긴다.
-    // 성장 처리는 BellManager.ApplyGrowth가 정산 계산 전에 수행 — 이 단계는 표시 재생 전용
-    private void AddBellStep(List<ScoreEffectStep> steps, BellManager.GrowthTrigger growth)
+    // 방울 성장 단계 기록 — 윷 배율 성장(YutMult)·속성 공격력 성장(Basic)을 정산 기록에 남긴다.
+    // 성장 처리는 BellManager.ApplyGrowth가 정산 계산 전에 수행 — 이 단계는 표시 재생 전용.
+    // isInfo 단계(화령방울 등 다른 단위의 성장 안내)는 점수판 배율을 바꾸지 않는다 —
+    // 성장분·속성 배율·윷 배율·전체배율을 같은 before/after 의미로 쓰지 않는다
+    private void AddBellStep(List<ScoreEffectStep> steps, BellManager.GrowthTrigger growth, float displayedMult)
     {
+        if (growth.isInfo)
+        {
+            steps.Add(new ScoreEffectStep
+            {
+                source = EffectSourceType.Bell,
+                sourceId = $"bell_{growth.bellName}",
+                displayName = growth.note,
+                reasonText = growth.note,
+                target = EffectTarget.YutMult,
+                op = EffectOp.Multiply,
+                opValueF = 1f,
+                beforeValueF = displayedMult,
+                afterValueF = displayedMult,    // 전후 동일 — 안내 전용, 윷 배율 표시 유지
+                order = steps.Count,
+            });
+            return;
+        }
         steps.Add(new ScoreEffectStep
         {
             source = EffectSourceType.Bell,
             sourceId = $"bell_{growth.bellName}",
             displayName = growth.note,
             reasonText = growth.note,
-            target = growth.isBasic ? EffectTarget.Basic : EffectTarget.Multiplier,
+            target = growth.isBasic ? EffectTarget.Basic : EffectTarget.YutMult,
             op = EffectOp.Add,
             opValue = growth.isBasic ? Mathf.RoundToInt(growth.after - growth.before) : 0,
             opValueF = growth.isBasic ? 0f : growth.after - growth.before,
@@ -401,14 +449,14 @@ public class ScoreManager
             sourceId = $"boss{gm.selectedBossIndex}_catch",
             displayName = label,
             reasonText = $"{label} ×{catchMult}",
-            target = EffectTarget.Multiplier,
+            target = EffectTarget.TotalMult,
             op = EffectOp.Multiply,
             opValue = (int)catchMult,
             opValueF = catchMult,
             beforeValue = 0,
-            beforeValueF = effectiveMultBefore,                  // 윷 배율 × 상성까지 반영된 멀티플
+            beforeValueF = effectiveMultBefore,                  // 상성까지 반영된 전체배율
             afterValue = 0,
-            afterValueF = effectiveMultBefore * catchMult,       // 잡기 배율 반영 최종 실효 멀티플
+            afterValueF = effectiveMultBefore * catchMult,       // 잡기 배율 반영 전체배율
             delta = 0,
             order = steps.Count,
         });
@@ -424,7 +472,7 @@ public class ScoreManager
             sourceId = fx.sourceId,
             displayName = $"{fx.displayName} ×{fx.mult}",
             reasonText = $"{fx.displayName} ×{fx.mult}",
-            target = EffectTarget.Multiplier,
+            target = EffectTarget.TotalMult,
             op = EffectOp.Multiply,
             opValue = 0,
             opValueF = fx.mult,
@@ -448,7 +496,7 @@ public class ScoreManager
             sourceId = fx.sourceId,
             displayName = $"{fx.displayName} — 조건 불충족",
             reasonText = $"{fx.displayName} — 조건 불충족",
-            target = EffectTarget.Multiplier,
+            target = EffectTarget.TotalMult,
             op = EffectOp.Multiply,
             opValue = 0,
             opValueF = 1f,                    // ×1 — Mult 표시 유지
@@ -471,7 +519,7 @@ public class ScoreManager
             sourceId = $"used_{useId}",
             displayName = note,
             reasonText = note,
-            target = EffectTarget.Multiplier,
+            target = EffectTarget.TotalMult,
             op = EffectOp.Multiply,
             opValue = 0,
             opValueF = 1f,
@@ -494,7 +542,7 @@ public class ScoreManager
             sourceId = "talisman_greed_cancel",
             displayName = "탐욕부 충돌 — 공격 0",
             reasonText = "탐욕부 — 잡기 성공으로 피해 0",
-            target = EffectTarget.Multiplier,
+            target = EffectTarget.TotalMult,
             op = EffectOp.Multiply,
             opValue = 0,
             opValueF = 0f,

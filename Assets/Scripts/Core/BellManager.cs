@@ -110,8 +110,9 @@ public class BellManager
     public class GrowthTrigger
     {
         public string bellName;
-        public string note;          // "도깨비방울 — 도 배율 +0.5" / "화령방울 — 불 공격력 +5"
+        public string note;          // "도걸방울 — 도 배율 +0.5" / "화령방울 — 불 착지 배율 1.5 → 2"
         public bool isBasic;         // true = Basic(공격력) 변화 단계, false = Multiplier 변화 단계
+        public bool isInfo;          // true = 안내 전용 — 점수판 수치를 바꾸지 않음 (속성 착지 배율 등 다른 단위의 성장)
         public float before;
         public float after;
     }
@@ -179,15 +180,19 @@ public class BellManager
                         continue;
                     }
                     {
-                        float before = attrMultBonus[tile.attribute];
+                        // 속성 착지 배율의 전체값을 공통 조회 경로로 기록 — 설정 기본 + 화령 성장 + 복주머니 강화
+                        // (복주머니로 2.0 상태면 안내도 2 → 2.5로 표시, 실제 계산과 같은 기준)
+                        float before = gm.tileEffects.CurrentAttrMult(tile.attribute);
                         attrMultBonus[tile.attribute] += bell.growthAmount;
+                        float after = gm.tileEffects.CurrentAttrMult(tile.attribute);
                         triggers.Add(new GrowthTrigger
                         {
                             bellName = bell.bellName,
-                            note = $"{bell.bellName} — {BoardManager.AttributeName(tile.attribute)} 배율 +{bell.growthAmount}",
+                            note = $"{bell.bellName} — {BoardManager.AttributeName(tile.attribute)} 착지 배율 {before} → {after}",
                             isBasic = false,
+                            isInfo = true,   // 성장분은 전체 실효 배율이 아닌 속성 배율 단위 — 점수판 유지
                             before = before,
-                            after = attrMultBonus[tile.attribute],
+                            after = after,
                         });
                     }
                     break;

@@ -41,4 +41,8 @@ public class GameBalanceConfig : ScriptableObject
     // 추혼부는 잡기 배율을 대체하지 않고 추가 ×4 — 부적 배율 곱셈에 포함
     public float catchMultiplier = 3f;      // 잡기 성공 시 잡기 배율
     public float catchBonusMult = 2f;       // 잡기 성공 시 별도 잡기 보너스 배율 (구 catchAffinityMult 대체 — 상성과 무관)
+
+    // 기본 전체배율 — 모든 공격의 전체배율 출발점(×1). 설정값과 런타임 값을 분리해 추후 강화 가능
+    // (런타임 복사본은 ScoreManager.baseTotalMult — 보스 전환 유지, 새 런에서 이 값으로 초기화)
+    public float baseTotalMult = 1f;
 }
