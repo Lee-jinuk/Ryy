@@ -534,21 +534,23 @@ public class GameUIManager
                 string desc = offer.kind == ShopOfferKind.FortunePouch
                     ? (gm.shopConfig != null ? gm.shopConfig.fortunePouchDescription : "")
                     : offer.bell.description;
+                int price = gm.shopManager.PriceFor(offer);   // 할인 적용 구매가 — 표시·판정·차감 공용 조회
                 if (sold)
                 {
-                    slot.Bind(name, desc, $"{offer.price}냥", "구매 완료", false, null);
+                    slot.Bind(name, desc, $"{price}냥", "구매 완료", false, null);
                 }
                 else if (offer.kind == ShopOfferKind.FortunePouch)
                 {
-                    // 복주머니 — 장착 슬롯 미점유: 방울 한도와 무관하게 잔액만 검사
-                    slot.Bind(name, desc, $"{offer.price}냥", "구매",
-                        !choosing && gm.economyManager.money >= offer.price,
+                    // 복주머니 — 장착 슬롯 미점유: 방울 한도와 무관하게 잔액 + 실제 구매 가능 여부 검사
+                    // (유효 점괘 후보 부족이면 '구매 가능'으로 표시하지 않는다)
+                    slot.Bind(name, desc, $"{price}냥", "구매",
+                        !choosing && gm.economyManager.money >= price && gm.shopManager.FortunePouchAvailable,
                         () => gm.shopManager.BuyOffer(index));
                 }
                 else
                 {
-                    slot.Bind(name, desc, $"{offer.price}냥", "구매",
-                        !choosing && gm.economyManager.money >= offer.price && gm.bellManager.ownedBells.Count < gm.bellManager.MaxBells,
+                    slot.Bind(name, desc, $"{price}냥", "구매",
+                        !choosing && gm.economyManager.money >= price && gm.bellManager.ownedBells.Count < gm.bellManager.MaxBells,
                         () => gm.shopManager.BuyOffer(index));
                 }
             }

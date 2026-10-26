@@ -40,7 +40,7 @@ public enum TalismanEffectKind
     MoveAdjust,      // 환위부 — 투척 후 확정 전 이동 거리 +1/−1 선택 보정 (백색 부적)
     NextTurnProbBoost, // 도걸부·모윷부 — 다음 차례 최초 투척의 면 조합 추첨에서 targetResult·targetResult2 결과 조합에 가중치 ×value
     BoardReshuffle,  // 역행부 — 말판 속성 배치를 새로 섞기 (말 위치·상태 유지)
-    BossMoveReduce,  // 족쇄부 — 사용 차례 포함 duration턴 보스 이동 거리 −value (족쇄방울과 합산)
+    BossMoveReduce,  // 족쇄부 — 사용 차례 포함 duration턴 보스 이동 거리 −value (속박령과 합산)
     ProximityBaseBoost, // 추적부 — 사용 차례 포함 duration턴 보스와 전후 range칸 이내 착지 시 윷 기본점수 ×value
     NoRerollBaseBoost,  // 고집부 — 사용 차례 포함 duration턴 재투척 미사용 차례 공격의 윷 기본점수 ×value
     TriAttributeCombo,  // 삼재부 — 사용 차례 포함 duration턴 불·물·풀 수집 완성 시 세 번째 착지 최종 피해 ×value
@@ -83,6 +83,11 @@ public class TalismanData
     //   진격부·후퇴부 = 이동 거리 보정 (+1 / −1)
     //   일도부~모령부 = 목표 결과 윷 배율에 곱할 배율 (2)
     public float value;
+
+    // 전체배율 연산 방식 — 피해 효과 카드의 value 해석. Multiply = 가산 합계 확정 후 ×value,
+    // Add = 전체배율 가산 합계에 +value. 기존 카드는 전부 Multiply 유지 — 가산 부적은
+    // 사용자 지정 카드에만 설정한다 (2026-10-27 확정 구조)
+    public EffectOp totalMultOp = EffectOp.Multiply;
 
     // 속성 조건 카드가 검사할 칸 속성 (Fire/Water/Forest)
     // 비조건 카드에서는 무시된다.

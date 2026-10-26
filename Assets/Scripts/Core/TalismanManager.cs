@@ -57,7 +57,8 @@ public class TalismanManager
     {
         public TalismanEffectKind kind;
         public TileAttribute attribute;
-        public float mult;           // 최종 피해 배율 (×4/×2). 추혼부는 잡기 성공 시 추가 배율(4)
+        public float mult;           // 효과 수치 — totalMultOp에 따라 전체배율 곱연산(×N) 또는 가산(+N)으로 해석
+        public EffectOp totalMultOp = EffectOp.Multiply;   // 카드 정의의 연산 방식 복사본
         public string displayName;
         public string sourceId;      // 정산 기록 식별자 — 카드 고유 ID
         public int useId;            // 사용 부적 표시 기록과 연결하는 식별자 (0 = 기록 없음)
@@ -355,7 +356,8 @@ public class TalismanManager
                 {
                     kind = card.effect,
                     attribute = card.attribute,
-                    mult = card.value,          // 피해 부적 = 최종 피해 배율 / 추혼부 = 잡기 성공 시 추가 배율
+                    mult = card.value,          // 피해 부적 = 전체배율 수치 / 추혼부 = 잡기 성공 시 추가 수치
+                    totalMultOp = card.totalMultOp,   // 가산/곱연산 구분은 카드 데이터로 결정
                     displayName = card.talismanName,
                     sourceId = card.cardId,
                     useId = useId
@@ -364,7 +366,9 @@ public class TalismanManager
 
             case TalismanEffectKind.ExtraReroll:
                 // 재기부 특별 재투척 — 이미 재투척한 윷도 다시 던질 수 있는 별도 기회.
-                // 기본 기회의 같은 윷 제한·사용 기록은 그대로 유지된다
+                // 기본 기회의 같은 윷 제한·사용 기록은 그대로 유지된다.
+                // 결단령 보유 시 모든 재투척 금지 — 재기부는 발동 불가로 카드 미소모
+                if (gm.bellManager.HasBell(BellEffectKind.RerollBan)) return false;
                 session.specialRerolls += Mathf.RoundToInt(card.value);
                 resultNote = $"{card.talismanName} — 특별 재투척 +{Mathf.RoundToInt(card.value)}, 이미 처리됨";
                 return true;

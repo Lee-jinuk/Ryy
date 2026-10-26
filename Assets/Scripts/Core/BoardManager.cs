@@ -4,7 +4,8 @@ using UnityEngine.UI;
 
 // 말판과 말 이동 담당 — 30칸 속성 말판 생성, 말 이동, 완주 판정 보조, 말판 UI 갱신
 // 말판 데이터 원본은 YutGameManager.board (Inspector 노출 유지) — 이 클래스가 유일한 쓰기 경로
-// 배치(layoutGenerated)와 말 위치(pieceIndex/totalMoved/lapCount) 초기화는 분리한다
+// 배치(layoutGenerated)·말 위치(pieceIndex/totalMoved)와 런 누적 완주(lapCount) 초기화는 분리한다
+// — 완주는 새 런(ResetForNewRun)에서만 0, 보스 전환에서는 누적 유지 (2026-10-27 확정)
 // 일반 C# 클래스 (MonoBehaviour 아님) — Inspector 연결에 영향 없음
 public class BoardManager
 {
@@ -48,33 +49,78 @@ public class BoardManager
         _ => attribute.ToString(),
     };
 
-    // 속성 칸 1개 독립 추첨 — 불30 물30 풀30 땅10 쇠0(생성 제외) (%)
-    private static TileAttribute DrawAttribute()
+    // 속성 칸 1개 독립 추첨 — 불30 물30 풀30 땅10 쇠0(생성 제외) + 점괘 속성 확률 강화.
+    // 강화는 이 배치 생성 시점의 누적값을 ApplyPercentBonuses 규칙으로 반영한다 —
+    // 대상 +N%p, 비대상은 기존 비율로 차감(쇠 기본 0 → 생성 제외 유지).
+    // START 고정·고정 칸 수 보장 없음·이미 생성된 배치는 재추첨하지 않는다
+    private TileAttribute DrawAttribute()
     {
+        var baseP = new float[AttributeWeights.Length];
+        var bonusP = new float[AttributeWeights.Length];
+        bool anyBonus = false;
+        for (int i = 0; i < AttributeWeights.Length; i++)
+        {
+            baseP[i] = AttributeWeights[i].percent;
+            bonusP[i] = gm.fortuneManager.GetAttrProbBonus(AttributeWeights[i].attribute);
+            anyBonus |= bonusP[i] > 0f;
+        }
+        float[] pcts = anyBonus ? YutRollManager.ApplyPercentBonuses(baseP, bonusP) : baseP;
         float roll = Random.Range(0f, 100f);
         float acc = 0f;
-        foreach ((TileAttribute attribute, float percent) in AttributeWeights)
+        for (int i = 0; i < AttributeWeights.Length; i++)
         {
-            acc += percent;
+            acc += pcts[i];
             if (roll < acc)
             {
-                return attribute;
+                return AttributeWeights[i].attribute;
             }
         }
         return TileAttribute.Earth;   // 예외 반환 — 쇠가 어떤 경로로도 생성되지 않게 한다
     }
 
-    // 보스전 진입 시 호출 — 배치는 런당 1회만 생성하고 게임오버까지 유지한다
-    // (보스 처치·다음 보스 진입·건너뛰기에서 재추첨하지 않음). 말 위치·완주는 매 보스전 초기화 (기존 동작 유지)
+    // 속성 확률 점괘의 실효 판정 — 대상 속성에 +pct를 가상 적용했을 때 다음 배치의
+    // 발생 확률이 바뀌는지 비교한다. 순수 조회 — 배치·강화·추첨 상태를 바꾸지 않는다
+    public bool WouldChangeAttrWeights(TileAttribute target, float pct)
+    {
+        if (pct <= 0f)
+        {
+            return false;
+        }
+        var baseP = new float[AttributeWeights.Length];
+        var bonusP = new float[AttributeWeights.Length];
+        for (int i = 0; i < AttributeWeights.Length; i++)
+        {
+            baseP[i] = AttributeWeights[i].percent;
+            bonusP[i] = gm.fortuneManager.GetAttrProbBonus(AttributeWeights[i].attribute);
+        }
+        float[] current = YutRollManager.ApplyPercentBonuses(baseP, bonusP);
+        for (int i = 0; i < AttributeWeights.Length; i++)
+        {
+            if (AttributeWeights[i].attribute == target)
+            {
+                bonusP[i] += pct;
+            }
+        }
+        float[] next = YutRollManager.ApplyPercentBonuses(baseP, bonusP);
+        for (int i = 0; i < current.Length; i++)
+        {
+            if (Mathf.Abs(current[i] - next[i]) > 0.0001f)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 보스전 진입 시 호출 — 매 실제 보스전 시작 시 누적 속성 확률로 배치를 새로 생성한다
+    // (2026-10-23 사용자 확정 '매 보스전 말판 재배치' 4단계 구현 — 런당 1회 생성 규칙 폐기.
+    // 소개 화면·상점·리프레시·UI 갱신·점괘 선택 직후·건너뛰기에서는 재배치하지 않는다).
+    // 말 위치·보스전 이동 진행도는 초기화하고 런 누적 완주(lapCount)는 유지한다
     public void SetupBoard()
     {
-        if (!gm.board.layoutGenerated)
-        {
-            GenerateLayout();
-        }
-        gm.board.pieceIndex = 0;   // 시작점 = START (인덱스 0)
+        GenerateLayout();
+        gm.board.pieceIndex = 0;   // 시작점 = START (인덱스 0) — 강제 배치는 완주 증가 아님
         gm.board.totalMoved = 0;
-        gm.board.lapCount = 0;
         UpdateBoardUI();
     }
 
@@ -90,6 +136,7 @@ public class BoardManager
         gm.board.layoutGenerated = true;
 
         int[] counts = new int[6];
+
         foreach (BoardTile tile in gm.board.tiles)
         {
             counts[(int)tile.attribute]++;

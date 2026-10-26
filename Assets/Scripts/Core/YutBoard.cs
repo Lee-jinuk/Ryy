@@ -32,9 +32,11 @@ public class YutBoard
 
     public List<BoardTile> tiles = new List<BoardTile>();
     public bool layoutGenerated;   // 이번 런의 배치 생성 완료 여부 — ResetForNewRun에서 리셋
-    public int totalMoved = 0;    // START(인덱스 0) 기준 누적 이동 칸 수
+    public int totalMoved = 0;    // 보스전 이동 진행도 — START(인덱스 0) 기준 누적 칸 수.
+                                  // 보스전 시작에서만 초기화하고 다음 보스전으로 부분 진행을 이월하지 않는다
     public int pieceIndex = 0;    // 현재 말 위치 (칸 인덱스, 시작 = 0 = START)
-    public int lapCount = 0;      // 완주 횟수 — 인덱스 29를 지나 0(START)으로 넘어갈 때 증가 (기록용, 점수 보너스 없음)
+    public int lapCount = 0;      // 런 누적 완주 횟수 — 실제 이동으로 START 경계를 넘은 횟수.
+                                  // 보스 전환·건너뛰기에서 유지하고 새 런 초기화에서만 0 (2026-10-27 확정)
 
     // steps칸 시계방향 이동. 경유 칸 인덱스를 path에 기록하고 도착 칸 인덱스를 반환
     public int MovePiece(int steps, List<int> path)
@@ -49,12 +51,11 @@ public class YutBoard
             }
             path?.Add(p);
         }
+        int prevTotal = totalMoved;
         totalMoved += steps;
-        // 30칸을 넘어 순환할 때마다 완주 (인덱스 29 → 0 경계 통과)
-        while (totalMoved >= TileCount * (lapCount + 1))
-        {
-            lapCount++;
-        }
+        // 런 누적 완주 — 이번 보스전 이동 진행도가 START 경계(30칸 배수)를 넘은 횟수만큼 증가.
+        // START에 정확히 도착하거나 통과하면 증가한다. START 배치 초기화·이동 0·UI 갱신은 제외
+        lapCount += totalMoved / TileCount - prevTotal / TileCount;
         pieceIndex = totalMoved % TileCount;
         return pieceIndex;
     }

@@ -22,7 +22,7 @@ public class YutGameManager : MonoBehaviour
     public BossDatabase bossDatabase;              // 보스 순서·이름·HP·능력 — Assets/ScriptableObjects/BossDatabase
     public GameBalanceConfig balanceConfig;        // 투척 횟수·윷 배율·보스 이동 범위 — Assets/ScriptableObjects/GameBalanceConfig
     public PresentationConfig presentationConfig;  // 연출 딜레이 — Assets/ScriptableObjects/PresentationConfig
-    public BellDatabase bellDatabase;              // 방울 정의 12종 — Assets/ScriptableObjects/BellDatabase
+    public BellDatabase bellDatabase;              // 방울 정의 20종 — Assets/ScriptableObjects/BellDatabase
     public ShopConfig shopConfig;                  // 시작 자금·장착 한도·상점 상품 수 — Assets/ScriptableObjects/ShopConfig
     public FortuneUpgradeDatabase fortuneDatabase; // 복주머니 점괘 강화 정의 — Assets/ScriptableObjects/FortuneUpgradeDatabase
 
@@ -139,7 +139,7 @@ public class YutGameManager : MonoBehaviour
 
     [Header("Throw State")]
     // 기본 투척 횟수 — 기준은 GameBalanceConfig 에셋
-    public int maxThrows => balanceConfig != null ? balanceConfig.maxThrows : 5;
+    public int maxThrows => balanceConfig != null ? balanceConfig.maxThrows : 6;
     public int currentThrows = 0;
     public int goalScore = 1000;     // 현재 보스 목표 점수 = 보스 최대 HP
 
@@ -151,7 +151,10 @@ public class YutGameManager : MonoBehaviour
     public int totalScore = 0;    // 보스전 전체 누적 총점 (보스 HP와 대응 — 백도 차감 기준이기도 함)
 
     // 보스 말 이동 거리 — 기준은 GameBalanceConfig 에셋.
-    // 누적 피해 비율 단계별 이동 범위 — 단계 i는 피해 ≥ 최대 HP의 i/N 에서 적용 (기본 3단계: <1/3 → 4~7 / ≥1/3 → 3~6 / ≥2/3 → 2~5)
+    // 보스 말 이동 — 기본은 고정 범위(4~7칸). useBossMoveDamageStages 활성 시에만 누적 피해 비율 단계 배열 사용 (구조 보존·비활성)
+    public bool bossMoveUseDamageStages => balanceConfig != null && balanceConfig.useBossMoveDamageStages;
+    public int bossMoveFixedMin => balanceConfig != null ? balanceConfig.bossMoveMin : 4;   // 고정 이동 최소 칸 (단계 미사용 시)
+    public int bossMoveFixedMax => balanceConfig != null ? balanceConfig.bossMoveMax : 7;   // 고정 이동 최대 칸 (단계 미사용 시, 상한 포함)
     // 배열 길이 = 단계 수. 변경된 범위는 다음 투척 세션의 최초 던지기부터 적용. 새 보스전(피해 0)은 0단계
     public int[] bossMoveStageMin => balanceConfig != null ? balanceConfig.bossMoveStageMin : null;   // 단계별 이동 최소 칸 수
     public int[] bossMoveStageMax => balanceConfig != null ? balanceConfig.bossMoveStageMax : null;   // 단계별 이동 최대 칸 수 (최소~최대 정수 균등 추첨, 상한 포함)
@@ -196,7 +199,7 @@ public class YutGameManager : MonoBehaviour
     internal EconomyManager economyManager;  // 냥(화폐) — 시작 자금·구매·판매·수입
     internal ShopManager shopManager;        // 방울 상점 — 보스 소개 화면의 구매·판매
     internal TalismanManager talismanManager; // 부적 카드 — 뽑기 덱·손패·선택·사용·세션 효과
-    internal TileEffectManager tileEffects;  // 속성 착지 효과 — 불×1.5·물 연속·풀 도트 (보스전 단위 상태)
+    internal TileEffectManager tileEffects;  // 속성 착지 효과 — 불×2·물 연속·풀 도트 (보스전 단위 상태)
     internal FortuneUpgradeManager fortuneManager;  // 복주머니 점괘 강화 — 획득 횟수·누적 강화·선택 대기 (런 단위 상태)
     internal GameUIManager uiManager;        // UI 표시·연출
 
@@ -544,10 +547,17 @@ public class YutGameManager : MonoBehaviour
         {
             Debug.LogWarning("GameBalanceConfig.maxThrows가 0 이하입니다 — 투척할 수 없습니다.", balanceConfig);
         }
-        if (balanceConfig.bossMoveStageMin == null || balanceConfig.bossMoveStageMax == null ||
-            balanceConfig.bossMoveStageMin.Length != balanceConfig.bossMoveStageMax.Length)
+        if (balanceConfig.useBossMoveDamageStages)
         {
-            Debug.LogWarning("GameBalanceConfig의 보스 이동 단계 배열이 비어 있거나 길이가 맞지 않습니다 — 보스 말 이동이 차단됩니다.", balanceConfig);
+            if (balanceConfig.bossMoveStageMin == null || balanceConfig.bossMoveStageMax == null ||
+                balanceConfig.bossMoveStageMin.Length != balanceConfig.bossMoveStageMax.Length)
+            {
+                Debug.LogWarning("GameBalanceConfig의 보스 이동 단계 배열이 비어 있거나 길이가 맞지 않습니다 — 단계 모드에서 보스 말 이동이 차단됩니다.", balanceConfig);
+            }
+        }
+        else if (balanceConfig.bossMoveMin > balanceConfig.bossMoveMax || balanceConfig.bossMoveMin < 1)
+        {
+            Debug.LogWarning("GameBalanceConfig의 고정 이동 범위(bossMoveMin/bossMoveMax)가 올바르지 않습니다 — 추첨 시 보정됩니다.", balanceConfig);
         }
         if (bellDatabase == null)
         {
@@ -596,7 +606,7 @@ public class YutGameManager : MonoBehaviour
         talismanManager.ResetForBoss();                 // 부적 덱·손패는 보스전 단위 — 이전 손패·효과 정리 후 새 덱 구성 예약
         landingTileInfo = "";
         bossManager.ResetBossPiece();                   // 모든 보스전 시작 시 보스 말을 START로 초기화 + 이전 이동 계획 폐기
-        boardManager.SetupBoard();                      // 배치는 런당 1회 생성·유지, 말 위치·완주만 초기화
+        boardManager.SetupBoard();                      // 배치는 런당 1회 생성·유지, 말 위치·이동 진행도만 초기화 — 누적 완주는 런 단위 유지
         boardManager.MovePieceVisual(board.pieceIndex); // 말을 시작점(START) 위치에 배치
         PrepareTurn();                                  // 이전 투척 세션·부적 효과 정리 + 첫 차례 준비 — 보스 말 초기화 후 이동 계획을 세운다
         economyManager.ResetClearReward();              // 이번 보스의 클리어 보상 지급 여부 초기화 — 보스전당 1회 지급
@@ -630,6 +640,7 @@ public class YutGameManager : MonoBehaviour
     private void EnterClear()
     {
         economyManager.GrantBossClearReward();   // 클리어 보상 — 기본+남은 투척 보상, 보스전당 1회 (게임오버·건너뛰기는 이 경로 미도달)
+        fortuneManager.OnBossCleared();          // 적용 대기 상점 할인 활성화 — 다음 상점부터 할인가 적용 (건너뛰기·재진입으로는 활성화 안 됨)
         currentState = GameState.Cleared;
         GameUIManager.SetPanel(gameOverPanel, false);            // 클리어/게임오버 동시 표시 방지
         GameUIManager.SetPanel(talismanChoicePanel, false);
@@ -718,7 +729,7 @@ public class YutGameManager : MonoBehaviour
         }
         if (currentThrows >= maxThrows)
         {
-            EnterGameOver();   // 5회 소진 후에도 보스 생존 — 마지막 투척 처치는 위 클리어 판정이 먼저 잡는다
+            EnterGameOver();   // 기본 투척 소진 후에도 보스 생존 — 마지막 투척 처치는 위 클리어 판정이 먼저 잡는다
             return;
         }
         PrepareTurn();   // 다음 차례 준비 — 새 세션 생성 + 이전 '이번 투척' 부적 효과 해제. 선택창이 닫히면 부적 사용 가능
@@ -745,10 +756,37 @@ public class YutGameManager : MonoBehaviour
         {
             return;
         }
-        totalScore += dot;
+        // 잔향령 — 정상 도트 지급 시 유효 확률(공령명 반영)로 같은 도트를 한 번 더 지급한다.
+        // 저장된 도트량은 그대로 두고, 추가 지급분에는 잔향령을 다시 판정하지 않는다 (연쇄 없음)
+        int extra = 0;
+        OwnedBell dotBell = bellManager.GetBell(BellEffectKind.DotDoubleChance);
+        if (dotBell != null && Random.value < bellManager.EffectiveChance(dotBell))
+        {
+            extra = dot;
+        }
+        // 목박령 — 도트 지급마다 유효 확률(공령명 반영)로 다음 예정 보스 이동을 1회 봉쇄한다.
+        // 정상 지급과 잔향령 추가 지급에서 각각 판정 (추가 지급이 있으면 기회 2회).
+        // 봉쇄부와 같은 pendingMoveSeal 경로를 사용 — 속박령의 최소 1칸 보정이 0칸을
+        // 되살리지 않고, 같은 다음 이동을 막는 효과를 중첩해 봉쇄 턴을 추가하지 않는다
+        OwnedBell sealBell = bellManager.GetBell(BellEffectKind.DotSealChance);
+        if (sealBell != null)
+        {
+            int payments = 1 + (extra > 0 ? 1 : 0);
+            for (int i = 0; i < payments; i++)
+            {
+                if (Random.value < bellManager.EffectiveChance(sealBell))
+                {
+                    bossManager.pendingMoveSeal = true;
+                    Debug.Log("목박령 발동 — 다음 예정 보스 이동 1회 봉쇄 (풀 도트 지급)");
+                }
+            }
+        }
+        totalScore += dot + extra;
         displayTotal = totalScore;
-        uiManager.SetMultiplierReason($"풀 도트 피해 +{dot}");   // 이번 윷 공격과 구분된 별도 표시
-        Debug.Log($"풀 도트 틱: {dot} 피해 (등록 도트 {tileEffects.forestDot}) | Total {totalScore}/{goalScore}");
+        uiManager.SetMultiplierReason(extra > 0
+            ? $"풀 도트 피해 +{dot} +{extra} (잔향령)"
+            : $"풀 도트 피해 +{dot}");   // 이번 윷 공격과 구분된 별도 표시
+        Debug.Log($"풀 도트 틱: {dot + extra} 피해 (등록 도트 {tileEffects.forestDot}{(extra > 0 ? $", 잔향령 추가 +{extra}" : "")}) | Total {totalScore}/{goalScore}");
         if (totalScore >= goalScore)
         {
             EnterClear();
@@ -762,7 +800,7 @@ public class YutGameManager : MonoBehaviour
     private void ResetRunState()
     {
         StopPresentation();                  // 이전 보스전의 잔여 연출 정리
-        bellManager.ResetForNewRun();        // 보유 방울·속성 성장 등 런 단위 장착 상태 정리
+        bellManager.ResetForNewRun();        // 보유 방울 등 런 단위 장착 상태 정리
         fortuneManager.ResetForNewRun();     // 점괘 강화 횟수·누적 강화·선택 대기 정리 — 보스 전환에서는 호출되지 않음
         shopManager.ResetForNewRun();        // 상점 열림 상태·상품 후보 정리
         economyManager.ResetForNewRun();     // 돈 초기화 + 시작 자금 재지급 (런당 1회)

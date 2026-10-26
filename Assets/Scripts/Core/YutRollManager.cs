@@ -49,6 +49,192 @@ public class YutRollManager
     public void PrepareSession()
     {
         session = new YutThrowSession();
+        // 방울 연동 세션 설정 — 세션 생성 시점에 보유 방울을 반영한다
+        // (확률 판정은 실행 시점에만 — 세션 중 보유 상태는 변하지 않는다)
+        // 윤회령 — 유효 확률(공령명 배율 반영)을 세션에 보관, Reroll 실행 시 추첨
+        OwnedBell freeRerollBell = gm.bellManager.GetBell(BellEffectKind.FreeReroll);
+        session.freeRerollChance = freeRerollBell != null ? gm.bellManager.EffectiveChance(freeRerollBell) : 0f;
+        // 삼고령 — 기본 재투척 기회 가산 (같은 윷 1회 제한·특별 기회는 별도 유지)
+        OwnedBell extraRerollBell = gm.bellManager.GetBell(BellEffectKind.ExtraReroll);
+        session.maxRerolls = YutThrowSession.BaseRerolls + (extraRerollBell != null ? extraRerollBell.bonusCount : 0);
+        // 결단령 — 모든 재투척 금지 (다른 방울이 낙·승부부의 금지를 해제하지 않는 것과 같은 방향의 독립 상태)
+        session.rerollsBanned = gm.bellManager.HasBell(BellEffectKind.RerollBan);
+        // 양면령 + 재투척 면 점괘 — 기본값(미장착 0.5·장착 시 방울 설정)에
+        // 앞면 − 뒷면 강화 누적을 더하고 20~80%로 제한한 최종값을 세션에 보관한다
+        // (기본·특별 재투척 모두 적용, 최초 투척에는 미적용 — 공령명 증폭 대상 아님)
+        float faceDelta = (gm.fortuneManager.GetRerollFrontBonus() - gm.fortuneManager.GetRerollBackBonus()) / 100f;
+        session.rerollFrontUpChance = Mathf.Clamp(RerollFrontBaseChance() + faceDelta, 0.2f, 0.8f);
+        // 걸윷령·쌍개령·극단령 + 윷 확률 점괘 — 최초 투척 결과 확률 보정 분포를 세션에 보관
+        // (추첨은 InitialRoll에서 1회만 — 재투척·UI 갱신에는 적용되지 않는다)
+        session.initialResultWeights = BuildInitialResultWeights();
+    }
+
+    // 재투척 앞면 확률의 기본값 — 양면령 장착 시 방울 설정(현재 0.7), 미장착 0.5.
+    // 점괘 보정·클램프 전의 원본 — HasEffect 판정과 세션 설정이 같은 경로를 쓴다
+    public float RerollFrontBaseChance()
+    {
+        OwnedBell frontBiasBell = gm.bellManager.GetBell(BellEffectKind.RerollFrontBias);
+        return frontBiasBell != null ? frontBiasBell.frontUpChance : 0.5f;
+    }
+
+    // 최초 투척 결과 확률 보정 — 장착 확률 방울과 윷 확률 점괘의 증가량을 모아
+    // 한 번 계산한다 (합산이라 장착·획득 순서와 무관). 보정 대상이 없으면 null —
+    // 세션은 기본 면 분포를 사용한다.
+    // 일반 경우: 대상에 +N%p를 적용하고 남은 확률을 비대상의 기존 비율로 분배.
+    // 예외(모든 결과가 대상이거나 대상 확률 합계 ≥ 100%): 전체를 함께 100%로 정규화 —
+    // 비대상을 강제로 0으로 만들지 않는다 (2026-10-26 지시서 §7 → 2026-10-27 점괘 통합)
+    public Dictionary<YutResult, float> BuildInitialResultWeights()
+    {
+        Dictionary<YutResult, float> bonus = CollectInitialProbBonus();
+        return bonus.Count == 0 ? null : ComputeAdjustedResultWeights(bonus);
+    }
+
+    // 최초 투척 결과별 증가량 수집 — 확률 방울(걸윷·쌍개·극단) + 윷 확률 점괘를
+    // 같은 맵에 합산한다. 두 출처를 구분하지 않으므로 적용 순서에 결과가 달라지지 않는다
+    private Dictionary<YutResult, float> CollectInitialProbBonus()
+    {
+        var bonus = new Dictionary<YutResult, float>();
+        foreach (OwnedBell bell in gm.bellManager.ownedBells)
+        {
+            if (bell.probBonusPercent <= 0f)
+            {
+                continue;
+            }
+            AddProbTarget(bonus, bell.targetResult, bell.probBonusPercent);
+            if (bell.targetResult2 != bell.targetResult)   // 같은 대상 중복 가산 방지
+            {
+                AddProbTarget(bonus, bell.targetResult2, bell.probBonusPercent);
+            }
+        }
+        foreach (YutResult result in YutGameManager.NormalResults)
+        {
+            float fortuneBonus = gm.fortuneManager.GetYutProbBonus(result);
+            if (fortuneBonus > 0f)
+            {
+                AddProbTarget(bonus, result, fortuneBonus);
+            }
+        }
+        return bonus;
+    }
+
+    // 보정 분포 계산 — 결과별 기본 확률 + 증가량을 ApplyPercentBonuses 규칙으로 조정.
+    // 후보 효과 판정(WouldChangeInitialWeights)과 실제 세션 설정이 같은 경로를 쓴다
+    private static Dictionary<YutResult, float> ComputeAdjustedResultWeights(
+        Dictionary<YutResult, float> bonus)
+    {
+        var baseP = new float[YutGameManager.NormalResults.Length];
+        var bonusP = new float[baseP.Length];
+        for (int i = 0; i < baseP.Length; i++)
+        {
+            baseP[i] = BaseResultPercent(YutGameManager.NormalResults[i]);
+            bonusP[i] = bonus.TryGetValue(YutGameManager.NormalResults[i], out float v) ? v : 0f;
+        }
+        float[] adjusted = ApplyPercentBonuses(baseP, bonusP);
+        var weights = new Dictionary<YutResult, float>();
+        for (int i = 0; i < adjusted.Length; i++)
+        {
+            weights[YutGameManager.NormalResults[i]] = adjusted[i];
+        }
+        return weights;
+    }
+
+    // 점괘 후보의 실효 판정 — 대상 결과에 +pct를 가상 적용했을 때 보정 분포가
+    // 바뀌는지 비교한다. 순수 조회 — 방울·세션·추첨 상태를 바꾸지 않는다
+    public bool WouldChangeInitialWeights(YutResult target, float pct)
+    {
+        if (pct <= 0f || target == YutResult.BackDo || target == YutResult.Nak)
+        {
+            return false;
+        }
+        Dictionary<YutResult, float> bonus = CollectInitialProbBonus();
+        Dictionary<YutResult, float> current = ComputeAdjustedResultWeights(bonus);
+        bonus[target] = bonus.TryGetValue(target, out float v) ? v + pct : pct;
+        Dictionary<YutResult, float> next = ComputeAdjustedResultWeights(bonus);
+        foreach (YutResult result in YutGameManager.NormalResults)
+        {
+            if (Mathf.Abs(current[result] - next[result]) > 0.0001f)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 확률 %p 보정의 공통 규칙 — 대상에 증가량을 더하고, 남은 확률을 비대상의
+    // 기존 비율로 분배해 합계 100%를 유지한다. 모든 대상이 증가 대상이거나 대상
+    // 합계가 100% 이상이면 전체를 함께 정규화한다 (비대상 강제 0 없음).
+    // 최초 투척 결과 보정·말판 속성 발생 보정이 이 구현을 공용한다
+    public static float[] ApplyPercentBonuses(float[] basePcts, float[] bonusPcts)
+    {
+        int n = basePcts.Length;
+        var adjusted = new float[n];
+        float targetSum = 0f;
+        float totalSum = 0f;
+        float nonTargetBase = 0f;
+        bool allTargeted = n > 0;
+        for (int i = 0; i < n; i++)
+        {
+            float w = Mathf.Max(0f, basePcts[i] + bonusPcts[i]);
+            adjusted[i] = w;
+            totalSum += w;
+            if (bonusPcts[i] > 0f)
+            {
+                targetSum += w;
+            }
+            else
+            {
+                allTargeted = false;
+                nonTargetBase += Mathf.Max(0f, basePcts[i]);
+            }
+        }
+        if (allTargeted || targetSum >= 100f)
+        {
+            if (totalSum > 0f)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    adjusted[i] = adjusted[i] / totalSum * 100f;
+                }
+            }
+            return adjusted;
+        }
+        float remaining = 100f - targetSum;
+        for (int i = 0; i < n; i++)
+        {
+            if (bonusPcts[i] > 0f)
+            {
+                continue;
+            }
+            float b = Mathf.Max(0f, basePcts[i]);
+            adjusted[i] = nonTargetBase > 0f ? b * remaining / nonTargetBase : 0f;
+        }
+        return adjusted;
+    }
+
+    // 확률 가산 대상 등록 — 저주 결과(백도·낙)는 일반 결과 분포의 대상이 아니다
+    private static void AddProbTarget(Dictionary<YutResult, float> bonus, YutResult result, float pct)
+    {
+        if (result == YutResult.BackDo || result == YutResult.Nak)
+        {
+            return;
+        }
+        bonus[result] = bonus.TryGetValue(result, out float v) ? v + pct : pct;
+    }
+
+    // 실제 4개 윷의 기본 면 분포 — 앞면 k개의 조합 수 C(4,k) / 16 (%)
+    // 도(앞1)=25, 개(앞2)=37.5, 걸(앞3)=25, 윷(앞4)=6.25, 모(앞0)=6.25
+    private static float BaseResultPercent(YutResult result)
+    {
+        int combos = result switch
+        {
+            YutResult.Do => 4,
+            YutResult.Gae => 6,
+            YutResult.Geol => 4,
+            YutResult.Yut => 1,
+            YutResult.Mo => 1,
+            _ => 0,
+        };
+        return combos * 100f / 16f;
     }
 
     // 기본 확률 → 런타임 가중치 복사. 누락 결과는 0, 음수는 0으로 보정

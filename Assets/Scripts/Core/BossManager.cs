@@ -47,8 +47,9 @@ public class BossManager
     public int bossPieceIndex;
     public int lastBossMoveSteps;   // 직전 추첨 이동 거리 (디버그·검증용)
 
-    // 봉쇄부 — 다음 최초 던지기의 보스 이동을 1회 금지 (미확정 임시 규칙: 중복 사용 중첩 없음,
-    // 보스 전환 시 해제). 이미 완료된 이번 이동은 되돌리지 않고 다음 MoveBossPiece에서 소모된다
+    // 봉쇄부·목박령 공통 — 다음 최초 던지기의 보스 이동을 1회 금지 (미확정 임시 규칙:
+    // 중복 사용 중첩 없음, 보스 전환 시 해제). 이미 완료된 이번 이동은 되돌리지 않고
+    // 다음 MoveBossPiece에서 소모된다
     public bool pendingMoveSeal;
 
     // 다음 이동 계획 — 차례 준비(PrepareBossMove)에 기본 거리를 1회 추첨해 보관하고
@@ -56,7 +57,7 @@ public class BossManager
     public bool movePlanReady;
     public int plannedBaseSteps;    // 추첨된 기본 이동 거리 (족쇄·봉쇄 미반영)
 
-    // 유효 이동 거리·목적지 — 족쇄방울·봉쇄부를 계산 시점에 반영 (봉쇄 플래그는 소모하지 않음).
+    // 유효 이동 거리·목적지 — 속박령·봉쇄(봉쇄부·목박령)를 계산 시점에 반영 (봉쇄 플래그는 소모하지 않음).
     // 봉쇄부를 준비 단계에 쓰면 목적지가 현재 칸으로 즉시 바뀐다
     public int PlannedEffectiveSteps =>
         !movePlanReady ? 0 : pendingMoveSeal ? 0 : ApplyMoveReduction(plannedBaseSteps);
@@ -164,7 +165,7 @@ public class BossManager
     }
 
     // 보스 상성 조회 — 상성 능력이 있는 보스만 BossAffinity 반환, 없으면 null.
-    // 가짜 약점·강점을 생성하지 않으므로 천운부·재복방울·청개구리방울은 null 검사로 조건 판정한다
+    // 가짜 약점·강점을 생성하지 않으므로 천운부 같은 약점 조건 효과는 null 검사로 조건 판정한다
     public BossAffinity GetAffinity(int bossIndex)
     {
         if (!HasAffinityAbility(bossIndex))
@@ -244,12 +245,16 @@ public class BossManager
     // ============ 보스 말 (표시·이동 전용 — 칸 효과·공격·방울 발동 없음) ============
 
     // 현재 누적 피해 비율이 적용되는 이동 단계 — 실제 누적 피해 totalScore 기준 (연출용 displayTotal 아님)
-    // 단계 i는 누적 피해 ≥ 최대 HP의 i/N 에서 적용 (N = 단계 수, 기본 3단계: <1/3 → 4~7, ≥1/3 → 3~6, ≥2/3 → 2~5)
-    // 정수 곱셈 비교로 HP가 나누어떨어지지 않아도 경계 오류 없음. 변경분은 다음 최초 투척 추첨부터 적용
+    // 단계 모드(useBossMoveDamageStages) 활성 시에만 의미 있음 — 비활성(기본)은 항상 0 (고정 범위)
+    // 단계 i는 누적 피해 ≥ 최대 HP의 i/N 에서 적용 (N = 단계 수). 정수 곱셈 비교로 경계 오류 없음
     public int BossMoveStage
     {
         get
         {
+            if (!gm.bossMoveUseDamageStages)
+            {
+                return 0;
+            }
             int stages = Mathf.Min(gm.bossMoveStageMin?.Length ?? 0, gm.bossMoveStageMax?.Length ?? 0);
             if (stages <= 1 || gm.goalScore <= 0)
             {
@@ -267,40 +272,49 @@ public class BossManager
         }
     }
 
-    // 보스 이동 거리 추첨 — 현재 피해 단계의 최소~최대 정수 균등 (상한 포함). 잘못된 설정은 보정 후 경고.
-    // 이동 배열 자체가 비어 있거나 길이가 맞지 않으면 -1 반환 — 임의 기본값을 만들지 않고 계획을 차단한다
+    // 보스 이동 거리 추첨 — 기본은 고정 범위(bossMoveMin~bossMoveMax, 상한 포함).
+    // 단계 모드 활성 시에만 현재 피해 단계 배열에서 추첨. 잘못된 설정은 보정 후 경고.
+    // 단계 모드에서 이동 배열이 비어 있거나 길이가 맞지 않으면 -1 반환 — 임의 기본값을 만들지 않고 계획을 차단한다
     private int DrawBossMoveSteps()
     {
-        int[] mins = gm.bossMoveStageMin;
-        int[] maxs = gm.bossMoveStageMax;
-        if (mins == null || maxs == null || mins.Length == 0 || maxs.Length == 0 || mins.Length != maxs.Length)
+        int min, max;
+        if (gm.bossMoveUseDamageStages)
         {
-            Debug.LogError("[YutGameManager] 보스 이동 단계 배열이 비어 있거나 최소/최대 길이가 일치하지 않습니다 — 보스 말 이동이 차단됩니다. GameBalanceConfig의 bossMoveStageMin/bossMoveStageMax를 확인하세요.", gm);
-            return -1;
+            int[] mins = gm.bossMoveStageMin;
+            int[] maxs = gm.bossMoveStageMax;
+            if (mins == null || maxs == null || mins.Length == 0 || maxs.Length == 0 || mins.Length != maxs.Length)
+            {
+                Debug.LogError("[YutGameManager] 보스 이동 단계 배열이 비어 있거나 최소/최대 길이가 일치하지 않습니다 — 보스 말 이동이 차단됩니다. GameBalanceConfig의 bossMoveStageMin/bossMoveStageMax를 확인하세요.", gm);
+                return -1;
+            }
+            int stage = BossMoveStage;
+            min = mins[stage];
+            max = maxs[stage];
         }
-        int stage = BossMoveStage;
-        int min = mins[stage];
-        int max = maxs[stage];
+        else
+        {
+            min = gm.bossMoveFixedMin;
+            max = gm.bossMoveFixedMax;
+        }
         if (min > max)
         {
-            Debug.LogWarning($"[YutGameManager] 보스 이동 {stage}단계 최소값({min}) > 최대값({max}) — 순서를 바꿔 적용합니다.", gm);
+            Debug.LogWarning($"[YutGameManager] 보스 이동 최소값({min}) > 최대값({max}) — 순서를 바꿔 적용합니다.", gm);
             (min, max) = (max, min);
         }
         if (min < 1)
         {
-            Debug.LogWarning($"[YutGameManager] 보스 이동 {stage}단계 최소값이 {min}칸 — 1칸 미만은 허용하지 않아 1로 보정합니다.", gm);
+            Debug.LogWarning($"[YutGameManager] 보스 이동 최소값이 {min}칸 — 1칸 미만은 허용하지 않아 1로 보정합니다.", gm);
             min = 1;
         }
         return Random.Range(min, max + 1);   // Random.Range(int)는 상한 미포함 → max 포함을 위해 +1
     }
 
-    // 족쇄방울 — 보스 이동 거리 −1칸, 최소 1칸 보장 (사용자 확정).
-    // 봉쇄부의 이동 0칸은 PlannedEffectiveSteps·MoveBossPiece에서 먼저 처리되어 이 보정으로 되살아나지 않는다
+    // 속박령 — 보스 이동 거리 −bonusCount칸, 최소 1칸 보장 (사용자 확정).
+    // 봉쇄부·목박령의 이동 0칸은 PlannedEffectiveSteps·MoveBossPiece에서 먼저 처리되어 이 보정으로 되살아나지 않는다
     private int ApplyMoveReduction(int steps)
     {
-        return gm.bellManager.HasBell(BellEffectKind.BossMoveReduce)
-            ? Mathf.Max(1, steps - 1)
-            : steps;
+        OwnedBell shackle = gm.bellManager.GetBell(BellEffectKind.BossMoveReduce);
+        return shackle != null ? Mathf.Max(1, steps - shackle.bonusCount) : steps;
     }
 
     // 차례 준비 — 다음 이동의 기본 거리를 1회 추첨해 계획한다. 보스 말은 이동하지 않고
@@ -333,17 +347,17 @@ public class BossManager
         movePlanReady = false;
         if (pendingMoveSeal)
         {
-            // 봉쇄부 — 이번 보스 이동 생략하고 상태 소모. 실제 이동거리 0으로 기록
+            // 봉쇄부·목박령 공통 봉쇄 — 이번 보스 이동 생략하고 상태 소모. 실제 이동거리 0으로 기록
             pendingMoveSeal = false;
             lastBossMoveSteps = 0;
-            Debug.Log($"봉쇄부 적용: 보스 이동 0칸 — 칸 {bossPieceIndex} 유지");
+            Debug.Log($"이동 봉쇄 적용: 보스 이동 0칸 — 칸 {bossPieceIndex} 유지");
             return;
         }
         int steps = ApplyMoveReduction(plannedBaseSteps);
         lastBossMoveSteps = steps;
         bossPieceIndex = (bossPieceIndex + steps) % YutBoard.TileCount;   // 끝 칸 넘으면 START로 순환
         gm.boardManager.MoveBossPieceVisual(bossPieceIndex);
-        Debug.Log($"--- 보스 말 이동: +{steps}칸 (계획 {plannedBaseSteps}) → 칸 {bossPieceIndex} (이동 단계 {BossMoveStage}) ---");
+        Debug.Log($"--- 보스 말 이동: +{steps}칸 (계획 {plannedBaseSteps}) → 칸 {bossPieceIndex}{(gm.bossMoveUseDamageStages ? $" (이동 단계 {BossMoveStage})" : "")} ---");
     }
 
     // 보스 말 초기화 — 논리 위치와 화면 위치를 함께 START(인덱스 0)로 되돌리고 이전 이동 계획을 폐기한다

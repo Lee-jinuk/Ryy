@@ -6,9 +6,214 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ## [2026-10-20 오후 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-23 오전 (40차) 변경사항 요약 - 사용자 지시 / Devin 구현]
+[2026-10-27 (47차) 변경사항 요약 - 사용자 지시 / Devin 구현]
 
-★ 최신 — 점검 발견 검증 누락 4건 보완:
+★ 최신 — 점괘 24종 확장 + 매 보스전 재배치 + 상점 할인 (Unity Play 검증 대기):
+- 점괘 16종→24종 전부 활성 — 신규 FortuneUpgradeKind 8종:
+  YutBaseScore(기본점수 +5, 5종) / RerollFrontProb·
+  RerollBackProb(재투척 면 +2%p) / ShopDiscount(+5%p) +
+  기존 비활성 확률 8종 활성화
+- 기본점수·배율 강화는 YutStatEntry 런타임 스탯 가산 —
+  설정 원본 미변경, 정보판·피해 동일 값
+- 최초 투척 결과 확률: 방울 보정+점괘를 별개 버킷 합산 →
+  ApplyPercentBonuses 공통 규칙(%p 증분·비대상 비례 차감·
+  정규화) 1회 적용 — 방울+점괘 단일 버킷, 순서 무관
+- 속성 확률: DrawAttribute가 같은 규칙 적용 — 매 보스전
+  재배치에 반영. START 고정·쇠 제외·선택 즉시 재배치 없음
+- 재투척 면: 세션 rerollFrontUpChance = Clamp(양면령
+  기본값(50%) + GetRerollFrontBonus − GetRerollBackBonus,
+  20~80%) — 기본·특별 재투척 공통
+- 상점 할인: ShopDiscountPending↔Percent 이원 — 획득 상점
+  미적용, 다음 보스 처치(EnterClear→OnBossCleared) 후부터
+  적용. Ceil(정가×(1−율)), 상한 50%, 새로고침·판매가 미변경.
+  PriceFor를 표시·판정·차감 공용 — 상점 UI는 할인가 표시
+- 매 보스전 말판 재배치 구현(34차 확정·구현 대기 완료):
+  SetupBoard가 매 실제 보스전 시작 시 재생성 — 소개·상점·
+  점괘 선택·건너뛰기는 미재배치. 누적 완주·성장 유지
+- HasEffect(선택 전후 실제 변화, 순수 조회)+FortunePouchAvailable
+  — 유효 후보 부족 복주머니는 구매 불가 표시·미차감
+- 에셋: FortuneUpgradeDatabase 신규 8종+확률 8종 활성·설명
+  정정 / ShopConfig.shopDiscountMaxPercent 50 명시
+- 검증: build 0·0 + 수치 확인(도30·개35·걸23.33·윷모5.83,
+  면 52/74/80클램프, 할인 19/19/10). Unity Play 미검증
+- Inspector 작업 없음
+
+[이전] 2026-10-27 (46차) — 방울 4종 효과 분류 변경 + 표시 문구 (Unity Play 검증 대기):
+- 화염령: 방울 곱연산 → 말판 곱연산 ×2 (출처 방울 유지, 최종
+  피해 불변) — TileEffectManager 불 경로에서 EffectiveChance
+  추첨 후 tileEffectMult에 포함. 미발동도 단계 기록
+- 결단령: 방울 곱연산 ×2 → 전체배율 방울가산 +2 (totalMultAdd)
+  — 재투척 금지·재기부 거부·삼고령 차단 유지. 피해 변경
+  (불 기준 480→720)
+- 폭염령: 불 말판 배율 자체 +1 → 불 공격 시 말판가산 +1
+  (tileMultAdd 신규, tileMultBonus 폐기) — 비불 공격 미가산
+- 윤환령: 런 누적 완주 가산 45차 구현 그대로 (문구만 변경)
+- 단계 표시: 화염령 ×2 / 결단령 +2 / 폭염령 +1 — 모두 방울
+  출처, UI 코드 변경 없음(기존 재생 경로)
+- 에셋 이전: BellDatabase — 결단 damageMult 0+totalMultAdd 2,
+  폭염 tileMultBonus 0+tileMultAdd 1, 4종 description을
+  사용자 문구로 교체(개발 용어 없음). 코드 기본값 의존 아닌
+  저장 에셋 명시 변경
+- 공식 확장: 가산 항에 잡기·말판·상성 자리(catchAddMult·
+  affinityAddMult 예약 필드, 현재 효과 없음)
+- 검증: build 0·0 + 필수 예시 5종 수식 일치(240/720/480/960/
+  1,920). Unity Play 미검증
+- Inspector 작업 없음 — 기존 연결 보존
+
+[이전] 2026-10-27 (45차) — 전체배율 가산 우선 구조 + 런 누적 완주:
+- 완주 lapCount: 보스전 → 런 단위. MovePiece는 보스전 진행도가
+  START 경계 넘은 횟수만 가산, SetupBoard는 말 위치·진행도만
+  리셋, 새 런에서만 0. 윤환령은 장착 중 누적 완주 가산
+- 전체배율 = (기본+윤환령+부적 가산+방울 가산) × 곱연산 부적
+  × 잡기 × 곱연산 방울 × 말판 × 상성 — 가산 우선 합산 후 곱셈
+- 데이터 구분: TalismanData.totalMultOp(Add/Multiply, 기존 전부
+  Multiply), BellData.totalMultAdd(기존 20종 전부 0)
+- settlement: lapBonus/talismanAddMult/bellAddMult/AdditiveTotal
+- TileEffectManager는 runningForSteps 공통 누적값 사용(재조립 폐기)
+  — 탐욕부 취소 시 이후 전 단계 0 표시
+- 검증: build 0·0 + 예시 수식 일치. Unity Play 미검증
+- Inspector 작업 없음 — 기존 연결 보존
+
+[이전] 2026-10-26 (44차-6단계) — 방울 20종 확장 완료:
+- 6단계 회귀 점검: 상점 풀(effectEnabled+미보유 20종)·
+  장착 최대4+종류당1·런 단위 보유(보스 전환 유지·새 런
+  초기화)·세션 방울 설정은 PrepareSession 단일 경로·
+  확률 추첨은 실행 시점만·정산 1회 계산+단계 기록으로
+  정상/스킵 동일·재투척 버튼 CanReroll 연동·땅 선택은
+  landedOnBellTile 억제로만 생략·결과 5종 유지
+- 잔여 표기: YutGameManager bellDatabase 주석 20종,
+  TalismanData 족쇄부 주석 속박령
+- 검증: build 0·0 + 에셋 정합(20종·ID 중복0·20/10냥)
+- Unity Play 미검증 — 전 종 구매·효과·수명·확률 강제
+  테스트·정상/스킵 동일 실측 필요. Inspector 작업 없음
+
+[이전] 2026-10-26 (44차-5단계) — 방울 20종 확장 확률 통합:
+- 걸윷·쌍개·극단: YutRollManager.BuildInitialResultWeights —
+  장착 방울의 targetResult/2·probBonusPercent 합산(순서 독립)
+  → 기본 면 분포(도25·개37.5·걸25·윷6.25·모6.25) 기준 보정.
+  일반: 대상 +N%p, 비대상 기존 비율로 잔여 분배. 예외(전원
+  대상 또는 대상 합계 ≥100%): 전체 정규화 — 비대상 0 강제 없음
+- session.initialResultWeights에 보관 → InitialRoll에서
+  RollWeightedFaces로 결과 선추첨 → 앞면 개수에 맞는 면 조합
+  균등 배치(결과=면 일치). 재투척은 실제 면으로 판정·미적용
+- 공령명: EffectiveChance가 5종(잔향·윤회·화염·목박·연수)
+  전부 연결 — 원본 chance 미변경·조회 시점 배율. 활성만 추가
+- 활성화 20종 전체. 검증: build 0·0 + 정규화 수치 확인
+  (쌍개 개47.5/걸윷+극단 예외 정규화 합계 100). Unity Play 대기
+
+[이전] 2026-10-26 (44차-4단계) — 방울 20종 확장 피해·보상:
+- 화염령·접전령: ScoreManager.BellDamageMultFor에 조건 추가 —
+  화염령 불 칸 유효 확률(공령명 반영)로 ×2, 접전령 원형 말판
+  최단 거리 ≤3이면 ×2 (거리 0=잡기 칸도 충족·중첩).
+  미발동·거리 초과도 AddBellInfoStep으로 안내 단계 기록
+- 윤환령: baseTotalMult += lapCount×perLapBonus — 이번 이동의
+  완주 포함(MovePiece 후 읽기), 보스전 초기화 규칙 유지·읽기 전용
+- 지맥령·금맥령: ScoreManager가 earthNoPick으로 landedOnBellTile
+  억제(카드 선택 제거, 땅 공격 유지). TileEffectManager 땅 칸 —
+  지맥령 말판 ×tileMult(2)·금맥령 AddMoney(bonusMoney 20) 정산당 1회
+- 폭염령: CurrentAttrMult에 tileMultBonus 가산 — 실제 계산·
+  정보판 표시가 같은 경로 (불 ×2→×3)
+- 활성화 16종: +화염·윤환·지맥·금맥·접전·폭염
+- 검증: build 0·0, 필수 예시 수식 확인(도불240/폭염360/화염480/
+  땅지맥240/3종1920). Unity Play 대기
+
+[이전] 2026-10-26 (44차-3단계) — 방울 20종 확장 속성·도트:
+- 연수령: TileEffectManager 물 착지 — 정상 증가 후 유효
+  확률(EffectiveChance)로 연계 +1, 이번 공격부터 배율 적용·
+  재귀 없음·목록 초과는 기존 클램프. 첫 물 착지 발동 시 즉시
+  2연계 배율. 청류령 연계 시작 판정을 comboStart(0→)로 변경해
+  연수령 가산 시에도 방어 준비 유지
+- 목박령: ApplyTurnStartDot 도트 지급마다 유효 확률로
+  bossManager.pendingMoveSeal — 봉쇄부와 같은 경로(예고·실제
+  이동 0칸, 속박령 최소 1 미해제, 중첩 없음). 정상 지급+잔향령
+  추가 지급 = 판정 2회. 잔향령도 EffectiveChance로 전환
+- BossManager: pendingMoveSeal 주석·로그를 봉쇄부+목박령 공용으로
+- 활성화 10종: +목박·연수 (청류·잔향은 기존 구현 유지)
+- 검증: build 0·0. Inspector 작업 없음. Unity Play 대기
+
+[이전] 2026-10-26 (44차-2단계) — 방울 20종 확장 투척·이동:
+- 삼고령: session.maxRerolls = BaseRerolls + bonusCount —
+  PrepareSession 설정, 같은 윷 1회 제한·특별 기회 분리 유지
+- 윤회령: freeRerollChance를 EffectiveChance(공령명 반영)로
+  설정 — Reroll 실행 시만 추첨, 차감만 생략·기록 유지
+- 양면령: session.rerollFrontUpChance = frontUpChance(0.7) —
+  Reroll 면 추첨만 적용, InitialRoll은 0.5 유지
+- 결단령: session.rerollsBanned → CanReroll·Reroll·
+  RemainingRerolls(0) 전부 차단. 재기부는 UseTalisman에서
+  false 반환으로 카드 미소모. + ScoreManager 방울 피해 배율
+  경로 신설(ApplyBellDamageMults·BellDamageMultFor —
+  단계 기록, 공격 칸에서만 평가)로 damageMult ×2 적용
+- 축지령: SettleNormalThrow에서 MoveSteps+moveDelta+
+  bonusCount 합산 — 윷 기본점수·배율 미변경, 최소 0칸,
+  안내 단계 기록
+- 속박령: ApplyMoveReduction이 bonusCount 데이터 사용
+  (−1, 최소 1·봉쇄 0칸 미해제 — 의미 변화 없음)
+- 활성화 8종: 청류·잔향·속박·윤회 + 삼고·축지·결단·양면
+- 검증: build 0·0. Inspector 작업 없음. Unity Play 대기
+
+[이전] 2026-10-26 (44차-1단계) — 방울 20종 확장 데이터 재편:
+- BellEffectKind 4종 유지 + 신규 16종 추가(11~26번) —
+  폐기 번호 재사용 없음. 기존 4종 이름 변경: 수령→청류령,
+  목령→잔향령, 족쇄→속박령, 천운→윤회령(chance 7%→5%)
+- BellData 전용 필드 추가: chanceBoostable(공령명 대상),
+  bonusCount/damageMult/tileMultBonus/tileMult/bonusMoney/
+  frontUpChance/proximityRange/probBonusPercent/chanceBoostMult/
+  perLapBonus — growthAmount 제거
+- BellManager: EffectiveChance(공령명 유효 확률 배율 조회)
+- BellDatabase.asset 20종 — 구현 완료 4종만 effectEnabled,
+  신규 16종은 각 단계 구현 시 활성화(미구현 활성화 금지)
+- ID: 기존 4종(b_suryeong/mogryeong/jokswae/cheonun) 재사용,
+  신규 16종 — 중복 0건
+- 검증: build 0·0. Inspector 작업 없음
+
+[이전] 2026-10-26 (43차) 변경사항 요약 - 사용자 지시 / Devin 구현]
+
+방울 4종 재편 + 전 효과 구현:
+- 제거 10종: 도걸·윷령·화령·지령·도깨비·개화·걸음·모령·
+  청개구리·재복 — BellDatabase 정의·enum·효과 코드·상태 전부
+  삭제. enum 번호 폐기(3·5·8·9 유지, 재사용 금지). 방울 성장
+  저장소(ApplyGrowth·attrAttackBonus·attrMultBonus) 삭제 —
+  복주머니 강화·불 기본 ×2·잡기 ×4 무영향
+- 수령방울: TileEffectManager.waterComboGuardArmed — 연계 새
+  시작(0→1) 시 방어 준비, 물 외 착지는 BreakOrGuardWaterCombo
+  가 소모(기록 보존·횟수 미증가·칸 효과 정상)/미준비면 끊김.
+  ResetForBoss에서 연계와 함께 초기화
+- 목령방울: ApplyTurnStartDot — 도트>0 시 chance(0.2)로 도트
+  1회 추가. 저장량 불변·연쇄 없음·도트 0이면 미추첨
+- 천운방울: session.freeRerollChance(PrepareSession이 chance
+  0.07 보관) — Reroll 실행 시 추첨, 무료면 기회 차감만 생략.
+  면·결과·사용 기록 정상. CanReroll·UI·거부 입력 미추첨
+- 족쇄방울: 기존 ApplyMoveReduction(−1, 최소 1) 유지 — 봉쇄부
+  0칸 미해제·고정 범위 모드 유지·판매 즉시 해제
+- BellDatabase.asset = 4종 전부 effectEnabled·20/10냥
+- 검증: build 0·0 + 잔여 참조 grep 0건. Unity Play 대기 —
+  4종 구매·효과·판매·보스 유지·새 런 초기화 실측 필요
+- Inspector: 신규 필드·버튼 없음 — 기존 연결 보존
+- 미확정 유지: 수룡부×수령방울 중첩(수룡부 비활성)
+- 대기 중: 42차 2~4단계(시작 7택5·START 공격·말판 재배치·낙)
+
+[이전] 2026-10-26 (42차-1단계) 변경사항 요약 - 사용자 지시 / Devin 구현]
+
+★ 최신 — 밸런스 지시서 1단계 (2~4단계 승인 대기):
+- 기본 투척 5→6 (maxThrows 클래스·에셋·폴백) / 불 착지 ×1.5→×2
+- 보스 이동 = 고정 4~7칸 — 피해 단계는 useBossMoveDamageStages
+  (기본 꺼짐)로 비활성 보존, bossMoveMin/Max 신규 설정
+- 완주 lapCount는 기존 구조로 정상 — 경계 통과·정확한 START 도착
+  +1, 보스전 SetupBoard·새 런 ResetForNewRun 초기화, lapCountText
+  표시 경로 기존 유지 (Inspector 연결 필요 시 사용자 작업)
+- 검증: build 0·0 + 도·불 240. Unity Play 대기
+- 대기 중: 2단계(시작 7택5·START 공격+3택1) / 3단계(보스전마다
+  말판 재배치) / 4단계(최초 투척 낙 1%)
+
+[이전] 2026-10-26 (41차) — 잡기 배율 단일화 (규칙 변경):
+- 잡기 성공 ×3+보너스×2(=×6) → ×4 단일. catchMultiplier 3→4,
+  catchBonusMult 필드·에셋·정산·연출·로그 제거
+- 잡기 연출 = "보스 잡기 ×4" 한 단계. 추혼부 ×4·탐욕 취소 0 유지
+- 기대값: 윷·땅·잡기 1,200 / +추혼부 4,800 / 윷·불·잡기 1,800 /
+  +추혼부 7,200
+- 검증: build 0·0 + 수식 대조. Unity Play 대기
+
+[이전] 2026-10-23 오전 (40차) — 점검 발견 검증 누락 4건 보완:
 - IsSupported 대상 검증: YutMult는 도~모만, AttrMult는 불만
   유효 (백도·낙·물/풀 속성 배율은 활성이어도 후보·적용 제외)
 - SupportedCandidateCount + CanSellFortunePouch — 복주머니

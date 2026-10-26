@@ -16,6 +16,9 @@ public class ShopConfig : ScriptableObject
     public int bossClearBaseReward = 10;    // 보스 클리어 기본 보상(냥)
     public int bossClearPerThrowReward = 5; // 남은 기본 투척 횟수당 추가 보상(냥)
 
+    [Header("할인")]
+    public float shopDiscountMaxPercent = 50f;   // 상점 구매 할인율 상한(%) — 점괘 누적의 적용 한도
+
     [Header("복주머니")]
     public int fortunePouchPrice = 20;          // 복주머니 상품 가격(냥) — 장착 슬롯 미점유
     public float fortunePouchChance = 0.5f;     // 상품 칸당 복주머니 출현 확률 0~1 (기본 50%)

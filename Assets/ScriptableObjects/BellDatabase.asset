@@ -13,185 +13,503 @@ MonoBehaviour:
   m_Name: BellDatabase
   m_EditorClassIdentifier: 
   bells:
-  - bellId: b_dogeol
-    bellName: "도걸방울"
-    description: "도 또는 걸을 최종 확정할 때마다 그 결과의 기본 배율이 +0.5 성장한다. 두 결과 합산 5회 발동 후 소멸한다."
-    effect: 1
-    targetResult: 1
-    targetResult2: 3
-    targetAttribute: 0
-    growthAmount: 0.5
-    chance: 0
-    useLimit: 5
-    buyPrice: 20
-    sellPrice: 10
-    effectEnabled: 1
-  - bellId: b_yutryeong
-    bellName: "윷령방울"
-    description: "윷 또는 모를 최종 확정할 때마다 그 결과의 기본 배율이 +0.5 성장한다. 두 결과 합산 5회 발동 후 소멸한다."
-    effect: 1
-    targetResult: 4
-    targetResult2: 5
-    targetAttribute: 0
-    growthAmount: 0.5
-    chance: 0
-    useLimit: 5
-    buyPrice: 20
-    sellPrice: 10
-    effectEnabled: 1
-  - bellId: b_hwaryeong
-    bellName: "화령방울"
-    description: "불 속성 칸에 최종 착지할 때마다 불 착지 배율이 +0.5 성장한다. 성장분은 발동한 이번 공격부터 적용된다. 5회 발동 후 소멸한다."
-    effect: 7
-    targetResult: 0
-    targetResult2: 0
-    targetAttribute: 1
-    growthAmount: 0.5
-    chance: 0
-    useLimit: 5
-    buyPrice: 20
-    sellPrice: 10
-    effectEnabled: 1
   - bellId: b_suryeong
-    bellName: "수령방울"
-    description: "새 물 연계를 시작할 때마다 끊김 방어 1회를 제공한다. 물 연계 도중 물 외 속성 착지 시 방어를 사용해 연속 기록을 보존한다(횟수 미증가, 칸 자체 효과는 정상 적용)."
+    bellName: "\uCCAD\uB958\uB839"
+    description: "\uC0C8 \uBB3C \uC5F0\uACC4\uB97C \uC2DC\uC791\uD560 \uB54C\uB9C8\uB2E4 \uB04A\uAE40 \uBC29\uC5B4 1\uD68C\uB97C \uC81C\uACF5\uD55C\uB2E4. \uBB3C \uC5F0\uACC4 \uB3C4\uC911 \uBB3C \uC678 \uC18D\uC131 \uCC29\uC9C0 \uC2DC \uBC29\uC5B4\uB97C \uC0AC\uC6A9\uD574 \uC5F0\uC18D \uAE30\uB85D\uC744 \uBCF4\uC874\uD55C\uB2E4(\uD69F\uC218 \uBBF8\uC99D\uAC00, \uCE78 \uC790\uCCB4 \uD6A8\uACFC\uB294 \uC815\uC0C1 \uC801\uC6A9)."
     effect: 8
     targetResult: 0
     targetResult2: 0
     targetAttribute: 2
-    growthAmount: 0
     chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 0
+    effectEnabled: 1
   - bellId: b_mogryeong
-    bellName: "목령방울"
-    description: "정상 풀 도트 지급 시 20% 확률로 도트를 한 번 더 지급한다."
+    bellName: "\uC794\uD5A5\uB839"
+    description: "\uC815\uC0C1 \uD480 \uB3C4\uD2B8 \uC9C0\uAE09 \uC2DC 20% \uD655\uB960\uB85C \uAC19\uC740 \uB3C4\uD2B8 \uD53C\uD574\uB97C \uD55C \uBC88 \uB354 \uC9C0\uAE09\uD55C\uB2E4."
     effect: 9
     targetResult: 0
     targetResult2: 0
     targetAttribute: 3
-    growthAmount: 0
     chance: 0.2
+    chanceBoostable: 1
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 0
+    effectEnabled: 1
   - bellId: b_jokswae
-    bellName: "족쇄방울"
-    description: "보유하는 동안 보스 말의 이동 거리가 1칸 줄어든다. 이동 거리는 최소 1칸이다."
+    bellName: "\uC18D\uBC15\uB839"
+    description: "\uBCF4\uC720\uD558\uB294 \uB3D9\uC548 \uBCF4\uC2A4 \uB9D0\uC758 \uC774\uB3D9 \uAC70\uB9AC\uAC00 1\uCE78 \uC904\uC5B4\uB4E0\uB2E4. \uC774\uB3D9 \uAC70\uB9AC\uB294 \uCD5C\uC18C 1\uCE78\uC774\uBA70 \uC774\uB3D9 \uBD09\uC1C4 0\uCE78\uC740 \uC720\uC9C0\uB41C\uB2E4."
     effect: 3
     targetResult: 0
     targetResult2: 0
     targetAttribute: 0
-    growthAmount: 0
     chance: 0
+    chanceBoostable: 0
+    bonusCount: 1
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
     effectEnabled: 1
   - bellId: b_cheonun
-    bellName: "천운방울"
-    description: "개별 재투척 실행 시 7% 확률로 재투척 기회를 소모하지 않는다."
+    bellName: "\uC724\uD68C\uB839"
+    description: "\uAC1C\uBCC4 \uC7AC\uD22C\uCC99 \uC2E4\uD589 \uC2DC 5% \uD655\uB960\uB85C \uC7AC\uD22C\uCC99 \uAE30\uD68C\uB97C \uC18C\uBAA8\uD558\uC9C0 \uC54A\uB294\uB2E4."
     effect: 5
     targetResult: 0
     targetResult2: 0
     targetAttribute: 0
-    growthAmount: 0
-    chance: 0.07
+    chance: 0.05
+    chanceBoostable: 1
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 0
-  - bellId: b_jiryeong
-    bellName: "지령방울"
-    description: "땅 칸에 최종 착지해 정산할 때마다 +3냥을 얻는다."
-    effect: 10
+    effectEnabled: 1
+  - bellId: b_samggo
+    bellName: "\uC0BC\uACE0\uB839"
+    description: "\uAC01 \uD22C\uCC99 \uC138\uC158\uC758 \uAE30\uBCF8 \uC7AC\uD22C\uCC99 \uAE30\uD68C\uAC00 1\uD68C \uB298\uC5B4\uB09C\uB2E4. \uAC19\uC740 \uC737\uC740 \uAE30\uBCF8 \uAE30\uD68C\uB85C \uD55C \uBC88\uB9CC \uB2E4\uC2DC \uB358\uC9C8 \uC218 \uC788\uB2E4."
+    effect: 11
     targetResult: 0
     targetResult2: 0
-    targetAttribute: 4
-    growthAmount: 3
+    targetAttribute: 0
     chance: 0
+    chanceBoostable: 0
+    bonusCount: 1
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 0
-  - bellId: b_dokkaebi
-    bellName: "도깨비방울"
-    description: "도를 최종 확정할 때마다 도의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
-    effect: 1
-    targetResult: 1
+    effectEnabled: 1
+  - bellId: b_chukji
+    bellName: "\uCD95\uC9C0\uB839"
+    description: "\uD655\uC815\uD55C \uC737\uC758 \uC774\uB3D9 \uAC70\uB9AC\uAC00 1\uCE78 \uB298\uC5B4\uB09C\uB2E4. \uC737 \uAE30\uBCF8\uC810\uC218\uC640 \uC737 \uBC30\uC728\uC740 \uADF8\uB300\uB85C\uB2E4."
+    effect: 12
+    targetResult: 0
     targetResult2: 0
     targetAttribute: 0
-    growthAmount: 0.5
     chance: 0
-    useLimit: 5
+    chanceBoostable: 0
+    bonusCount: 1
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 0
-  - bellId: b_gaehwa
-    bellName: "개화방울"
-    description: "개를 최종 확정할 때마다 개의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
-    effect: 1
+    effectEnabled: 1
+  - bellId: b_hwayeom
+    bellName: "\uD654\uC5FC\uB839"
+    description: "\uBD88\uC18D\uC131 \uACF5\uACA9\uC2DC \uC77C\uC815\uD655\uB960\uB85C \uD06C\uB9AC\uD2F0\uCEEC\uB370\uBBF8\uC9C0(2\uBC30)\uB97C \uBC1C\uB3D9\uD55C\uB2E4"
+    effect: 13
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 1
+    chance: 0.2
+    chanceBoostable: 1
+    bonusCount: 0
+    damageMult: 2
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_mokbak
+    bellName: "\uBAA9\uBC15\uB839"
+    description: "\uD480 \uC9C0\uC18D\uACF5\uACA9 10% \uD655\uB960\uB85C \uB2E4\uC74C \uC608\uC815 \uBCF4\uC2A4 \uC774\uB3D9\uC744 1\uD68C \uBD09\uC1C4\uD55C\uB2E4."
+    effect: 14
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 3
+    chance: 0.1
+    chanceBoostable: 1
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_yeonsu
+    bellName: "\uC5F0\uC218\uB839"
+    description: "\uBB3C \uCE78 \uACF5\uACA9 \uC2DC 10% \uD655\uB960\uB85C \uBB3C \uC5F0\uACC4 \uD69F\uC218\uAC00 1 \uC99D\uAC00\uD55C\uB2E4. \uC99D\uAC00\uBD84\uC740 \uC774\uBC88 \uACF5\uACA9\uBD80\uD130 \uC801\uC6A9\uB41C\uB2E4."
+    effect: 15
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 2
+    chance: 0.1
+    chanceBoostable: 1
+    bonusCount: 1
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_gyeoldan
+    bellName: "\uACB0\uB2E8\uB839"
+    description: "\uC7AC\uD22C\uCC99\uC744 \uC5C6\uC560\uB294 \uB300\uC2E0 \uBAA8\uB4E0\uACF5\uACA9\uB825\uC5D0 2\uBC30 \uACF5\uACA9\uB825\uC744 \uC99D\uAC00\uC2DC\uD0A8\uB2E4"
+    effect: 16
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 0
+    chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 2
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_yangmyeon
+    bellName: "\uC591\uBA74\uB839"
+    description: "\uC7AC\uD22C\uCC99 \uC2DC \uC737\uC774 \uC55E\uBA74\uC73C\uB85C \uB098\uC62C \uD655\uB960\uC774 50%\uC5D0\uC11C 70%\uB85C \uC99D\uAC00\uD55C\uB2E4."
+    effect: 17
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 0
+    chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0.7
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_gongmyeong
+    bellName: "\uACF5\uB839\uBA85"
+    description: "\uC737\uACFC \uBD80\uC801\uC758 \uC77C\uC815\uD655\uB960\uB85C \uBC1C\uB3D9\uB418\uB294 \uBD80\uC801\uC758 \uD655\uB960\uC774 2\uBC30\uAC00 \uB41C\uB2E4."
+    effect: 18
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 0
+    chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 2
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_geolyut
+    bellName: "\uAC78\uC737\uB839"
+    description: "\uCD5C\uCD08 \uD22C\uCC99\uC5D0\uC11C \uAC78\xB7\uC737\uC774 \uB098\uC62C \uD655\uB960\uC774 \uAC01\uAC01 10%p \uC99D\uAC00\uD55C\uB2E4."
+    effect: 19
+    targetResult: 3
+    targetResult2: 4
+    targetAttribute: 0
+    chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 10
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_ssanggae
+    bellName: "\uC30D\uAC1C\uB839"
+    description: "\uCD5C\uCD08 \uD22C\uCC99\uC5D0\uC11C \uAC1C\uAC00 \uB098\uC62C \uD655\uB960\uC774 10%p \uC99D\uAC00\uD55C\uB2E4."
+    effect: 20
     targetResult: 2
     targetResult2: 0
     targetAttribute: 0
-    growthAmount: 0.5
     chance: 0
-    useLimit: 5
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 10
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 0
-  - bellId: b_geoleum
-    bellName: "걸음방울"
-    description: "걸을 최종 확정할 때마다 걸의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
-    effect: 1
-    targetResult: 3
-    targetResult2: 0
-    targetAttribute: 0
-    growthAmount: 0.5
-    chance: 0
-    useLimit: 5
-    buyPrice: 20
-    sellPrice: 10
-    effectEnabled: 0
-  - bellId: b_moryeong
-    bellName: "모령방울"
-    description: "모를 최종 확정할 때마다 모의 기본 배율이 +0.5 성장한다. 5회 발동 후 소멸한다."
-    effect: 1
+    effectEnabled: 1
+  - bellId: b_geukdan
+    bellName: "\uADF9\uB2E8\uB839"
+    description: "\uCD5C\uCD08 \uD22C\uCC99\uC5D0\uC11C \uBAA8\xB7\uB3C4\uAC00 \uB098\uC62C \uD655\uB960\uC774 \uAC01\uAC01 10%p \uC99D\uAC00\uD55C\uB2E4."
+    effect: 21
     targetResult: 5
-    targetResult2: 0
+    targetResult2: 1
     targetAttribute: 0
-    growthAmount: 0.5
     chance: 0
-    useLimit: 5
-    buyPrice: 20
-    sellPrice: 10
-    effectEnabled: 0
-  - bellId: b_frog
-    bellName: "청개구리방울"
-    description: "보유하는 동안 보스의 원래 강점 속성 상성이 ×3, 나머지 공격 속성은 ×0.5가 된다. 잡기 강제 상성보다 우선한다."
-    effect: 4
-    targetResult: 0
-    targetResult2: 0
-    targetAttribute: 0
-    growthAmount: 0
-    chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 10
+    chanceBoostMult: 0
+    perLapBonus: 0
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 0
-  - bellId: b_jaebok
-    bellName: "재복방울"
-    description: "보스의 원래 약점 속성 칸으로 공격할 때마다 1냥을 얻는다."
-    effect: 6
+    effectEnabled: 1
+  - bellId: b_yunhwan
+    bellName: "\uC724\uD658\uB839"
+    description: "\uD604\uC7AC \uB9D0\uD310\uC758 \uBC14\uD034\uC218\uB9CC\uD07C \uC804\uCCB4\uBC30\uC728\uC774 \uC99D\uAC00\uB41C\uB2E4."
+    effect: 22
     targetResult: 0
     targetResult2: 0
     targetAttribute: 0
-    growthAmount: 1
     chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 1
     useLimit: 0
     buyPrice: 20
     sellPrice: 10
-    effectEnabled: 0
+    effectEnabled: 1
+  - bellId: b_jimaek
+    bellName: "\uC9C0\uB9E5\uB839"
+    description: "\uB545\uC18D\uC131\uC5D0 \uB3C4\uCC29\uD558\uBA74 \uBD80\uC801\uC744 \uBF51\uB294 \uB300\uC2E0 \uACF5\uACA9\uC2DC \uC804\uCCB4\uBC30\uC728\uC774 2\uBC30\uAC00\uB41C\uB2E4.\r\n"
+    effect: 23
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 4
+    chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 2
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_geummaek
+    bellName: "\uAE08\uB9E5\uB839"
+    description: "\uB545 \uCE78 \uCC29\uC9C0 \uC2DC \uBD80\uC801 \uC120\uD0DD \uB300\uC2E0 20\uB0E5\uC744 \uC5BB\uB294\uB2E4."
+    effect: 24
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 4
+    chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 20
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_jeopjeon
+    bellName: "\uC811\uC804\uB839"
+    description: "\uBCF4\uC2A4\uC640 3\uCE78\uC774\uB0B4 \uADFC\uC811\uD558\uBA74, 2\uBC30\uACF5\uACA9\uB825 \uC99D\uAC00\uC2DC\uCF1C \uACF5\uACA9\uD55C\uB2E4."
+    effect: 25
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 0
+    chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 2
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 0
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 3
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1
+  - bellId: b_pokyeom
+    bellName: "\uD3ED\uC5FC\uB839"
+    description: "\uBD88\uC18D\uC131 \uACF5\uACA9\uC2DC 1\uBC30\uC758 \uACF5\uACA9\uB825\uC744 \uC99D\uAC00\uC2DC\uCF1C \uACF5\uACA9\uD55C\uB2E4."
+    effect: 26
+    targetResult: 0
+    targetResult2: 0
+    targetAttribute: 1
+    chance: 0
+    chanceBoostable: 0
+    bonusCount: 0
+    damageMult: 0
+    totalMultAdd: 0
+    tileMultBonus: 0
+    tileMultAdd: 1
+    tileMult: 0
+    bonusMoney: 0
+    frontUpChance: 0
+    proximityRange: 0
+    probBonusPercent: 0
+    chanceBoostMult: 0
+    perLapBonus: 0
+    useLimit: 0
+    buyPrice: 20
+    sellPrice: 10
+    effectEnabled: 1

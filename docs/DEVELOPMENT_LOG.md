@@ -11,6 +11,170 @@
 - `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
 - 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
 
+### [2026-10-27 (47차) - 사용자 지시 / Devin 구현 — 점괘 24종 확장·매 보스전 재배치·상점 할인]
+
+- `FortuneUpgradeKind` 신규 8종 (`YutBaseScore`·`RerollFrontProb`·`RerollBackProb`·`ShopDiscount`) + `FortuneUpgradeManager` 조회 경로 — 기본점수는 `YutStatEntry.baseScore` 가산(설정 원본 미변경), 나머지는 조회 시 합산
+- 최초 투척 결과 확률: `BuildInitialResultWeights`가 방울 보정 + `GetYutProbBonus`를 별개 버킷으로 합산 → `ApplyPercentBonuses`(%p 증분·비대상 비례 차감·전체 증가 시 정규화) 1회 적용. 방울 보정·점괘는 `CollectInitialProbBonus` 단일 버킷에 합산 후 1회 적용 — 순서 무관, 방울 %p 의미 보존
+- 속성 발생 확률: `BoardManager.DrawAttribute`가 `GetAttrProbBonus`를 같은 `ApplyPercentBonuses` 규칙으로 적용 — `WouldChangeAttrWeights` 순수 조회로 실효 판정
+- 재투척 면: 세션 `rerollFrontUpChance` = Clamp(양면령 기본값(없으면 50%) + `GetRerollFrontBonus` − `GetRerollBackBonus`, 20~80%) — 세션 생성 시 계산 — 세션 생성 시 계산해 `rerollFrontUpChance`에 기록, 기본·특별 재투척 공통
+- 상점 할인: `FortuneUpgradeManager`가 `ShopDiscountPending`↔`shopDiscountActive` 이원 관리, `OnBossCleared`는 `YutGameManager.EnterClear`에서만 호출 — 상점 재진입·건너뛰기로 활성화 안 됨. `ShopManager.PriceFor`(Ceil, 상한 `ShopConfig.shopDiscountMaxPercent`)를 슬롯 표시·구매 가능 판정·차감 공용 — `GameUIManager` 상점 슬롯은 `offer.price`(정가) 대신 조회값 표시
+- **매 보스전 말판 재배치**: `SetupBoard`의 `layoutGenerated` 게이트 제거 — 매 실제 보스전 시작 시 배치 재생성(34차 확정·구현 대기 규칙 구현). 소개·상점·점괘 선택·건너뛰기에서는 재배치 없음. 누적 완주·성장 유지
+- `HasEffect`(선택 전후 실제 변화 판정, 순수 조회) + `ShopManager.FortunePouchAvailable`/`CanSellFortunePouch`로 유효 후보 부족 복주머니를 구매 불가 표시·미차감 거부 — 후보 부족 시 돈 미차감·선택 대기 미발생 유지
+- 에셋: `FortuneUpgradeDatabase` — u_do/gae/geol/yut/mo_base·u_front_face·u_back_face·u_shop_discount 신규 8종 + 확률 8종 `effectEnabled: 1` + 설명 정정("기본점수 +0.5"→"기본 배율 +0.5" 등). `ShopConfig.asset`에 `shopDiscountMaxPercent: 50` 명시
+- 검증: `dotnet build` 오류 0·경고 0 + 수치 검증(도 25→30·개 37.5→35·걸·윷·모 분포, 앞면 52/74/클램프 80, 할인 20→19/19→19/20→10). **Unity Play 미검증** — 24종 후보 노출·효과·보스 전환 유지·재배치 반영·할인 적용 시점·후보 제외는 Play에서 확인 필요
+- Inspector 작업 없음
+
+### [2026-10-27 (46차) - 사용자 지시 / Devin 구현 — 방울 4종 효과 분류·표시 문구]
+
+**규칙 변경 (사용자 확정 지시서 + 문구 보완 지시)** — 20종 구현 유지, 4종의 계산 분류·수치·설명만 변경:
+
+- **화염령** — 방울 피해 곱연산 → **말판 곱연산 ×2**로 분류 이동 (불 조건·20% 확률·공령명 부스트 유지). `ScoreManager.BellDamageMultFor`에서 제거하고 `TileEffectManager` 불 칸 경로가 `EffectiveChance` 추첨 후 `mult *= damageMult` — `tileEffectMult`에 포함돼 최종 피해는 기존과 동일. 출처는 방울로 기록 — `AddBellDamageStep`·`AddBellInfoStep`을 internal 공용화 (미발동도 단계 기록)
+- **결단령** — 방울 피해 ×2 → **전체배율 방울가산 +2**. 에셋 `damageMult: 2→0` + `totalMultAdd: 2` — `ScoreManager.BellAddFor`(평면 가산)가 공격 칸에서 `bellAddMult`에 가산. 재투척 금지·재기부 거부·삼고령 차단 경로는 무관하게 유지. 실제 피해 변경 (불 기준 480→720)
+- **폭염령** — 불 말판 자체 배율 +1(×2→×3) → **불 공격 시 전체배율 말판가산 +1**. `BellData`/`OwnedBell`에 `tileMultAdd` 신규(구 `tileMultBonus`는 미사용 주석 처리) + 에셋 `tileMultBonus: 1→0`·`tileMultAdd: 1`. `ScoreManager.BellTileAddFor`가 `tile.attribute == targetAttribute` 조건으로 `tileAddMult`에 가산 — 비불 공격은 0. `CurrentAttrMult`의 tileMultBonus 합산 제거로 정보판·계산 동일하게 ×2 유지
+- **윤환령** — 런 누적 완주 ×`perLapBonus` 가산은 45차 구현 그대로 (설명 문구만 변경)
+- **단계 표시** — `화염령 ×2`(Multiply·방울 출처·말판 구간), `결단령 +2`·`폭염령 +1`(Add·방울 출처·가산 구간). UI 코드 변경 없음 — 기존 재생 경로가 `op`/`reasonText`/`afterValueF` 사용
+- **에셋 이전** — `BellDatabase.asset`: 결단령 `damageMult 2→0`+`totalMultAdd: 2` / 폭염령 `tileMultBonus 1→0`+`tileMultAdd: 1` / 4종 `description`을 사용자 제공 문구로 교체 (가산·곱연산 용어 없음 — 화염 "불속성 공격시 일정확률로 크리티컬데미지(2배)를 발동한다"·결단 "재투척을 없애는 대신 모든공격력에 2배 공격력을 증가시킨다"·폭염 "불속성 공격시 1배의 공격력을 증가하여 공격한다."·윤환 "현재 말판의 바퀴수만큼 전체배율이 증가된다."). 다른 방울·필드 미변경. **코드 기본값만으로 완료 처리하지 않고 저장 에셋에 명시 이전**
+- **공식 표기 확장** — 가산 항에 잡기·말판·상성 가산 자리 명시. `ThrowSettlement`에 `catchAddMult`/`affinityAddMult` 예약 필드(현재 적용 효과 없음·0)
+- **수정 파일** — `ScoreManager.cs`(가산 버킷·BellAddFor·BellTileAddFor·AddAddStep·bell 단계 헬퍼 internal화·AddBellInfoStep 유효값 인자화), `TileEffectManager.cs`(불 경로 화염령 배치·runningForSteps 사용), `BellData.cs`(tileMultAdd·enum 주석), `BellManager.cs`(tileMultAdd 복사), `BellDatabase.asset`, `docs/` 4종
+- 검증: `dotnet build` 오류 0·경고 0. 수식 대조(기초 120·불 ×2): 기본 240 / 결단 (1+2)×2=6→720 / 폭염 (1+1)×2=4→480 / 결단+폭염 (1+2+1)×2=8→960 / 위 둘+화염 발동 (1+2+1)×2×2=16→1,920 — 5종 전부 일치. 중복 적용 없음(BellDamageMultFor에서 화염·결단 제거·폭염은 가산 경로만). **Unity Play 대기**: 불/비불 조건·화염령 0/100%·결단령 재투척 차단 재확인·정상/스킵 동일 실측
+- Inspector 작업 없음 — 신규 필드·버튼·패널 없음 (`tileMultAdd`는 Inspector 표시만 추가), 기존 연결 전부 보존
+
+### [2026-10-27 (45차) - 사용자 지시 / Devin 구현 — 전체배율 가산 우선 구조·런 누적 완주]
+
+**규칙 변경 (사용자 확정 지시서)** — 전체배율은 가산 항목을 먼저 합산한 뒤 곱연산 항목을 곱하는 구조로 개편 + 완주 횟수를 런 단위로 변경:
+
+- **런 누적 완주 (1단계)** — `YutBoard.lapCount` 보스전 단위 → 런 단위. `MovePiece`는 `totalMoved`(보스전 진행도)가 START 경계(30칸 배수)를 넘은 횟수만 가산 — `while(totalMoved >= TileCount*(lapCount+1))` 구식 누적 판정 제거(진행도 리셋과 누적 횟수 분리 불가 문제 해소). `BoardManager.SetupBoard`는 `pieceIndex`/`totalMoved`만 리셋하고 `lapCount` 유지 — `ResetForNewRun`에서만 0. START 강제 배치·이동 0·UI 갱신 미증가, 미완주 부분 진행은 이월하지 않음. `Lap Count Text` = 런 누적 완주 (동일 필드 읽음 — 코드 변경 불요)
+- **전체배율 공통 경로 (2단계)** — `ThrowSettlement`에 `lapBonus`/`talismanAddMult`/`bellAddMult`/`AdditiveTotal` 추가, `baseTotalMult`는 설정값만 보관. `SettleNormalThrow` 재구성: 가산 수집(기본→윤환령→가산 부적→가산 방울) → 곱연산 부적(결과별→피해 부적) → 잡기 → 곱연산 방울 → 말판 → 상성. 부적 조건은 `TalismanDamageApplies`에서 1회 판정 후 가산/곱연산 경로 공용
+- **가산/곱연산 데이터 구조** — `TalismanData.totalMultOp`(EffectOp, 기본 Multiply — 기존 에셋 항목은 누락 필드라 생성자 기본값 Multiply 적용)·`ActiveTalismanEffect.totalMultOp` 복사 / `BellData`·`OwnedBell.totalMultAdd`(기본 0 — 평면 가산, `ScoreManager.BellAddFor`에서 평가, 현재 20종 전부 0). 기존 효과의 연산·수치는 전부 유지 — ×N을 +N으로 바꾼 효과 없음
+- **취소·단계 일치** — 탐욕부 취소 시 `runningMult`를 0으로 고정해 이후 잡기·방울·말판·상성 단계 전후 0 표시(기존 방울 단계의 비0 표시 누락도 함께 정리). `TileEffectManager.ResolveLandingEffect`는 `runningForSteps` 인자로 공통 누적값을 받아 별도 공식 재조립 폐기 — `AddTileStep`/`AddInfoTileStep`/`AddWaterComboGuardStep` 전부 전달값 사용. 상성 단계는 말판 다음 마지막 항목으로 이동
+- **표시 순서 (3단계)** — 단계 기록 순서 = 확정 공식 순서와 동일(기본→윤환령 +N→가산 부적 +N→가산 방울 +N→곱연산 부적 ×N→잡기 ×N→곱연산 방울 ×N→말판 ×N→상성 ×N). `EffectOp.Add` 단계는 `AddAddStep`으로 전후 누적 합계 기록 — 이유 Text·전체배율 Text·정산 로그가 같은 단계 재생. UI 코드 변경 없음(기존 재생 경로가 `afterValueF` 표시)
+- **디버그 로그** — 최종 로그를 가산 합계→결과부적→부적→잡기→방울→착지→상성 순서로 갱신
+- 검증: `dotnet build` 오류 0·경고 0. 수식 대조: 가산 효과가 없는 기존 공격은 곱연산 순서 재배치만으로 변경 전과 동일 피해(필수 예시 5종 일치). **Unity Play 대기**: 첫 보스 완주 2회 → 다음 보스 2 유지·추가 완주 3·건너뛰기 유지·새 런 0 실측 / 윤환령 판매→가산 제거·재장착→누적 적용 / 가산 단계(+N) 표시 / 탐욕부 취소 후 전 단계 0 표시 / 정상·스킵 동일
+- Inspector 작업 없음 — 신규 필드·버튼·패널 없음, 기존 연결 전부 보존 (`totalMultOp`/`totalMultAdd`는 데이터 필드라 Inspector 표시만 생김 — 씬·프리팹 연결 변경 아님)
+
+### [2026-10-26 (44차-6단계) - 사용자 지시 / Devin 구현 — 방울 20종 확장 6단계: 전체 활성·회귀 점검]
+
+**규칙 적용 (사용자 확정 지시서)** — 20종 전체 상점 활성 + 회귀 코드 점검, Unity Play 실측 대기:
+
+- **활성·상점 풀 확인** — `BellDatabase.asset` 20종 전부 `effectEnabled: 1`·ID 중복 0건·구매 20/판매 10 통일. `ShopManager.BuildCandidatePool`은 `effectEnabled`+미보유(`OwnsKind`) 필터라 20종이 상품 후보에 등장 — 슬롯당 방울·복주머니 50:50 추첨·리프레시 비용 구조 미변경
+- **장착 규칙** — `TryAddBell`의 `MaxBells`(shopConfig 기본 4)+`OwnsKind` 중복 종류 차단 유지. `BellSlotUI`는 이름·설명 데이터 주도라 20종 별도 경로 불요
+- **수명** — 보유 방울은 런 단위(`ResetForNewRun`에서만 정리)라 보스 전환 유지. 세션 방울 설정(`maxRerolls`/`rerollsBanned`/`rerollFrontUpChance`/`freeRerollChance`/`initialResultWeights`)은 `PrepareSession` 단일 경로에서 차례마다 반영 — 상점 구매는 보스 사이에만 가능해 세션 중 보유 변동 없음. 확률 방울 추첨은 `InitialRoll`·`Reroll` 실행 시점에만 — UI 갱신·버튼 조회 미추첨
+- **정상 연출=스킵 동일성** — 모든 방울 판정(확률·배율·수입)은 정산(`SettleNormalThrow`/`ResolveLandingEffect`/`ApplyTurnStartDot`)에서 1회 계산·`ScoreEffectStep`으로 기록 — `PresentSettlement`·스킵은 같은 단계를 재생하므로 피해·확률·보상 동일
+- **기존 기능 무결** — 재투척 버튼 `session.CanReroll` 연동(결단령 시 전부 비활성·잔여 0 표시), 보스 이동 예고 `PlannedEffectiveSteps`가 봉쇄(봉쇄부·목박령)·속박령을 동일 반영, 땅 카드 선택은 `landedOnBellTile` 억제로만 생략(땅 공격 유지), 최초 투척은 세션 결과 5종만 생성(백도·낙 도달 불가 기존 유지)
+- **잔여 표기 정리** — `YutGameManager` bellDatabase 주석 4종→20종, `TalismanData` 족쇄부 주석 족쇄방울→속박령
+- 검증: `dotnet build` 오류 0·경고 0 + 에셋 정합(정의 20·ID 중복 0·가격 통일)·상점 풀 필터 확인. **Unity Play 대기**: 20종 구매·최대 4 장착·중복 거부·판매 해제·보스 전환 유지·새 런 초기화·확률 방울 0/100% 강제 테스트·정상/스킵 동일 실측
+- Inspector 작업 없음 — 신규 필드·버튼·패널 없음, 기존 연결 전부 보존
+
+### [2026-10-26 (44차-5단계) - 사용자 지시 / Devin 구현 — 방울 20종 확장 5단계: 확률 통합]
+
+**규칙 적용 (사용자 확정 지시서 §7)** — 최초 투척 결과 확률 방울 3종 + 공령명 완성으로 **20종 전부 구현·활성**, 6단계 전체 회귀 승인 대기:
+
+- **`Core/YutRollManager.cs` `BuildInitialResultWeights`** — 장착 방울 중 `probBonusPercent`가 설정된 것(걸윷령·쌍개령·극단령)의 `targetResult`/`targetResult2` 대상에 증가량을 합산 (합산이라 장착 순서 무관, 같은 대상 중복 가산 방지, 백도·낙은 대상 제외). 기준 확률은 실제 4개 윷의 면 분포(`BaseResultPercent`: 도 25·개 37.5·걸 25·윷 6.25·모 6.25 = C(4,k)/16). **일반 경우**: 대상 = 기본+증가, 비대상은 남은 확률을 기본 비율로 분배(합계 100%). **정규화 예외**(모든 결과가 대상이거나 대상 합계 ≥ 100%): 전체를 함께 100%로 정규화 — 비대상 강제 0 처리 없음
+- **`Core/YutThrowSession.cs`** — `initialResultWeights` 세션 필드(PrepareSession 보관) + `InitialRoll` 분기: 가중치 있으면 `RollWeightedFaces`(결과 선추첨 → `FrontCountFor`로 앞면 개수 확정 → 위치 균등 배치 — **보정 결과와 화면 면이 항상 일치**), 없으면 기존 0.5 면 추첨. 가중치 오류 시 기본 분포로 복귀. 재투척은 기존 면 추첨·실제 면 판정 — 확률 방울 미적용
+- **공령명** — `EffectiveChance`가 지정 5종(잔향 20→40 / 윤회 5→10 / 화염 20→40 / 목박 10→20 / 연수 10→20) 전부에 연결됨을 확인. 원본 `chance` 미변경·조회 시점 배율·양면령 70%·확률 방울 +10%p는 비대상 — 추가 활성만으로 완성
+- **`ScriptableObjects/BellDatabase.asset`** — 공령명·걸윷·쌍개·극단 `effectEnabled: 1` → **20종 전체 활성**
+- 검증: `dotnet build` 오류 0·경고 0 + 정규화 수치 확인(쌍개령: 개 47.5·나머지 비례 축소 합계 100 / 걸윷+극단: 대상 합계 102.5 → 예외 정규화, 비대상 개 26.79 유지 / 3종 동시: 전원 대상 예외 정규화). **Unity Play 대기** — 보정 투척 결과·면 일치·재투척 미적용·공령명 2배 실측 필요
+- Inspector 작업 없음 — 신규 필드·버튼 없음, 기존 연결 보존
+
+### [2026-10-26 (44차-4단계) - 사용자 지시 / Devin 구현 — 방울 20종 확장 4단계: 피해·보상]
+
+**규칙 적용 (사용자 확정 지시서)** — 피해·보상 방울 6종 구현, 5~6단계 승인 대기:
+
+- **화염령** (`Core/ScoreManager.cs` `BellDamageMultFor`) — 불 공격 착지 시 `EffectiveChance`(기본 0.2, 공령명 반영)로 `damageMult` ×2를 방울 피해 배율에 곱한다. 정산 계산 시점에 1회 추첨 — 미발동도 `AddBellInfoStep`으로 안내 단계 기록
+- **접전령** (같은 경로) — `BoardDistance`(원형 말판 최단 거리 = 양방향 차의 작은 쪽, `YutBoard.TileCount` 기준)로 최종 착지↔보스 실제 위치를 측정, `proximityRange`(3) 이내면 `damageMult` ×2. 거리 0(잡기 칸)도 충족 — 잡기 배율과 중첩. 화면 좌표·경유 칸·예고 위치 미사용. 범위 초과도 안내 단계 기록
+- **윤환령** (`ScoreManager.SettleNormalThrow`) — `settlement.baseTotalMult += lapCount × perLapBonus`. 이번 공격 이동으로 완료한 완주는 `MovePiece`가 먼저 증가시키므로 최종 착지 시점 횟수에 자연스럽게 반영. 완주 데이터는 읽기 전용 — 보스전 시작 초기화(SetupBoard의 `lapCount=0`) 규칙 유지. 가산 시 안내 단계 기록
+- **지맥령·금맥령** (`ScoreManager` + `Core/TileEffectManager.cs`) — `earthNoPick`으로 `landedOnBellTile`을 내려 `OpenLandPick` 카드 선택을 제거 (땅은 공격 칸으로 유지, START 미적용). 땅 착지: 지맥령 `tileMult`(2) 말판 배율 + `AddTileStep` / 금맥령 `bonusMoney`(20)를 `EconomyManager.AddMoney` 경로로 정산당 1회 지급 + 안내 단계. 동시 장착 시 선택 없음·×2·20냥 모두 적용. `ResolveLandingEffect`는 확정 정산에서만 호출 — 스킵·UI 갱신 중복 수입 없음
+- **폭염령** (`TileEffectManager.CurrentAttrMult`) — 불 말판 배율에 `tileMultBonus`(1) 가산 — 실제 데미지 계산과 정보판 표시가 같은 조회 경로 (기본 ×2 → ×3). 착지 시 안내 단계 기록
+- **`ScriptableObjects/BellDatabase.asset`** — 화염·윤환·지맥·금맥·접전·폭염 `effectEnabled: 1` (활성 16종)
+- 검증: `dotnet build` 오류 0·경고 0 + 필수 예시 수식 확인(기본 전체배율 1·무효과: 도·불=20×6×2=**240** / +폭염령=20×6×3=**360** / +화염령 발동=20×6×2×2=**480** / 도·땅+지맥령=20×6×2=**240** / 도·불+결단령+접전령+화염령 발동=20×6×8×2=**1,920**). **Unity Play 대기** — 지맥+금맥 동시 장착(선택 없음·×2·20냥)·윤환령 완주 가산·접전령 거리 경계(3칸/4칸) 실측 필요
+- Inspector 작업 없음 — 신규 필드·버튼 없음, 기존 연결 보존
+
+### [2026-10-26 (44차-3단계) - 사용자 지시 / Devin 구현 — 방울 20종 확장 3단계: 속성·도트]
+
+**규칙 적용 (사용자 확정 지시서)** — 속성·도트 방울 2종 신규 구현 + 청류령·잔향령 검증·정합, 4~6단계 승인 대기:
+
+- **연수령** (`Core/TileEffectManager.cs`) — 물 착지 시 정상 연계 증가 후 `EffectiveChance`(공령명 반영 유효 확률, 기본 0.1)로 `waterComboCount +1`. 증가된 횟수로 이번 공격 배율을 즉시 계산(첫 착지 발동 시 2연계 ×2), 증가분은 이후 연계에도 유지, 추가 횟수로 재판정·재귀 실행 없음, 연계 배율 목록 초과는 기존 클램프 유지. `ScoreEffectStep` 안내 단계 기록
+- **청류령 정합** — 연계 새 시작 판정을 `waterComboCount == 1`에서 `comboStart`(증가 전 0)로 변경: 연수령으로 첫 착지가 2연계가 돼도 방어 1회가 정상 준비된다. 기존 방어 소모·충전·보스 전환 초기화 의미는 불변
+- **목박령** (`Core/YutGameManager.cs` `ApplyTurnStartDot`) — 도트 지급마다 `EffectiveChance`(기본 0.1)로 `bossManager.pendingMoveSeal = true`. 정상 지급과 잔향령 추가 지급에서 각각 판정(추가 지급 시 기회 2회). 봉쇄부와 같은 봉쇄 경로: `PlannedEffectiveSteps` 0(예고 표식 즉시 반영) → `MoveBossPiece`가 상태 소모하며 0칸 처리 → 속박령 최소 1칸 보정이 0을 되살리지 않음. bool 플래그라 같은 다음 이동을 막는 효과가 중첩해 봉쇄 턴을 추가하지 않고, 보스 전환 시 기존 경로(`pendingMoveSeal = false`)로 해제. 도트 처치 시 `EnterClear`로 후속 판정 중단(기존)
+- **잔향령 정합** — 직접 `chance` 조회를 `EffectiveChance`로 전환 (공령명 5단계 구현 시 자동 적용, 현재 기본 0.2 동일). 저장 도트량 불변·추가분 재판정 없음·도트 0이면 미추첨 유지
+- **`Core/BossManager.cs`** — `pendingMoveSeal`·봉쇄 소모 경로의 주석·로그를 봉쇄부+목박령 공용 표기로 갱신 (의미 변경 없음)
+- **`ScriptableObjects/BellDatabase.asset`** — 목박·연수 `effectEnabled: 1` (활성 10종)
+- 검증: `dotnet build` 오류 0·경고 0. 조합 확인: 청류+연수(연계 시작 방어 유지) / 잔향 추가 지급에서 목박 판정·잔향 재귀 없음 / 목박+속박(0칸 미해제) / 목박+봉쇄부(같은 플래그 — 중첩 없음). **Unity Play 대기** — 연수령 첫 착지 2연계·도트 지급 시 이동 예고 0 표시·실제 이동 0칸 실측 필요
+- Inspector 작업 없음 — 신규 필드·버튼 없음, 기존 연결 보존
+
+### [2026-10-26 (44차-2단계) - 사용자 지시 / Devin 구현 — 방울 20종 확장 2단계: 투척·이동]
+
+**규칙 적용 (사용자 확정 지시서)** — 투척·이동 방울 5종 구현 + 속박령 데이터화, 3~6단계 승인 대기:
+
+- **`Core/YutThrowSession.cs`** — 세션 필드: `maxRerolls`(기본 `BaseRerolls`=1)·`rerollsBanned`·`rerollFrontUpChance` + 기존 `freeRerollChance` 유지. `CanReroll`: `rerollsBanned` 즉시 거부, 기본 기회 상한 `maxRerolls`. `Reroll`: 기본/특별 판정 후 윤회령 추첨(차감만 생략·`rerolled`/`speciallyRerolled` 기록·결과 평가 정상) → 양면령 앞면 확률로 면 추첨(`rerollFrontUpChance` 0이면 0.5). `RemainingRerolls`: 포기·금지 시 0. `InitialRoll`은 0.5 고정 — 최초 투척 미적용
+- **`Core/YutRollManager.cs`** — `PrepareSession`에서 보유 방울을 세션 필드로 반영: 윤회령 `EffectiveChance`(공령명 배율 반영 유효 확률) / 삼고령 `BaseRerolls+bonusCount` / 결단령 `rerollsBanned` / 양면령 `rerollFrontUpChance`. 세션 생성 경로는 이곳뿐 — 중복 설정 없음
+- **`Core/TalismanManager.cs`** — 재기부(`ExtraReroll`): 결단령 보유 시 `false` 반환으로 발동 불가 — 카드 미소모(`hand.RemoveAt` 전 차단). 승부부 포기·낙 금지는 어느 방울도 해제하지 않음
+- **`Core/ScoreManager.cs`** — 축지령: 이동 계산을 `MoveSteps(selected)+moveDelta+bonusCount`로 합산 (윷 기본점수·윷 배율·부적 `moveDelta`와 독립, 최소 0칸) + 안내 단계 기록. 결단령: `ApplyBellDamageMults`/`BellDamageMultFor`/`AddBellDamageStep` 신규 — 공격 칸에서만 평가, 조건 만족 방울의 `damageMult`를 `bellDamageMult`에 순차 곱하고 `EffectSourceType.Bell` 단계로 전후 배율 기록. 화염령·접전령 조건은 4단계에서 추가
+- **`Core/BossManager.cs`** — 속박령: `ApplyMoveReduction`이 `GetBell().bonusCount` 사용(−1, 최소 1) — 봉쇄부 0칸 미해제·예고=실제 이동 동일 계획 유지, 의미 변화 없음
+- **`ScriptableObjects/BellDatabase.asset`** — 삼고·축지·결단·양면 `effectEnabled: 1` (활성 8종)
+- 검증: `dotnet build` 오류 0·경고 0. 조합 확인: 결단령+삼고령+재기부 = 재투척 전면 차단 / 삼고령 = 기본 기회만 +1(특별 기회 분리) / 윤회령 = CanReroll·UI·거부 입력 미추첨 / 양면령 = 최초 투척 미적용. **Unity Play 대기** — 버튼 비활성 표시·이동 예고·정산 단계 표시 실측 필요
+- Inspector 작업 없음 — 신규 필드·버튼 없음, 기존 연결 보존
+
+### [2026-10-26 (44차-1단계) - 사용자 지시 / Devin 구현 — 방울 20종 확장 1단계: 데이터 재편]
+
+**규칙 변경 (사용자 확정 지시서)** — 방울 4종 → 20종 체계의 1단계만 구현, 2~6단계 승인 대기:
+
+- **`Data/BellData.cs`** — `BellEffectKind` 신규 16종 추가(11~26번): `ExtraReroll` 삼고령 / `MoveBonus` 축지령 / `FireChanceMult` 화염령 / `DotSealChance` 목박령 / `WaterComboChance` 연수령 / `RerollBan` 결단령 / `RerollFrontBias` 양면령 / `ChanceBoost` 공령명 / `ProbGeolYut` 걸윷령 / `ProbGae` 쌍개령 / `ProbMoDo` 극단령 / `LapTotalMult` 윤환령 / `EarthNoPickMult` 지맥령 / `EarthNoPickGold` 금맥령 / `ProximityMult` 접전령 / `FireMultBonus` 폭염령. 구 4종(3·5·8·9) 번호 유지, 폐기 번호(1·2·4·6·7·10) 재사용 금지
+- **`BellData` 필드 확장** — `chanceBoostable`(공령명 대상 bool) + 효과별 전용 수치: `bonusCount`(재투척/이동/연계 가산)·`damageMult`(방울 피해 배율)·`tileMultBonus`(말판 가산)·`tileMult`(말판 곱셈)·`bonusMoney`(착지 수입)·`frontUpChance`(앞면 확률)·`proximityRange`(판정 거리)·`probBonusPercent`(결과 확률 +%p)·`chanceBoostMult`(공령명 배율)·`perLapBonus`(완주당 가산). 사용하지 않는 `growthAmount` 제거 — `OwnedBell`에 동일 필드 복사
+- **`Core/BellManager.cs`** — `TryAddBell`이 신규 필드 전부 복사 / `EffectiveChance(OwnedBell|kind)` 신규: 공령명 보유 시 `chanceBoostable` 방울만 `chanceBoostMult` 배 유효 확률 반환 (원본 `chance` 미변경 — 조회 시점 계산)
+- **`ScriptableObjects/BellDatabase.asset`** — 4종 → **20종**. 기존 ID 재사용으로 이름 변경: `b_suryeong` 수령방울→**청류령** / `b_mogryeong` 목령방울→**잔향령** / `b_jokswae` 족쇄방울→**속박령** / `b_cheonun` 천운방울→**윤회령**(`chance` 0.07→**0.05**). 신규 16종: `b_samggo`·`b_chukji`·`b_hwayeom`·`b_mokbak`·`b_yeonsu`·`b_gyeoldan`·`b_yangmyeon`·`b_gongmyeong`·`b_geolyut`·`b_ssanggae`·`b_geukdan`·`b_yunhwan`·`b_jimaek`·`b_geummaek`·`b_jeopjeon`·`b_pokyeom`. 전부 구매 20·판매 10. 확률 5종(잔향·윤회·화염·목박·연수)만 `chanceBoostable: 1`, 공령명 `chanceBoostMult: 2`
+- **활성화 정책**: 구현 완료 4종만 `effectEnabled: 1`, 신규 16종은 `0` — 각 단계에서 효과 구현 후 활성화 (미구현 활성화 금지 원칙 준수)
+- 검증: `dotnet build` 오류 0·경고 0 + 에셋 정의 20종·ID 중복 0건·활성 4종. Inspector 작업 없음 — 기존 슬롯·직렬화 보존
+- 대기: 2단계 투척·이동(삼고·윤회·양면·결단·축지·속박) / 3단계 속성·도트 / 4단계 피해·보상 / 5단계 확률 통합 / 6단계 전체 활성·회귀
+
+### [2026-10-26 (43차) - 사용자 지시 / Devin 구현 — 방울 4종 재편·효과 전체 구현]
+
+**규칙 변경 (사용자 확정 지시서)** — 방울을 4종(수령·목령·족쇄·천운)으로 재편하고 전 효과를 실제 상태·정산 경로에 구현:
+
+- **1단계 — 데이터·삭제 대상 정리**
+  - `Data/BellData.cs` — `BellEffectKind`를 4종+`None`으로 정리: `BossMoveReduce=3`·`FreeReroll=5`·`WaterComboGuard=8`·`DotDoubleChance=9` 유지, 구 1·2·4·6·7·10번은 주석으로 폐기 명시 (번호 재사용 금지 — 직렬화 의미 보존). `targetResult/2`·`targetAttribute`·`growthAmount` 필드는 유지(현 4종 미사용, 주석 갱신)
+  - `ScriptableObjects/BellDatabase.asset` — 14종 → 4종(`b_suryeong`·`b_mogryeong`·`b_jokswae`·`b_cheonun`)으로 재작성, 전부 `effectEnabled: 1`·구매 20·판매 10·목령 `chance 0.2`·천운 `chance 0.07`. 스크립트 GUID 확인으로 에셋 바인딩 보존
+  - `Core/BellManager.cs` — 재작성: `ownedBells`·`OwnsKind`·`HasBell`·`GetBell`·`TryAddBell`·`RemoveBell`·`ResetForNewRun`만 유지. 제거: `ApplyGrowth`/`GrowthTrigger`/`attrAttackBonus`/`attrMultBonus`/`FrogAffinityMult`/구 `GetChance` 경로
+  - `Core/ScoreManager.cs` — 제거: 정산의 방울 성장 루프+`AddBellStep`(성장 단계), 청개구리 상성 분기(`frogActive`·`FrogAffinityMult` — `AddAffinityStep` 시그니처에서 `frogActive` 삭제), 재복방울 약점 수입 블록
+  - `Core/TileEffectManager.cs` — `CurrentAttrMult`에서 화령방울 성장분(`bellManager.GetAttrMultBonus`) 제거 — 불 기본 ×2·복주머니 `AttrMult` 강화는 유지
+  - 기타 잔여 주석 정리: `FortuneUpgradeManager`·`FortuneUpgradeData`·`BossManager`·`YutGameManager`의 구 방울명 참조 주석
+- **2단계 — 수령방울** (`Core/TileEffectManager.cs`)
+  - `waterComboGuardArmed` 신규(보스전 단위) — 물 착지로 `waterComboCount` 0→1 시 방울 보유 중이면 방어 준비 + 정산 안내 단계
+  - `BreakOrGuardWaterCombo` 신규 — 물 외 모든 착지(불·풀·땅·START·기타) 공통 처리: 방어 준비+방울 보유 시 소모해 연속 기록 보존(true), 아니면 연속 초기화(false). 보존 시 횟수 미증가·비물 칸 효과 정상 적용·물 배율 미적용
+  - 연계 중 물 재착지로는 방어 충전 안 됨 — `waterComboCount == 1`일 때만 준비. `ResetForBoss`에서 연계·방어 함께 초기화
+- **3단계 — 목령방울** (`Core/YutGameManager.cs`)
+  - `ApplyTurnStartDot` — 도트>0 지급 시 `bellManager.GetBell(DotDoubleChance)`의 `chance`(0.2)로 `extra=dot` 추가 지급. 저장 도트량(`forestDot`) 불변·추가분 재추첨·연쇄 없음·도트 0이면 미추첨·처치 클리어 처리 기존 유지. 이유 표시 "풀 도트 피해 +N +N (목령방울)"
+- **4단계 — 천운방울** (`Core/YutThrowSession.cs`·`Core/YutRollManager.cs`)
+  - `YutThrowSession.freeRerollChance` 신규 — `YutRollManager.PrepareSession`이 보유 방울 `chance`(0.07)를 세션 생성 시 보관 (확률은 세션 단위, 판정은 실행 시점)
+  - `Reroll` — 기회 종류(기본/특별) 판정 후 `freeReroll` 추첨, 무료면 그 차감(`rerollUsed++` 또는 `specialRerolls--`)만 생략. 면·결과·`rerolled`/`speciallyRerolled` 기록·`EvaluateArmedBonuses`는 정상 — 같은 윷 반복 차단 유지. `CanReroll`·UI 조회·최초 투척·거부 입력·승부부 포기(`rerollsForfeited`)에서는 추첨 없음
+- **5단계 — 족쇄방울 검증·활성화** — `BossManager.ApplyMoveReduction`(−1, 최소 1) 기존 유지 확인: 봉쇄부 0칸은 보정 전 처리로 미해제, 이동 계획(예고)·실제 이동 동일 경로, 고정 범위(4~7) 모드 유지, 판매 시 `HasBell` false로 즉시 해제
+- **유지 확인**: `ShopManager` 후보 풀(`effectEnabled`+미보유 필터) 구조 변경 없음 — 4종 정의만으로 상점에 4종만 등장. `GameUIManager` 방울 표시는 이름·설명 데이터 주도라 별도 경로 삭제 불요. 복주머니 8종 강화·보스 상성·잡기 ×4·전체배율 정산 경로 미변경
+- 검증: `dotnet build` 오류 0·경고 0 + 라이브 참조 grep 정리(제거 enum·방울명·bellId 전부 0건 — 문서 이력 주석 제외). **Unity Play 대기**: 4종 구매·장착 표시·수령 물→불→물→풀 예시·목령 0/100%·천운 0/100%(판매 복귀 후 7%)·족쇄 예고=실제·판매 해제·보스 전환 유지·새 런 초기화
+- Inspector: **신규 필드·버튼 없음** — 기존 상점/슬롯/버튼 연결 그대로
+- 엑셀 반영 예정: `16_방울목록` 10종 제거(또는 삭제 이력)+4종 구현 상태 / `01_현재게임룰` 4종 체계·성장 방울 폐기 / `02_미확정_결정` 구현 3종 정리·수룡부 중첩 유지 / `14_데이터설정` BellDatabase 4종·목령 0.2·천운 0.07. 패널·버튼 시트 변경 없음
+
+### [2026-10-26 (42차-1단계) - 사용자 지시 / Devin 구현 — 투척·말판·부적 선택·낙 밸런스 변경 1단계: 기본 수치·보스 이동·완주 확인]
+
+**규칙 변경 (사용자 확정 지시서)** — 1단계만 구현, 2~4단계는 승인 대기:
+
+- **기본 투척 5→6** — `GameBalanceConfig.maxThrows` 클래스 기본값·에셋·`YutGameManager.maxThrows` 폴백 전부 6으로. 개별 재투척 1회 규칙은 별개 유지. 마지막 투척 처치 클리어 우선 판정은 `currentThrows >= maxThrows`라 자동 추종
+- **불 착지 ×1.5→×2** — `fireTileMult` 클래스·에셋·`TileEffectManager` 폴백(2f) 전부 반영. 관련 주석·폴백 잔재(ScoreManager·BellData·BellManager·YutGameManager 주석) 정리
+- **보스 이동 — 피해 비율 단계 비활성화(구조 보존)** — `GameBalanceConfig`에 `useBossMoveDamageStages`(기본 false)·`bossMoveMin 4`·`bossMoveMax 7` 추가. `DrawBossMoveSteps`는 비활성 시 고정 범위 추첨, 활성 시 기존 단계 배열 경로 그대로. `BossMoveStage`는 비활성 시 항상 0. 족쇄방울 −1(최소 1)·봉쇄부 0·이동 예고/계획 소비 경로 변경 없음. `ValidateDataAssets`는 단계 배열 검사를 단계 모드에서만 수행 + 고정 범위 오류 경고
+- **완주 검증** — `YutBoard.MovePiece`의 `totalMoved` 경계 통과 증가 구조 재사용: 29→0 통과·정확한 START 도착 모두 +1, 0칸 이동 증가 없음, 6번 모(30칸) 시 완주 1. 초기화 = 보스전 `SetupBoard`·런 `ResetForNewRun` (기존). 표시는 기존 `lapCountText` 필드 + `UpdateBoardUI` 동기화 경로 사용 — 신규 완주 보너스·방울 효과 없음
+- 검증: `dotnet build` 오류 0·경고 0 + 수식: 도·불(무효과) = 20×6×2 = **240**. Unity Play 대기 — 6회 소진 종료·보스 이동 4~7칸·완주 표시 확인 필요
+- 엑셀: `01` 투척 6회·불 ×2·보스 이동 고정 4~7 / `04` 불 ×2·투척 6 / `14` `maxThrows` 6·`fireTileMult` 2·신규 `useBossMoveDamageStages`·`bossMoveMin/Max` / `09` `lapCountText` 연결 안내
+
+### [2026-10-26 (41차) - 사용자 지시 / Devin 구현 — 잡기 배율 단일화]
+
+**규칙 변경**: 잡기 성공 배율 `×3 + 별도 보너스 ×2(=×6)` → **`×4` 단일**.
+
+- `Data/GameBalanceConfig.cs` + 에셋 — `catchMultiplier` 3→4, `catchBonusMult` 필드·에셋 저장값 제거
+- `Core/ScoreManager.cs` — `ThrowSettlement.catchBonusMult` 제거 / `catchMult` 폴백 4f / 잡기 연출 단계를 "보스 잡기" 하나로 (구 '보스 말 잡기 ×3'+'잡기 보너스 ×2' 두 단계 폐기) / `runningMult`·디버그 로그에서 보너스 제거 / 공식 주석 갱신
+- `Core/TileEffectManager.cs` — 착지 단계 전후값의 `catchBonusMult` 인자 제거
+- 유지: 추혼부 추가 ×4, 탐욕부 잡기 취소 = 피해 0·전체배율 0, 공격 없는 칸에서도 잡기 단계 기록
+- 검증: `dotnet build` 오류 0·경고 0 + 수식 대조 — 윷·땅·잡기 1,200 / +추혼부 4,800 / 윷·불·잡기 1,800 / +추혼부 7,200. Unity Play 대기
+- 엑셀: 잡기 규칙 ×6→×4, 계산기 잡기 보너스 항목 제거, `14_데이터설정` catchMultiplier 3→4·catchBonusMult 행 제거
+
 ### [2026-10-23 오전 (40차) - 사용자 지시 / Devin 구현 — 점검 발견 오류 4건 보완]
 
 **전체 점검에서 발견한 검증 누락 4건 수정** (규칙 변경 없음 — 정상 후보 8종 동작 보존):

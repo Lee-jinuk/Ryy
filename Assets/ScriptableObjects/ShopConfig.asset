@@ -19,6 +19,7 @@ MonoBehaviour:
   refreshCostMultiplier: 2
   bossClearBaseReward: 10
   bossClearPerThrowReward: 5
+  shopDiscountMaxPercent: 50
   fortunePouchPrice: 20
   fortunePouchChance: 0.5
   fortuneCandidateCount: 3

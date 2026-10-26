@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8c09cfe7184a6b06fed95618c81d1a15, type: 3}
   m_Name: GameBalanceConfig
   m_EditorClassIdentifier: 
-  maxThrows: 5
+  maxThrows: 6
   yutStats:
   - result: 1
     basicBonus: 0
@@ -34,7 +34,7 @@ MonoBehaviour:
     basicBonus: 0
     baseScore: 60
     mult: 5
-  fireTileMult: 1.5
+  fireTileMult: 2
   waterComboMults:
   - 1
   - 2
@@ -43,8 +43,10 @@ MonoBehaviour:
   - 16
   forestDotInitialPercent: 20
   forestDotAddPercent: 5
+  useBossMoveDamageStages: 0
+  bossMoveMin: 4
+  bossMoveMax: 7
   bossMoveStageMin: 040000000300000002000000i
   bossMoveStageMax: 070000000600000005000000i
-  catchMultiplier: 3
-  catchBonusMult: 2
+  catchMultiplier: 4
   baseTotalMult: 1

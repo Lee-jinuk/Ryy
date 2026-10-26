@@ -169,6 +169,10 @@ public class ShopManager
         return true;
     }
 
+    // 복주머니가 실제 구매 가능한지 — UI 버튼 활성 판정도 이 조회를 써서
+    // 구매 불가 상품이 '구매 가능'으로 보이지 않게 한다 (선택창 구성·유효 후보 수)
+    public bool FortunePouchAvailable => CanSellFortunePouch();
+
     // 복주머니가 실제 판매 가능한 상품인지 — 출현 확률·선택창 구성·후보 수를 구매와 같은 기준으로 검사
     private bool CanSellFortunePouch()
     {
@@ -218,6 +222,19 @@ public class ShopManager
         return true;
     }
 
+    // 실제 구매가 — 정가에 현재 적용 할인율을 적용한 올림 값.
+    // 상품 표시·구매 가능 판정·실제 차감이 이 조회 하나를 공용한다.
+    // 정가(offer.price) 자체는 변경하지 않는다 — 리프레시 비용·판매가는 대상이 아니다
+    public int PriceFor(ShopOffer offer)
+    {
+        if (offer == null)
+        {
+            return 0;
+        }
+        float discount = gm.fortuneManager.ShopDiscountPercent;
+        return Mathf.CeilToInt(offer.price * (1f - discount / 100f));
+    }
+
     // 상품 구매(int): index = 상품 목록 순번 — 상품 종류별로 방울·복주머니 경로를 분기한다.
     // 점괘 선택 대기 중에는 어떤 상품도 구매하지 않는다 (미완료 구매 보호)
     public bool BuyOffer(int index)
@@ -233,22 +250,23 @@ public class ShopManager
             return BuyFortunePouch(index, offer);
         }
         BellData bell = offer.bell;
+        int price = PriceFor(offer);
         // 장착 한도·중복은 TryAddBell이 최종 검사 — 잔액 부족이면 차감 없이 실패
-        if (!gm.economyManager.TrySpend(offer.price))
+        if (!gm.economyManager.TrySpend(price))
         {
-            Debug.Log($"상점 구매 실패: {bell.bellName} — 잔액 부족 ({gm.economyManager.money}냥 < {offer.price}냥)");
+            Debug.Log($"상점 구매 실패: {bell.bellName} — 잔액 부족 ({gm.economyManager.money}냥 < {price}냥)");
             return false;
         }
         if (!gm.bellManager.TryAddBell(bell))
         {
             // 한도·중복 실패 — 차감된 돈을 되돌려 거래를 원자적으로 되돌린다
-            gm.economyManager.AddMoney(offer.price);
+            gm.economyManager.AddMoney(price);
             Debug.Log($"상점 구매 실패: {bell.bellName} — 장착 불가 (한도 {gm.bellManager.MaxBells} 또는 중복 종류)");
             gm.uiManager.UpdateUI();
             return false;
         }
         soldOfferIndices.Add(index);   // 같은 상품 재구매 차단 — 연타도 여기서 막힌다
-        Debug.Log($"상점 구매: {bell.bellName} — {offer.price}냥 (잔액 {gm.economyManager.money}냥)");
+        Debug.Log($"상점 구매: {bell.bellName} — {price}냥{(price != offer.price ? $" (정가 {offer.price}냥, 할인 {gm.fortuneManager.ShopDiscountPercent}%)" : "")} (잔액 {gm.economyManager.money}냥)");
         gm.uiManager.UpdateUI();
         return true;
     }
@@ -273,14 +291,15 @@ public class ShopManager
         {
             return false;   // 후보 부족 — 돈·상품·선택 상태 모두 보존 (사유는 BeginChoice가 로그)
         }
-        if (!gm.economyManager.TrySpend(offer.price))
+        int price = PriceFor(offer);
+        if (!gm.economyManager.TrySpend(price))
         {
             gm.fortuneManager.ClearChoice();   // 잔액 부족 — 추첨한 후보만 정리하고 대기 상태 해제
-            Debug.Log($"상점 구매 실패: 복주머니 — 잔액 부족 ({gm.economyManager.money}냥 < {offer.price}냥)");
+            Debug.Log($"상점 구매 실패: 복주머니 — 잔액 부족 ({gm.economyManager.money}냥 < {price}냥)");
             return false;
         }
         soldOfferIndices.Add(index);
-        Debug.Log($"상점 구매: 복주머니 — {offer.price}냥 (잔액 {gm.economyManager.money}냥) → 점괘 {gm.fortuneManager.pendingCandidates.Count}택1");
+        Debug.Log($"상점 구매: 복주머니 — {price}냥{(price != offer.price ? $" (정가 {offer.price}냥, 할인 {gm.fortuneManager.ShopDiscountPercent}%)" : "")} (잔액 {gm.economyManager.money}냥) → 점괘 {gm.fortuneManager.pendingCandidates.Count}택1");
         gm.uiManager.UpdateUI();
         return true;
     }
