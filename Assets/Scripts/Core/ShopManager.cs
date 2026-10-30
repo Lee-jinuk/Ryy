@@ -261,7 +261,7 @@ public class ShopManager
         {
             // 한도·중복 실패 — 차감된 돈을 되돌려 거래를 원자적으로 되돌린다
             gm.economyManager.AddMoney(price);
-            Debug.Log($"상점 구매 실패: {bell.bellName} — 장착 불가 (한도 {gm.bellManager.MaxBells} 또는 중복 종류)");
+            Debug.Log($"상점 구매 실패: {bell.bellName} — 장착 불가 (한도 {gm.bellManager.OpenSlots} 또는 중복 종류)");
             gm.uiManager.UpdateUI();
             return false;
         }

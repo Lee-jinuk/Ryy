@@ -309,12 +309,14 @@ public class BossManager
         return Random.Range(min, max + 1);   // Random.Range(int)는 상한 미포함 → max 포함을 위해 +1
     }
 
-    // 속박령 — 보스 이동 거리 −bonusCount칸, 최소 1칸 보장 (사용자 확정).
+    // 보스 이동 거리 감소 — 속박령(방울)과 족쇄부(부적 차례 효과)를 합산해 −N칸, 최소 1칸 보장.
+    // 속박령의 기존 최소 1칸 규칙을 합산 결과에도 같이 적용한다 (사용자 확정·2026-10-28 족쇄부 추가).
     // 봉쇄부·목박령의 이동 0칸은 PlannedEffectiveSteps·MoveBossPiece에서 먼저 처리되어 이 보정으로 되살아나지 않는다
     private int ApplyMoveReduction(int steps)
     {
         OwnedBell shackle = gm.bellManager.GetBell(BellEffectKind.BossMoveReduce);
-        return shackle != null ? Mathf.Max(1, steps - shackle.bonusCount) : steps;
+        int reduce = (shackle != null ? shackle.bonusCount : 0) + gm.talismanManager.BossMoveReduction;
+        return reduce > 0 ? Mathf.Max(1, steps - reduce) : steps;
     }
 
     // 차례 준비 — 다음 이동의 기본 거리를 1회 추첨해 계획한다. 보스 말은 이동하지 않고

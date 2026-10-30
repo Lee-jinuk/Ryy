@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Serialization;
 
 public enum YutResult { BackDo, Do, Gae, Geol, Yut, Mo, Nak }
 
@@ -31,107 +32,211 @@ public class YutGameManager : MonoBehaviour
         talismanDatabase != null && bossDatabase != null &&
         balanceConfig != null && presentationConfig != null;
 
-    [Header("UI Texts")]
-    public Text mainResultText;    // 중앙 결과: 윷 결과 이름만 표시 (전투 중에만 보임) 
-    public Text basicScoreText;    // 이번 투척 베이직 (숫자만 출력)
-    public Text multScoreText;     // 이번 투척 윷 배율 — 성장 반영값 (숫자만 출력). 전체배율은 totalMultText
-    public Text totalMultText;     // 이번 투척 전체배율 — 기본 전체배율에서 발동 효과별로 갱신 (숫자만 출력, 미연결 시 무시)
-    public Text totalScoreText;    // 누적 총점 (숫자만 출력)
-    public Text goalScoreText;     // 목표 점수 = 보스 최대 HP (숫자만 출력)
-    public Text remainText;        // 남은 투척 기회 (숫자만 출력)
-    public Text throwDataText;     // 전체 투척 기회 (숫자만 출력)
-    public Text throwScoreText;    // 이번 투척 확정 점수 (숫자만 출력)
+    // ── UI 참조 구조 (2026-10-28 화면별 분리) ──────────────────────────────
+    // 화면·팝업별 UI 연결의 기준은 아래 컴포넌트 — 사용자는 각 화면 오브젝트의
+    // 컴포넌트 Inspector에서 Text·Image·Button·슬롯을 연결한다.
+    // 아래 legacy* 필드는 기존 Scene 연결 보존용이다. 읽기 경로는 프로퍼티 하나 —
+    // 컴포넌트에 연결이 있으면 컴포넌트 값이 우선하고, 컴포넌트 또는 해당 필드가
+    // 비어 있을 때만 레거시 값을 읽는다 (배열은 1개 이상 연결 시 배열 전체가 컴포넌트 소유).
+    // 참조 복사·컴포넌트 자동 부착은 메뉴 'YUTROLL/UI 참조 이전 (열린 씬)' 사용
+    // (Assets/Scripts/Editor/UITransferTool.cs). 레거시 필드는 이전 완료 후 비운다.
 
-    [Header("Boss UI")]
-    public Text bossNameText;        // 보스 이름
-    public Text bossAbilityText;     // 보스 특수능력 설명
-    public Text bossCurrentHPText;   // 보스 현재 체력 = Max(0, goalScore - 누적 피해) (숫자만 출력)
-    public Text bossAffinityText;    // 전투 중인 보스 상성 정보 — "기본: 불 100%\n약점: 물 200%\n강점: 풀 50%" (미연결 시 무시)
+    [Header("UI 컴포넌트 — 화면별 연결의 기준 (비어 있으면 레거시 필드 사용)")]
+    public StartScreenUI startScreenUI;            // 시작 화면 (startPanel 부착 권장)
+    public BossSelectScreenUI bossSelectScreenUI;  // 보스 소개 화면 (bossSelectPanel 부착 권장)
+    public GameScreenUI gameScreenUI;              // 게임 화면 최상위 (gamePanel 부착 권장)
+    public ClearScreenUI clearScreenUI;            // 클리어 화면 (clearPanel 부착 권장)
+    public ShopScreenUI shopScreenUI;              // 상점 화면 (shopPanel 부착 권장)
+    public GameOverScreenUI gameOverScreenUI;      // 게임오버 화면 (gameOverPanel 부착 권장)
+    public YutThrowUI yutThrowUI;                  // 윷 투척 UI (gamePanel 부착 권장)
+    public ScoreUI scoreUI;                        // 점수·능력치 UI (gamePanel 부착 권장)
+    public BossCombatUI bossCombatUI;              // 전투 중 보스 정보 (gamePanel 부착 권장)
+    public BoardUI boardUI;                        // 말판 UI (gamePanel 또는 boardPanel 부착 권장)
+    public TalismanHandUI talismanHandUI;          // 부적 손패 UI (gamePanel 부착 권장)
+    public EquippedBellUI equippedBellUI;          // 장착 방울 표시 (gamePanel 부착 권장)
+    public TalismanChoiceUI talismanChoiceUI;      // 부적 선택창 (talismanChoicePanel 부착 권장)
+    public MoveAdjustUI moveAdjustUI;              // 환위부 선택창 (moveAdjustPanel 부착 권장)
+    public FortuneChoiceUI fortuneChoiceUI;        // 점괘 선택창 (fortuneChoicePanel 부착 권장)
+    public UsedTalismanUI usedTalismanUI;          // 사용 부적 목록 (usedTalismanPanel 부착 권장)
+
+    // ── UI 접근자 — 실제 동작의 기준은 이 프로퍼티 하나 (컴포넌트 우선·레거시 폴백) ──
+    private static bool HasAny(Object[] arr)
+    {
+        if (arr == null) return false;
+        foreach (Object e in arr)
+        {
+            if (e != null) return true;
+        }
+        return false;
+    }
+
+    // YutThrowUI — 윷 투척
+    public Text mainResultText => yutThrowUI != null && yutThrowUI.mainResultText != null ? yutThrowUI.mainResultText : legacyMainResultText;
+    public Image[] stickFaceImages => yutThrowUI != null && HasAny(yutThrowUI.stickFaceImages) ? yutThrowUI.stickFaceImages : legacyStickFaceImages;
+    public Image[] flameImages => yutThrowUI != null && yutThrowUI.flameImages != null ? yutThrowUI.flameImages : new Image[0];
+    public Sprite stickFrontSprite => yutThrowUI != null && yutThrowUI.stickFrontSprite != null ? yutThrowUI.stickFrontSprite : legacyStickFrontSprite;
+    public Sprite stickBackSprite => yutThrowUI != null && yutThrowUI.stickBackSprite != null ? yutThrowUI.stickBackSprite : legacyStickBackSprite;
+    public Button[] rerollButtons => yutThrowUI != null && HasAny(yutThrowUI.rerollButtons) ? yutThrowUI.rerollButtons : legacyRerollButtons;
+    public Text throwStatusText => yutThrowUI != null && yutThrowUI.throwStatusText != null ? yutThrowUI.throwStatusText : legacyThrowStatusText;
+    public Text rerollRemainText => yutThrowUI != null && yutThrowUI.rerollRemainText != null ? yutThrowUI.rerollRemainText : legacyRerollRemainText;
+    public Button rollButton => yutThrowUI != null && yutThrowUI.rollButton != null ? yutThrowUI.rollButton : legacyRollButton;
+    public Button confirmThrowButton => yutThrowUI != null && yutThrowUI.confirmThrowButton != null ? yutThrowUI.confirmThrowButton : legacyConfirmThrowButton;
+
+    // ScoreUI — 점수·능력치
+    public Text basicScoreText => scoreUI != null && scoreUI.basicScoreText != null ? scoreUI.basicScoreText : legacyBasicScoreText;
+    public Text multScoreText => scoreUI != null && scoreUI.multScoreText != null ? scoreUI.multScoreText : legacyMultScoreText;
+    public Text totalMultText => scoreUI != null && scoreUI.totalMultText != null ? scoreUI.totalMultText : legacyTotalMultText;
+    public Text totalScoreText => scoreUI != null && scoreUI.totalScoreText != null ? scoreUI.totalScoreText : legacyTotalScoreText;
+    public Text remainText => scoreUI != null && scoreUI.remainText != null ? scoreUI.remainText : legacyRemainText;
+    public Text throwDataText => scoreUI != null && scoreUI.throwDataText != null ? scoreUI.throwDataText : legacyThrowDataText;
+    public Text throwScoreText => scoreUI != null && scoreUI.throwScoreText != null ? scoreUI.throwScoreText : legacyThrowScoreText;
+    public Text currentYutStatsText => scoreUI != null && scoreUI.currentYutStatsText != null ? scoreUI.currentYutStatsText : legacyCurrentYutStatsText;
+    public Text currentAttributeStatsText => scoreUI != null && scoreUI.currentAttributeStatsText != null ? scoreUI.currentAttributeStatsText : legacyCurrentAttributeStatsText;
+    public Text multiplierReasonText => scoreUI != null && scoreUI.multiplierReasonText != null ? scoreUI.multiplierReasonText : legacyMultiplierReasonText;
+
+    // BossCombatUI — 전투 중 보스 정보
+    public Text bossNameText => bossCombatUI != null && bossCombatUI.bossNameText != null ? bossCombatUI.bossNameText : legacyBossNameText;
+    public Text bossAbilityText => bossCombatUI != null && bossCombatUI.bossAbilityText != null ? bossCombatUI.bossAbilityText : legacyBossAbilityText;
+    public Text bossCurrentHPText => bossCombatUI != null && bossCombatUI.bossCurrentHPText != null ? bossCombatUI.bossCurrentHPText : legacyBossCurrentHPText;
+    public Text bossAffinityText => bossCombatUI != null && bossCombatUI.bossAffinityText != null ? bossCombatUI.bossAffinityText : legacyBossAffinityText;
+    public Text goalScoreText => bossCombatUI != null && bossCombatUI.goalScoreText != null ? bossCombatUI.goalScoreText : legacyGoalScoreText;
+
+    // 화면 6종 — Start·BossSelect·Game·Clear·Shop·GameOver
+    public GameObject startPanel => startScreenUI != null && startScreenUI.startPanel != null ? startScreenUI.startPanel : legacyStartPanel;
+    public GameObject bossSelectPanel => bossSelectScreenUI != null && bossSelectScreenUI.bossSelectPanel != null ? bossSelectScreenUI.bossSelectPanel : legacyBossSelectPanel;
+    public Text bossSelectNameText => bossSelectScreenUI != null && bossSelectScreenUI.bossSelectNameText != null ? bossSelectScreenUI.bossSelectNameText : legacyBossSelectNameText;
+    public Text bossSelectGoalText => bossSelectScreenUI != null && bossSelectScreenUI.bossSelectGoalText != null ? bossSelectScreenUI.bossSelectGoalText : legacyBossSelectGoalText;
+    public Text bossSelectAbilityText => bossSelectScreenUI != null && bossSelectScreenUI.bossSelectAbilityText != null ? bossSelectScreenUI.bossSelectAbilityText : legacyBossSelectAbilityText;
+    public Text bossSelectAffinityText => bossSelectScreenUI != null && bossSelectScreenUI.bossSelectAffinityText != null ? bossSelectScreenUI.bossSelectAffinityText : legacyBossSelectAffinityText;
+    public GameObject skipBossButton => bossSelectScreenUI != null && bossSelectScreenUI.skipBossButton != null ? bossSelectScreenUI.skipBossButton : legacySkipBossButton;
+    public GameObject gamePanel => gameScreenUI != null && gameScreenUI.gamePanel != null ? gameScreenUI.gamePanel : legacyGamePanel;
+    public Text moneyText => gameScreenUI != null && gameScreenUI.moneyText != null ? gameScreenUI.moneyText : legacyMoneyText;
+    public GameObject clearPanel => clearScreenUI != null && clearScreenUI.clearPanel != null ? clearScreenUI.clearPanel : legacyClearPanel;
+    public Text clearBossNameText => clearScreenUI != null && clearScreenUI.clearBossNameText != null ? clearScreenUI.clearBossNameText : legacyClearBossNameText;
+    public Text clearScoreText => clearScreenUI != null && clearScreenUI.clearScoreText != null ? clearScreenUI.clearScoreText : legacyClearScoreText;
+    public Text clearMessageText => clearScreenUI != null && clearScreenUI.clearMessageText != null ? clearScreenUI.clearMessageText : legacyClearMessageText;
+    public GameObject nextBossButton => clearScreenUI != null && clearScreenUI.nextBossButton != null ? clearScreenUI.nextBossButton : legacyNextBossButton;
+    public GameObject shopPanel => shopScreenUI != null && shopScreenUI.shopPanel != null ? shopScreenUI.shopPanel : legacyShopPanel;
+    public Text shopMoneyText => shopScreenUI != null && shopScreenUI.shopMoneyText != null ? shopScreenUI.shopMoneyText : legacyShopMoneyText;
+    public BellSlotUI[] shopOfferSlots => shopScreenUI != null && HasAny(shopScreenUI.shopOfferSlots) ? shopScreenUI.shopOfferSlots : legacyShopOfferSlots;
+    public BellSlotUI[] shopBellSlots => shopScreenUI != null && HasAny(shopScreenUI.shopBellSlots) ? shopScreenUI.shopBellSlots : legacyShopBellSlots;
+    public Button refreshButton => shopScreenUI != null && shopScreenUI.refreshButton != null ? shopScreenUI.refreshButton : legacyRefreshButton;
+    public Text refreshCostText => shopScreenUI != null && shopScreenUI.refreshCostText != null ? shopScreenUI.refreshCostText : legacyRefreshCostText;
+    public GameObject gameOverPanel => gameOverScreenUI != null && gameOverScreenUI.gameOverPanel != null ? gameOverScreenUI.gameOverPanel : legacyGameOverPanel;
+    public Text gameOverBossNameText => gameOverScreenUI != null && gameOverScreenUI.gameOverBossNameText != null ? gameOverScreenUI.gameOverBossNameText : legacyGameOverBossNameText;
+    public Text gameOverScoreText => gameOverScreenUI != null && gameOverScreenUI.gameOverScoreText != null ? gameOverScreenUI.gameOverScoreText : legacyGameOverScoreText;
+    public Text gameOverGoalText => gameOverScreenUI != null && gameOverScreenUI.gameOverGoalText != null ? gameOverScreenUI.gameOverGoalText : legacyGameOverGoalText;
+
+    // BoardUI — 말판
+    public GameObject boardPanel => boardUI != null && boardUI.boardPanel != null ? boardUI.boardPanel : legacyBoardPanel;
+    public GameObject[] boardTiles => boardUI != null && HasAny(boardUI.boardTiles) ? boardUI.boardTiles : legacyBoardTiles;
+    public RectTransform playerPiece => boardUI != null && boardUI.playerPiece != null ? boardUI.playerPiece : legacyPlayerPiece;
+    public RectTransform bossPiece => boardUI != null && boardUI.bossPiece != null ? boardUI.bossPiece : legacyBossPiece;
+    public RectTransform bossMovePreview => boardUI != null && boardUI.bossMovePreview != null ? boardUI.bossMovePreview : legacyBossMovePreview;
+    public Text lapCountText => boardUI != null && boardUI.lapCountText != null ? boardUI.lapCountText : legacyLapCountText;
+    public Text landingTileText => boardUI != null && boardUI.landingTileText != null ? boardUI.landingTileText : legacyLandingTileText;
+
+    // TalismanHandUI / EquippedBellUI — 손패·장착 방울
+    public Text talismanNoticeText => talismanHandUI != null && talismanHandUI.talismanNoticeText != null ? talismanHandUI.talismanNoticeText : legacyTalismanNoticeText;
+    public BellSlotUI[] equipBellSlots => equippedBellUI != null && HasAny(equippedBellUI.equipBellSlots) ? equippedBellUI.equipBellSlots : legacyEquipBellSlots;
+
+    // TalismanChoiceUI / MoveAdjustUI / FortuneChoiceUI / UsedTalismanUI — 팝업
+    public GameObject talismanChoicePanel => talismanChoiceUI != null && talismanChoiceUI.talismanChoicePanel != null ? talismanChoiceUI.talismanChoicePanel : legacyTalismanChoicePanel;
+    public Text[] talismanOptionNameTexts => talismanChoiceUI != null && HasAny(talismanChoiceUI.talismanOptionNameTexts) ? talismanChoiceUI.talismanOptionNameTexts : legacyTalismanOptionNameTexts;
+    public Text[] talismanOptionDescTexts => talismanChoiceUI != null && HasAny(talismanChoiceUI.talismanOptionDescTexts) ? talismanChoiceUI.talismanOptionDescTexts : legacyTalismanOptionDescTexts;
+    public Text[] talismanOptionRarityTexts => talismanChoiceUI != null && HasAny(talismanChoiceUI.talismanOptionRarityTexts) ? talismanChoiceUI.talismanOptionRarityTexts : legacyTalismanOptionRarityTexts;
+    public Text talismanChoiceInfoText => talismanChoiceUI != null && talismanChoiceUI.talismanChoiceInfoText != null ? talismanChoiceUI.talismanChoiceInfoText : legacyTalismanChoiceInfoText;
+    public Button talismanConfirmButton => talismanChoiceUI != null && talismanChoiceUI.talismanConfirmButton != null ? talismanChoiceUI.talismanConfirmButton : legacyTalismanConfirmButton;
+    public GameObject moveAdjustPanel => moveAdjustUI != null && moveAdjustUI.moveAdjustPanel != null ? moveAdjustUI.moveAdjustPanel : legacyMoveAdjustPanel;
+    public GameObject fortuneChoicePanel => fortuneChoiceUI != null && fortuneChoiceUI.fortuneChoicePanel != null ? fortuneChoiceUI.fortuneChoicePanel : legacyFortuneChoicePanel;
+    public BellSlotUI[] fortuneOptionSlots => fortuneChoiceUI != null && HasAny(fortuneChoiceUI.fortuneOptionSlots) ? fortuneChoiceUI.fortuneOptionSlots : legacyFortuneOptionSlots;
+    public Text fortuneChoiceText => fortuneChoiceUI != null && fortuneChoiceUI.fortuneChoiceText != null ? fortuneChoiceUI.fortuneChoiceText : legacyFortuneChoiceText;
+    public GameObject usedTalismanPanel => usedTalismanUI != null && usedTalismanUI.usedTalismanPanel != null ? usedTalismanUI.usedTalismanPanel : legacyUsedTalismanPanel;
+    public Transform usedTalismanContent => usedTalismanUI != null && usedTalismanUI.usedTalismanContent != null ? usedTalismanUI.usedTalismanContent : legacyUsedTalismanContent;
+    public GameObject usedTalismanItemPrefab => usedTalismanUI != null && usedTalismanUI.usedTalismanItemPrefab != null ? usedTalismanUI.usedTalismanItemPrefab : legacyUsedTalismanItemPrefab;
+
     // 보스 체력은 별도 HP 필드를 두지 않고 goalScore - totalScore로 계산한다.
     // totalScoreText = 보스에게 준 누적 피해, goalScoreText = 보스 최대 체력.
 
-    [Header("Panels")]
-    public GameObject startPanel;            // '게임 시작' + 보스 선택이 있는 첫 화면
-    public GameObject gamePanel;             // 메인 게임 화면
-    public GameObject clearPanel;            // 보스 클리어 패널
-    public GameObject gameOverPanel;         // 게임오버 패널
-    public GameObject bossSelectPanel;       // 보스 소개/진입 패널 — 최초 선택과 클리어 후 다음 보스 소개에 공용 사용
+    [Header("레거시 UI 연결 — 이전용 (컴포넌트 연결 후 비우기)")]
+    [FormerlySerializedAs("mainResultText")]            public Text legacyMainResultText;
+    [FormerlySerializedAs("basicScoreText")]            public Text legacyBasicScoreText;
+    [FormerlySerializedAs("multScoreText")]             public Text legacyMultScoreText;
+    [FormerlySerializedAs("totalMultText")]             public Text legacyTotalMultText;
+    [FormerlySerializedAs("totalScoreText")]            public Text legacyTotalScoreText;
+    [FormerlySerializedAs("goalScoreText")]             public Text legacyGoalScoreText;
+    [FormerlySerializedAs("remainText")]                public Text legacyRemainText;
+    [FormerlySerializedAs("throwDataText")]             public Text legacyThrowDataText;
+    [FormerlySerializedAs("throwScoreText")]            public Text legacyThrowScoreText;
+    [FormerlySerializedAs("bossNameText")]              public Text legacyBossNameText;
+    [FormerlySerializedAs("bossAbilityText")]           public Text legacyBossAbilityText;
+    [FormerlySerializedAs("bossCurrentHPText")]         public Text legacyBossCurrentHPText;
+    [FormerlySerializedAs("bossAffinityText")]          public Text legacyBossAffinityText;
+    [FormerlySerializedAs("startPanel")]                public GameObject legacyStartPanel;
+    [FormerlySerializedAs("gamePanel")]                 public GameObject legacyGamePanel;
+    [FormerlySerializedAs("clearPanel")]                public GameObject legacyClearPanel;
+    [FormerlySerializedAs("gameOverPanel")]             public GameObject legacyGameOverPanel;
+    [FormerlySerializedAs("bossSelectPanel")]           public GameObject legacyBossSelectPanel;
+    [FormerlySerializedAs("clearBossNameText")]         public Text legacyClearBossNameText;
+    [FormerlySerializedAs("clearScoreText")]            public Text legacyClearScoreText;
+    [FormerlySerializedAs("clearMessageText")]          public Text legacyClearMessageText;
+    [FormerlySerializedAs("gameOverBossNameText")]      public Text legacyGameOverBossNameText;
+    [FormerlySerializedAs("gameOverScoreText")]         public Text legacyGameOverScoreText;
+    [FormerlySerializedAs("gameOverGoalText")]          public Text legacyGameOverGoalText;
+    [FormerlySerializedAs("bossSelectNameText")]        public Text legacyBossSelectNameText;
+    [FormerlySerializedAs("bossSelectGoalText")]        public Text legacyBossSelectGoalText;
+    [FormerlySerializedAs("bossSelectAbilityText")]     public Text legacyBossSelectAbilityText;
+    [FormerlySerializedAs("bossSelectAffinityText")]    public Text legacyBossSelectAffinityText;
+    [FormerlySerializedAs("skipBossButton")]            public GameObject legacySkipBossButton;
+    [FormerlySerializedAs("boardPanel")]                public GameObject legacyBoardPanel;
+    [FormerlySerializedAs("boardTiles")]                public GameObject[] legacyBoardTiles = new GameObject[30];
+    [FormerlySerializedAs("playerPiece")]               public RectTransform legacyPlayerPiece;
+    [FormerlySerializedAs("bossPiece")]                 public RectTransform legacyBossPiece;
+    [FormerlySerializedAs("bossMovePreview")]           public RectTransform legacyBossMovePreview;
+    [FormerlySerializedAs("lapCountText")]              public Text legacyLapCountText;
+    [FormerlySerializedAs("landingTileText")]           public Text legacyLandingTileText;
+    [FormerlySerializedAs("moneyText")]                 public Text legacyMoneyText;
+    [FormerlySerializedAs("equipBellSlots")]            public BellSlotUI[] legacyEquipBellSlots = new BellSlotUI[4];
+    [FormerlySerializedAs("shopPanel")]                 public GameObject legacyShopPanel;
+    [FormerlySerializedAs("shopMoneyText")]             public Text legacyShopMoneyText;
+    [FormerlySerializedAs("shopOfferSlots")]            public BellSlotUI[] legacyShopOfferSlots = new BellSlotUI[4];
+    [FormerlySerializedAs("shopBellSlots")]             public BellSlotUI[] legacyShopBellSlots = new BellSlotUI[4];
+    [FormerlySerializedAs("refreshButton")]             public Button legacyRefreshButton;
+    [FormerlySerializedAs("refreshCostText")]           public Text legacyRefreshCostText;
+    [FormerlySerializedAs("currentYutStatsText")]       public Text legacyCurrentYutStatsText;
+    [FormerlySerializedAs("currentAttributeStatsText")] public Text legacyCurrentAttributeStatsText;
+    [FormerlySerializedAs("talismanChoicePanel")]       public GameObject legacyTalismanChoicePanel;
+    [FormerlySerializedAs("moveAdjustPanel")]           public GameObject legacyMoveAdjustPanel;
+    [FormerlySerializedAs("talismanOptionNameTexts")]   public Text[] legacyTalismanOptionNameTexts = new Text[7];
+    [FormerlySerializedAs("talismanOptionDescTexts")]   public Text[] legacyTalismanOptionDescTexts = new Text[7];
+    [FormerlySerializedAs("talismanOptionRarityTexts")] public Text[] legacyTalismanOptionRarityTexts = new Text[7];
+    [FormerlySerializedAs("talismanChoiceInfoText")]    public Text legacyTalismanChoiceInfoText;
+    [FormerlySerializedAs("talismanConfirmButton")]     public Button legacyTalismanConfirmButton;
+    [FormerlySerializedAs("talismanNoticeText")]        public Text legacyTalismanNoticeText;
+    [FormerlySerializedAs("multiplierReasonText")]      public Text legacyMultiplierReasonText;
+    [FormerlySerializedAs("usedTalismanPanel")]         public GameObject legacyUsedTalismanPanel;
+    [FormerlySerializedAs("usedTalismanContent")]       public Transform legacyUsedTalismanContent;
+    [FormerlySerializedAs("usedTalismanItemPrefab")]    public GameObject legacyUsedTalismanItemPrefab;
+    [FormerlySerializedAs("fortuneChoicePanel")]        public GameObject legacyFortuneChoicePanel;
+    [FormerlySerializedAs("fortuneOptionSlots")]        public BellSlotUI[] legacyFortuneOptionSlots = new BellSlotUI[3];
+    [FormerlySerializedAs("fortuneChoiceText")]         public Text legacyFortuneChoiceText;
+    [FormerlySerializedAs("stickFaceImages")]           public Image[] legacyStickFaceImages = new Image[4];
+    [FormerlySerializedAs("stickFrontSprite")]          public Sprite legacyStickFrontSprite;
+    [FormerlySerializedAs("stickBackSprite")]           public Sprite legacyStickBackSprite;
+    [FormerlySerializedAs("rerollButtons")]             public Button[] legacyRerollButtons = new Button[4];
+    [FormerlySerializedAs("throwStatusText")]           public Text legacyThrowStatusText;
+    [FormerlySerializedAs("rerollRemainText")]          public Text legacyRerollRemainText;
+    [FormerlySerializedAs("rollButton")]                public Button legacyRollButton;
+    [FormerlySerializedAs("confirmThrowButton")]        public Button legacyConfirmThrowButton;
+    [FormerlySerializedAs("nextBossButton")]            public GameObject legacyNextBossButton;
 
-    [Header("Result Texts (숫자·이름만 출력)")]
-    public Text clearBossNameText;       // 클리어한 보스 이름
-    public Text clearScoreText;          // 클리어 시 최종 점수
-    public Text clearMessageText;        // 클리어 메시지 — 마지막 보스 클리어 시 "최종 클리어" 표시 (선택 사항)
-    public Text gameOverBossNameText;    // 도전한 보스 이름
-    public Text gameOverScoreText;       // 최종 획득 점수
-    public Text gameOverGoalText;        // 목표 점수
-
-    [Header("Boss Select UI — 보스 소개 화면")]
-    public Text bossSelectNameText;      // 진입 예정 보스 이름
-    public Text bossSelectGoalText;      // 진입 예정 보스 목표 점수 (= 보스 HP, 숫자만 출력)
-    public Text bossSelectAbilityText;   // 진입 예정 보스 특수능력 설명
-    public Text bossSelectAffinityText;  // 소개 중인 보스 상성 정보 — pendingBossIndex 기준, 전투 화면(bossAffinityText = selectedBossIndex)과 같은 런 고정 데이터 (미연결 시 무시)
-    public GameObject skipBossButton;    // 소개 화면 '건너뛰기' 버튼 — 마지막 보스 소개 시 자동 숨김 (미연결 시 무시)
-
-    [Header("Board UI — 말판")]
-    public GameObject boardPanel;                    // 원형 말판 부모 (있으면 상태에 맞춰 표시)
-    public GameObject[] boardTiles = new GameObject[30];  // 칸 오브젝트 30개 — START → 이동 방향 29칸 순서. 자식의 Text가 속성명 표시, 'BellIcon' 이름의 자식은 땅(방울) 칸 표시
-    public RectTransform playerPiece;                // 플레이어 말 — 도착 칸 위치로 이동
-    public RectTransform bossPiece;                  // 보스 말 — 플레이어와 별개, 최초 투척 성공 시마다 이동 (미연결 시 경고 후 표시만 생략)
-    public RectTransform bossMovePreview;            // 보스 다음 이동 예고 표식 — 준비 단계에 예정 도착 칸에 표시, 최초 투척 접수 시 숨김 (미연결 시 표시만 생략)
-    public Text lapCountText;                        // 완주 횟수 (숫자만 출력, 미연결 시 무시)
-    public Text landingTileText;                     // 착지 칸 정보 — "불 - 50점" 형식 (상성·윷 배율 적용 전 칸 기본점수, 미연결 시 무시)
     // 말 이동 1칸당 딜레이(초) — 기준은 PresentationConfig 에셋
     public float moveStepDelay => presentationConfig != null ? presentationConfig.moveStepDelay : 0.15f;
-
-    [Header("Bell / Shop UI — 방울 장착·상점")]
-    public Text moneyText;                                     // 보유 냥 표시 (전투 화면, 미연결 시 무시)
-    public BellSlotUI[] equipBellSlots = new BellSlotUI[4];    // 게임 화면 장착 방울 슬롯 — 고정 4칸, 표시 전용 (버튼 없음)
-    public GameObject shopPanel;                               // 상점 패널 — 보스 소개 화면에서 진입 (ClearPanel 자식으로 두지 말 것)
-    public Text shopMoneyText;                                 // 상점 내 보유 냥 표시 (미연결 시 무시)
-    public BellSlotUI[] shopOfferSlots = new BellSlotUI[4];    // 상점 구매 상품 슬롯 — 고정 4칸, 구매 버튼 포함
-    public BellSlotUI[] shopBellSlots = new BellSlotUI[4];     // 상점 장착/판매 슬롯 — 고정 4칸, 판매 버튼 포함
-    public Button refreshButton;                               // 상점 리프레시 버튼 — OnClick = RefreshShop (미연결 시 무시)
-    public Text refreshCostText;                               // 다음 리프레시 비용 표시 — "새로고침 N냥" (미연결 시 무시)
-    public Text currentYutStatsText;                           // 능력치 정보판 — 현재 런타임 윷별 기본 배율 (도·개·걸·윷·모, 미연결 시 표시 생략)
-    public Text currentAttributeStatsText;                     // 능력치 정보판 — 속성별 기본 공격력 + 런 성장 (불·물·풀, 미연결 시 표시 생략)
 
     // 부적 카드 정의 — 기준은 TalismanDatabase 에셋(talismanDatabase.cards).
     // Scene에 목록을 저장하지 않는다 — 에셋 하나만 편집하면 모든 씬에 동일 적용.
     // 덱 규칙: 카드 1장씩, 사용 시 런에서 소멸. 레어도 배정 미확정 → 전부 '미정'
     public List<TalismanData> talismanPool => talismanDatabase != null ? talismanDatabase.cards : null;
-
-    [Header("Talisman UI — 부적 선택창·손패")]
-    public GameObject talismanChoicePanel;                       // 부적 후보 선택창 — 시작 5택3·땅 3택1 공용
-    public GameObject moveAdjustPanel;                           // 환위부 ±1 이동 보정 선택창 — +1/−1/취소 버튼 배치용
-    public Text[] talismanOptionNameTexts = new Text[5];         // 후보 카드 이름 (5칸 — 3택1은 앞 3칸 사용)
-    public Text[] talismanOptionDescTexts = new Text[5];         // 후보 카드 설명
-    public Text[] talismanOptionRarityTexts = new Text[5];       // 후보 카드 레어도
-    public Text talismanChoiceInfoText;                          // 선택 진행 안내 — "2 / 3 장 선택" (미연결 시 무시)
-    public Button talismanConfirmButton;                         // '선택 확정' 버튼 — 정원 도달 시만 interactable (미연결 시 무시)
-    public Text[] talismanHandNameTexts = new Text[10];          // 손패 카드 이름 표시 슬롯 — 손패 한도 10과 일치 (미연결 칸은 무시)
-    public Text[] talismanHandDescTexts = new Text[10];          // 손패 카드 설명 표시 슬롯 — 이름과 같은 순서, 빈 슬롯은 빈칸 (미연결 칸은 무시)
-    public Button[] talismanUseButtons = new Button[10];         // 손패 카드 사용 버튼 — 사용 가능 구간에서만 interactable
-    public Text talismanNoticeText;                              // 부적 안내 — "손패가 가득 차 부적 N장이 소멸했습니다." (미연결 시 무시)
-    public Text multiplierReasonText;                            // 배율 변화 이유 표시 — Mult 위에 사용자 배치 ("추혼부 ×4" 등, 미연결 시 무시)
-    public GameObject usedTalismanPanel;                         // 사용 부적 패널 — 이번 투척 사용 카드 표시 영역 (미연결 시 표시 생략)
-    public Transform usedTalismanContent;                        // 사용 부적 목록 부모 — 항목 Prefab이 자식으로 생성 (미연결 시 표시 생략)
-    public GameObject usedTalismanItemPrefab;                    // 사용 부적 항목 Prefab — 자식 Text 첫 번째=이름, 두 번째=설명(선택)
-
-    [Header("복주머니 점괘 선택")]
-    public GameObject fortuneChoicePanel;            // 점괘 선택 패널 — 미연결 시 복주머니 구매가 거부된다 (돈만 차감되는 상태 방지)
-    public BellSlotUI[] fortuneOptionSlots = new BellSlotUI[3];  // 점괘 후보 슬롯 고정 3칸 — BellSlotUI 재사용 (이름·설명·선택 버튼)
-    public Text fortuneChoiceText;                   // 선택 안내 텍스트 (미연결 시 무시)
-
-    [Header("Throw Session UI — 윷 4개 재투척")]
-    public Text[] stickFaceTexts = new Text[4];      // 각 윷의 앞/뒤 표시 (재투척 여부는 표시하지 않음 — 제한은 rerolled[]가 판별)
-    public Button[] rerollButtons = new Button[4];   // 윷별 재투척 버튼 — 재투척 가능할 때만 interactable
-    public Text throwStatusText;                     // 투척 상태창 — "현재 결과: 개 / 재투척 가능: 2" 또는 확정 결과
-    public Text rerollRemainText;                    // 남은 재투척 수 (숫자만, 미연결 시 무시)
-    public Button rollButton;                        // '윷 던지기' 버튼 — 미투척 세션에서만 interactable (미연결 시 무시)
-    public Button confirmThrowButton;                // '결과 확정' 버튼 — 세션 진행 중에만 interactable (미연결 시 무시)
-
-    [Header("Buttons")]
-    public GameObject nextBossButton;   // 클리어 패널의 '다음 관문' 버튼 — 마지막 보스 클리어 시 자동 숨김 (미연결 시 무시)
 
     // 보스 목록 — 기준은 BossDatabase 에셋(bossDatabase.bosses). Scene에 목록을 저장하지 않는다
     public List<BossData> bosses => bossDatabase != null ? bossDatabase.bosses : null;
@@ -290,7 +395,7 @@ public class YutGameManager : MonoBehaviour
     {
         BeginBossFight();
         EnterPlaying();
-        talismanManager.OpenStartPick();   // 매 보스전 시작 — 후보 5장 중 3장 선택 (선택 완료 전 최초 투척 차단)
+        talismanManager.OpenStartPick();   // 매 보스전 시작 — 후보 7장 중 5장 선택 (선택 완료 전 최초 투척 차단)
     }
 
     // 클리어 화면의 '다음 관문' 버튼 — 다음 보스 소개 화면 표시 (전투 진입은 진입 버튼에서)
@@ -330,6 +435,7 @@ public class YutGameManager : MonoBehaviour
     {
         rollManager.PrepareSession();
         talismanManager.ClearSessionEffects();
+        talismanManager.OnTurnStart();           // 족쇄부·추적부 등 차례 지속 효과의 남은 턴 차감
         dotPaidThisTurn = false;             // 새 차례 — 풀 도트 지급 여부 리셋 (정상 최초 던지기에서 1회 지급)
         bossManager.PrepareBossMove();   // 다음 보스 이동 계획 — 거리를 1회 추첨해 예고 표시, 실제 이동은 최초 투척 시
     }
@@ -369,8 +475,19 @@ public class YutGameManager : MonoBehaviour
                 return;
             }
         }
-        rollManager.session.InitialRoll();   // 면만 던진다 — 준비 단계 부적 효과는 세션에 보존
-        bossManager.MoveBossPiece();   // 최초 투척 성공 시 보스 말 1회 이동 (재투척·확정에서는 이동 없음)
+        // 최초 투척 낙 판정 — 접수된 최초 투척에서만 1회, 일반 결과 5종 분포와 별개 추첨.
+        // 방울·점괘·공령명·보스 낙 능력은 적용하지 않고 설정값(initialNakPercent)만 사용 (2026-10-27 확정).
+        // 도트 처치 클리어는 위에서 이미 반환 — 여기 도달하면 전투가 계속 중이다
+        float nakPct = balanceConfig != null ? balanceConfig.initialNakPercent : 1f;
+        if (Random.value * 100f < nakPct)
+        {
+            rollManager.session.InitialRollNak();   // 낙 — 면 추첨 없이 결과 고정, 재투척 불가·확정만 가능
+        }
+        else
+        {
+            rollManager.session.InitialRoll();   // 면만 던진다 — 준비 단계 부적 효과는 세션에 보존
+        }
+        bossManager.MoveBossPiece();   // 최초 투척 접수 시 보스 말 1회 이동 (낙 포함 — 기존 최초 투척 1회 경로 유지, 재투척·확정에서는 이동 없음)
         hasRolled = false;   // 이전 확정 결과 표시 지우기 — 새 세션은 확정 전까지 결과 미표시
         uiManager.UpdateUI();
     }
@@ -437,13 +554,15 @@ public class YutGameManager : MonoBehaviour
     // '상점 닫기' 버튼 — 보스 소개 화면으로 복귀
     public void CloseShop() => shopManager.CloseShop();
 
-    // 부적 후보 선택 토글(int): index 0~4 — 시작 5택3·땅 3택1 공용. 확정은 ConfirmTalismanChoice()
+    // 부적 후보 선택 토글(int): index 0~6 — 시작 7택5·땅 3택1 공용. 확정은 ConfirmTalismanChoice()
     public void SelectTalismanOption(int index) => talismanManager.SelectCandidate(index);
     public void SelectTalismanOption1() => SelectTalismanOption(0);
     public void SelectTalismanOption2() => SelectTalismanOption(1);
     public void SelectTalismanOption3() => SelectTalismanOption(2);
     public void SelectTalismanOption4() => SelectTalismanOption(3);
     public void SelectTalismanOption5() => SelectTalismanOption(4);
+    public void SelectTalismanOption6() => SelectTalismanOption(5);
+    public void SelectTalismanOption7() => SelectTalismanOption(6);
 
     // 부적 선택 확정 버튼 — 정해진 수를 골랐을 때만 손패에 추가하고 창 닫기
     public void ConfirmTalismanChoice() => talismanManager.ConfirmChoice();
@@ -460,6 +579,10 @@ public class YutGameManager : MonoBehaviour
     public void UseTalisman8() => UseTalisman(7);
     public void UseTalisman9() => UseTalisman(8);
     public void UseTalisman10() => UseTalisman(9);
+
+    // 방울 슬롯 1칸 확장 — 테스트·OnClick 연결용 래퍼.
+    // 확장 아이템(종류·수치·지속 범위)은 미확정 — 확정 시 이 경로에서 호출한다
+    public void ExpandBellSlots() => bellManager.ExpandBellSlots(1);
 
     // 환위부 ±1 선택창 버튼 — +1/−1 보정 확정 또는 취소 (확정 전에는 카드 미소모)
     public void ChooseMoveAdjustPlus() => talismanManager.ChooseMoveAdjust(+1);
@@ -494,6 +617,8 @@ public class YutGameManager : MonoBehaviour
         fortuneManager = new FortuneUpgradeManager(this);
         uiManager = new GameUIManager(this);
 
+        EnsureUIComponents();   // 화면별 UI 컴포넌트 자동 확보 — 에디터 이전 도구 미실행 씬에서도 표시 갱신이 동작한다
+
         currentState = GameState.Start;
         ValidateDataAssets();
         rollManager.BuildWeights();
@@ -519,6 +644,38 @@ public class YutGameManager : MonoBehaviour
         GameUIManager.SetPanel(clearPanel, false);
         GameUIManager.SetPanel(gameOverPanel, false);
         GameUIManager.SetPanel(bossSelectPanel, false);
+    }
+
+    // 화면별 UI 컴포넌트 확보 — 매니저 필드가 비어 있으면 해당 패널 오브젝트(없으면 이 오브젝트)에서
+    // 찾거나 실행 중 부착한다. 실행 중 부착은 씬 파일을 건드리지 않고, 컴포넌트 필드가 비어 있으면
+    // 접근자가 레거시 연결을 읽으므로 기존 연결만으로도 표시가 유지된다.
+    // 씬에 영구 반영하려면 에디터 메뉴 'YUTROLL/UI 참조 이전 (열린 씬)' 사용.
+    private void EnsureUIComponents()
+    {
+        EnsureComp(ref startScreenUI, startPanel);
+        EnsureComp(ref bossSelectScreenUI, bossSelectPanel);
+        EnsureComp(ref gameScreenUI, gamePanel);
+        EnsureComp(ref clearScreenUI, clearPanel);
+        EnsureComp(ref shopScreenUI, shopPanel);
+        EnsureComp(ref gameOverScreenUI, gameOverPanel);
+        EnsureComp(ref yutThrowUI, gamePanel);
+        EnsureComp(ref scoreUI, gamePanel);
+        EnsureComp(ref bossCombatUI, gamePanel);
+        EnsureComp(ref boardUI, boardPanel != null ? boardPanel : gamePanel);
+        EnsureComp(ref talismanHandUI, gamePanel);
+        EnsureComp(ref equippedBellUI, gamePanel);
+        EnsureComp(ref talismanChoiceUI, talismanChoicePanel);
+        EnsureComp(ref moveAdjustUI, moveAdjustPanel);
+        EnsureComp(ref fortuneChoiceUI, fortuneChoicePanel);
+        EnsureComp(ref usedTalismanUI, usedTalismanPanel);
+    }
+
+    private void EnsureComp<T>(ref T field, GameObject host) where T : Component
+    {
+        if (field != null) return;
+        GameObject h = host != null ? host : gameObject;
+        field = h.GetComponent<T>();
+        if (field == null) field = h.AddComponent<T>();
     }
 
     // 설정 에셋 연결·내용 검증 — Awake에서 1회 실행. 누락/오류는 로그로 알리고
@@ -681,8 +838,9 @@ public class YutGameManager : MonoBehaviour
         isPresenting = false;
     }
 
-    // 확정 투척 1회 정산: 확정 결과(윷 4개 면 조합) → 정산 계산(scoreManager) → 정산 데이터 확정
-    // 세션은 일반 결과 5종만 생성하므로 저주 경로는 여기서 실행되지 않는다 (HandleCurseResult는 API로 유지)
+    // 확정 투척 1회 정산: 확정 결과(윷 4개 면 조합·낙) → 정산 계산(scoreManager) → 정산 데이터 확정
+    // 낙은 전용 정산(SettleNakThrow) — 이동·착지 효과·피해 연출 없이 공격 0 마감.
+    // 백도는 세션이 생성하지 않는다 (HandleCurseResult는 API로 유지)
     private ThrowSettlement SettleThrow(YutResult confirmed)
     {
         // 이전 투척의 표시용 임시값만 초기화 (윷별 영구 스탯·누적 총점은 유지)
@@ -696,7 +854,14 @@ public class YutGameManager : MonoBehaviour
             result = confirmed,
         };
 
-        scoreManager.SettleNormalThrow(settlement, confirmed);
+        if (confirmed == YutResult.Nak)
+        {
+            scoreManager.SettleNakThrow(settlement);
+        }
+        else
+        {
+            scoreManager.SettleNormalThrow(settlement, confirmed);
+        }
         return settlement;
     }
 
@@ -733,7 +898,7 @@ public class YutGameManager : MonoBehaviour
             return;
         }
         PrepareTurn();   // 다음 차례 준비 — 새 세션 생성 + 이전 '이번 투척' 부적 효과 해제. 선택창이 닫히면 부적 사용 가능
-        // 땅 칸 착지 — 정산 연출이 끝나고 보스전이 계속될 때 부적 후보 3택1 선택창 표시 (방울 선택 대체)
+        // 땅·START 칸 착지 — 정산 연출이 끝나고 보스전이 계속될 때 부적 후보 3택1 선택창 표시 (방울 선택 대체)
         if (settlement.landedOnBellTile)
         {
             talismanManager.OpenLandPick();

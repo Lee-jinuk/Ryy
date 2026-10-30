@@ -67,6 +67,52 @@ public class YutRollManager
         // 걸윷령·쌍개령·극단령 + 윷 확률 점괘 — 최초 투척 결과 확률 보정 분포를 세션에 보관
         // (추첨은 InitialRoll에서 1회만 — 재투척·UI 갱신에는 적용되지 않는다)
         session.initialResultWeights = BuildInitialResultWeights();
+        ApplyPendingProbBoosts(session);   // 도걸부·모윷부 — 이전 차례에 예약된 확률 보정을 이번 세션에 1회 소비
+    }
+
+    // 도걸부·모윷부 — 이전 차례 준비 단계에 예약된 결과 확률 보정을 이번 세션의 최초 투척
+    // 가중치에 1회 반영한다. 방울·점괘로 보정된 분포(없으면 기본 면 분포)의 대상 가중치에
+    // 곱한 뒤 합계 100%로 정규화한다. 재투척 면 확률·낙 1%에는 적용하지 않는다
+    private void ApplyPendingProbBoosts(YutThrowSession session)
+    {
+        List<TalismanManager.PendingProbBoost> boosts = gm.talismanManager.ConsumeProbBoosts();
+        if (boosts == null)
+        {
+            return;
+        }
+        Dictionary<YutResult, float> weights = session.initialResultWeights != null
+            ? new Dictionary<YutResult, float>(session.initialResultWeights)
+            : BaseResultWeights();
+        foreach (TalismanManager.PendingProbBoost boost in boosts)
+        {
+            weights[boost.result1] = (weights.TryGetValue(boost.result1, out float w1) ? w1 : 0f) * boost.mult;
+            weights[boost.result2] = (weights.TryGetValue(boost.result2, out float w2) ? w2 : 0f) * boost.mult;
+            Debug.Log($"확률 부적 {boost.displayName} 적용 — {YutGameManager.ToKorean(boost.result1)}·{YutGameManager.ToKorean(boost.result2)} ×{boost.mult} (이번 차례 최초 투척)");
+        }
+        float total = 0f;
+        foreach (float w in weights.Values)
+        {
+            total += w;
+        }
+        if (total > 0f)
+        {
+            foreach (YutResult r in YutGameManager.NormalResults)
+            {
+                weights[r] = weights[r] / total * 100f;   // 합계 100% 정규화 (사용자 확정)
+            }
+        }
+        session.initialResultWeights = weights;
+    }
+
+    // 보정이 없을 때의 기본 결과 분포 — 면 조합 조합수 C(4,k)/16 (%)
+    private static Dictionary<YutResult, float> BaseResultWeights()
+    {
+        var weights = new Dictionary<YutResult, float>();
+        foreach (YutResult r in YutGameManager.NormalResults)
+        {
+            weights[r] = BaseResultPercent(r);
+        }
+        return weights;
     }
 
     // 재투척 앞면 확률의 기본값 — 양면령 장착 시 방울 설정(현재 0.7), 미장착 0.5.

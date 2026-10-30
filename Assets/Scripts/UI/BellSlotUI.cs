@@ -55,6 +55,10 @@ public class BellSlotUI : MonoBehaviour
     // 빈 슬롯 — 이전 상품 정보와 클릭 동작이 남지 않게 정리한다
     public void Clear() => Bind("", "", "", "", false, null);
 
+    // 방울 남은 발동 횟수 표시 문자열 — 장착 슬롯(EquippedBellUI)과 상점 판매 슬롯(ShopScreenUI)이 공용 사용
+    public static string UsesText(OwnedBell bell) =>
+        bell.remainingUses >= 0 ? $"남은 발동 {bell.remainingUses}회" : "지속";
+
     private void SetLabel(string label)
     {
         Text labelText = actionLabel != null

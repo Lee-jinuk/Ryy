@@ -6,9 +6,216 @@ AI 간 작업 인수인계 문서. 작업 완료 시마다 갱신한다.
 ## [2026-10-20 오후 작업 요약 (다음 AI 전달용)]
 
 ```
-[2026-10-27 (47차) 변경사항 요약 - 사용자 지시 / Devin 구현]
+[2026-10-29 (59차) 변경사항 요약 - 사용자 지시 / Devin 구현]
 
-★ 최신 — 점괘 24종 확장 + 매 보스전 재배치 + 상점 할인 (Unity Play 검증 대기):
+★ 최신 — 방울 슬롯 기본 4·최대 8 + 전투 화면 자동 배치 (Unity Play 검증 대기):
+- ShopConfig: maxBells→baseBellSlots(4, 이전됨)+maxBellSlots(8)
+- BellManager.openBellSlots 런타임 추가 — OpenSlots가 획득/구매
+  한도 기준. ExpandBellSlots(amount)=확장 공용 경로(아이템 미확정),
+  YGM.ExpandBellSlots()=테스트 래퍼
+- EquippedBellUI: slots 8칸 + big/small size·gap Inspector 조절.
+  열린≤4=큰 한 줄, 5~8=작은 두 줄(3+2/3+3/4+3/4+4 가운데).
+  잠긴 칸 SetActive(false), 열린 빈 칸 표시, 판매 시 재배치 없음
+- ShopScreenUI.shopBellSlots 8칸, 구매 검사→OpenSlots. 상점 구매
+  후보 4칸 유지
+- Inspector 작업: equipBellSlots 배열 8로 늘려 슬롯 연결 +
+  bigSlotSize/smallSlotSize/slotGap/rowGap 조절 (씬 미수정)
+- build 0·0. Play 미검증: 4/5/6/7/8 배치·빈 슬롯·한도·구매판매
+  갱신·ExpandBellSlots 확인 필요
+
+[이전] 2026-10-29 (58차) — 손패 구 배열 제거 + test2 카드 슬롯 이전 (Unity Play 검증 대기):
+- 제거: TalismanHandUI의 nameTexts/descTexts/useButtons + RefreshSlots
+  + 자동 부착 폴백, YGM 동명 접근자 + legacy 필드. talismanNoticeText 유지
+- test2.unity: HandCard 10개에 TalismanCardUI 부착(&900000001~10,
+  bg/nameText/button/handUI 연결) + cardSlots 연결. 카드 안 설명
+  GO 10개는 비활성화. 카드 Button의 OnClick→UseTalismanN은 유지
+  (test2에 사용 영역 없어 제거 시 사용 불가)
+- ⚠ test2에 설명창/사용 영역 추가 시 HandCard의 OnClick→
+  UseTalismanN 연결 제거 필요 (이중 동작 방지)
+- test3/Test/SampleScene: 빈 배열 행만 삭제. UITransferTool 무수정
+- build 0·0. Play 미검증: 카드 표시·설명·사용·취소·재정렬 확인 필요
+
+[이전] 2026-10-29 (57차) — 부적 손패 이미지 카드화 + 위로 드래그 사용 (Unity Play 검증 대기):
+- 신규 TalismanCardUI.cs — 카드 컴포넌트: 클릭=설명, 위 드래그→
+  사용 영역 드롭=사용 시도. 클릭/드래그는 EventSystem이 자동 분리
+- TalismanHandUI 카드 모드: 보유분만 표시·빈 슬롯 숨김·카드엔
+  제목만·배경=appearance 스프라이트(yellow/white). X 간격을 장수와
+  컨테이너 너비로 조절(겹침 허용, Y·회전·크기 고정). 설명창=공용,
+  카드 위 배치+캔버스 클램프. 드롭 시 카드 인스턴스로 hand.IndexOf
+  재검사 → gm.UseTalisman (판정·소모 규칙 불변)
+- 신규 Inspector 필드: cardSlots[10]/yellowSprite/whiteSprite/
+  cardContainer/descriptionPanel+desc 이름·설명 Text/useDropArea/
+  handCountText/cardGap/descriptionOffset/dragUseMinPixels(80)
+- 자동 마이그레이션: cardSlots 빈칸은 talismanUseButtons에 런타임
+  자동 부착 — test2는 씬 수정 없이 카드 모드 전환. 단 test2는
+  설명창·사용 영역 없어 클릭=구 OnClick 사용 유지, 드래그=복귀만
+- ⚠ test2에 설명창/사용 영역 추가 시 HandCard의 OnClick→
+  UseTalismanN 연결 제거 필요 (이중 동작 방지)
+- test3: 손패 오브젝트 없음 — 사용자가 계층 구성 후 새 필드 연결.
+  카드 Button에 OnClick 금지, NameText Raycast Target 해제
+- build 0·0. Play 미검증: 0/1/10장·양색 배경·설명창·정상 사용·
+  드래그 취소·불가 카드 설명·제거 후 재정렬 확인 필요
+
+[이전] 2026-10-29 (56차) — 불꽃 횟수 표시 + 버튼 눌림 스프라이트 (Unity Play 검증 대기):
+- YutThrowUI.flameImages[7] 신규 — maxThrows-currentThrows만큼
+  왼쪽부터 enabled 표시(표시 용량 7, 규칙 무관). UpdateUI 경유로
+  확정 차감·새 보스·재시작 자동 갱신
+- test2 던지기·확정 버튼: Transition=Sprite Swap + PressedSprite=
+  버튼3 눌림_0 (OnClick·활성 조건 유지, 추가 코드 없음)
+- Inspector 작업: flameImages 7칸 Image 연결 (test3 배치용)
+- 주의: 두 버튼 배경은 기본 UISprite — 커스텀 배경 적용 시 눌림
+  스프라이트 매칭 재확인
+- build 0·0. Play 미검증: 불꽃 차감/초기화·눌림/해제 확인 필요
+
+[이전] 2026-10-29 (55차) — 윷 이미지 클릭 재투척 방식 완성 (Unity Play 검증 대기):
+- test2.unity: 윷 오브젝트(Button Legacy ×4)=윷 자체 버튼 + 자식
+  Image가 면 표시 — 별도 재투척 버튼 없음. rerollButtons 배열에
+  윷 Button 4개 연결(순서 images[0~3]=Stick1~4 일치, OnClick 타겟
+  YGM 확인). interactable 비활성화 경로 완성
+- test3.unity: rerollButtons·면 이미지·OnClick 전부 미연결 —
+  윷 오브젝트에 Button 부착+OnClick RerollStick1~4+배열 연결 필요
+- build 0·0. Play 미검증: 클릭 재투척·소진 시 비활성 확인 필요
+
+[이전] 2026-10-29 (54차) — stickFaceTexts 제거, 면 표시 이미지 전용 (Unity Play 검증 대기):
+- YutThrowUI 필드+갱신 코드, YutGameManager 접근자+
+  legacyStickFaceTexts 제거. UITransferTool은 리플렉션 매핑이라
+  자동 스킵(무수정)
+- 4개 씬 stickFaceTexts 행 삭제 — 전부 빈 참조였음.
+  stickFaceImages·스프라이트·rerollButtons 연결 보존
+- build 0·0. Play 미검증: 면 PNG 표시·재투척 동작 확인 필요
+
+[이전] 2026-10-29 (53차) — 결과·재투척 표시 형식 변경 (Unity Play 검증 대기):
+- mainResultText: 확정값(lastResult) → 세션 실시간 판정값
+  (session.CurrentResult) — 최초 투척·재투척 직후 현재 조합
+  즉시 표시, 확정 후 유지, 준비 세션 비움, 재추첨 없음
+- rerollRemainText: 숫자만 → "N회" (0회 포함)
+- 수정: YutThrowUI.Refresh만. build 0·0, Play 미검증
+
+[이전] 2026-10-28 (52차) — UI 참조 이전 검증 + Legacy 연결 정리 (Unity Play 검증 대기):
+- test2.unity: 이전 도구 실행 결과 컴포넌트·참조 복사 완료 상태 —
+  legacy 74필드 ↔ 컴포넌트 필드 1:1 전수 대조 불일치 0건 확인 후
+  legacy* 직렬화 행 182줄 삭제(읽기 기준 = 컴포넌트로 단일화)
+- SampleScene.unity·Test.unity: 구 필드명 그대로였던 것을 YAML
+  이전 — 컴포넌트 16종 부착(호스트=패널 GO, 없으면 매니저 GO)+
+  참조 복사+xxxUI 연결+구 필드명 행 제거 (Test.unity는 팝업·상점
+  패널 부재 → 해당 컴포넌트 매니저 GO 부착·필드 빈 상태)
+- Assets/_Recovery/*.unity: Unity 자동 복구 백업 — 미수정.
+  legacy* 필드 코드 유지로 폴백 동작
+- 코드상 legacy* 직접 접근 = YutGameManager 폴백 접근자뿐.
+  Missing Script 0건(미해석 GUID 전부 UGUI/URP 패키지). 프리팹에
+  YGM 참조 없음. OnClick·m_PersistentCalls 미수정
+- 검증: build 0·0 + 3씬 YAML 정적 대조. Unity Play 미검증 —
+  특히 SampleScene/Test.unity는 구 데이터 잔재 스냅숏으로 실사용
+  씬인지 확인 필요
+- 임시 호환: legacy* 필드 코드에 유지 — 모든 실사용 씬 새 구조
+  저장 확인 후 필드·접근자·UITransferTool 일괄 삭제 가능
+
+[이전] 2026-10-28 (51차) — YutGameManager UI 구조 분리 (규칙 변경 없음):
+- 신규 UI 컴포넌트 16종 (Scripts/UI, 표시 전용) — 화면 6:
+  StartScreenUI·BossSelectScreenUI·GameScreenUI·ClearScreenUI·
+  ShopScreenUI·GameOverScreenUI / 게임 하위 6: YutThrowUI·
+  ScoreUI·BossCombatUI·BoardUI·TalismanHandUI·EquippedBellUI /
+  팝업 4: TalismanChoiceUI·MoveAdjustUI·FortuneChoiceUI·
+  UsedTalismanUI(usedItems 이관 — 항목 생성·useId 제거)
+- YutGameManager: 기존 UI 필드 74종 → legacy* 개명 +
+  [FormerlySerializedAs]로 씬 연결 보존. 동명 프로퍼티가
+  컴포넌트 우선→레거시 폴백 단일 경로 제공 — gm.xxx 호출부 무수정
+- EnsureUIComponents(): Awake에서 미부착 컴포넌트를 해당 패널에
+  자동 부착 — 이전 도구 미실행 씬도 동작 (실행 중 부착, 씬 미변경)
+- GameUIManager = 얇은 조정자 — UpdateUI가 각 컴포넌트 Refresh(gm)
+  호출만. 개별 Text 작성은 컴포넌트 소유 (같은 Text 중복 작성 없음).
+  BoardManager 표시 4종(UpdateBoardUI·MovePieceVisual·
+  MoveBossPieceVisual·MoveBossPreviewVisual)은 BoardUI 위임 래퍼
+- 정산 연출 PresentSettlement·ShowLandingInfo는 GameUIManager 유지 —
+  카드 제거는 UsedTalismanUI 경유. 배율 이유는 ScoreUI 소유
+- 이전 도구: 에디터 메뉴 'YUTROLL/UI 참조 이전 (열린 씬) —
+  미리보기/실행' (Editor/UITransferTool.cs) — 컴포넌트 부착 +
+  legacy→컴포넌트 빈 칸에만 복사, 멱등·Undo. 실행 후 Ctrl+S
+- Scene·Prefab·OnClick·버튼 함수 전부 무수정
+- 검증: build 0·0. Unity Play 미검증 — 기존 흐름 전체
+  (7택5·3택1·환위부·점괘·상점·정산·보스HP·완주·새 런) 확인 필요
+- 임시 호환: legacy* 필드 — 전체 이전 확인 후 비우기 가능
+
+[이전] 2026-10-28 (50차) — 윷 면 PNG 표시 (Unity Play 검증 대기):
+- YutGameManager 신규 필드: stickFaceImages[4](Image)·
+  stickFrontSprite·stickBackSprite — 기존 stickFaceTexts 보존
+- GameUIManager.UpdateUI 면 루프에서 session.frontUp[i]로
+  스프라이트 교체 — 표시용 재추첨 없음. 준비 단계·낙에는
+  enabled=false로 숨김(레이아웃 유지). 미연결 시 Text만 유지
+- 갱신은 기존 UpdateUI 호출 경로 — 최초 투척·개별 재투척 후
+  즉시 반영, 별도 호출 없음
+- Inspector 작업 필요: Image 4칸 + 앞·뒤 스프라이트 2종 연결
+- 검증: build 0·0. Unity Play 미검증 — 배선 후 최초 투척·
+  재투척 즉시 갱신·낙 숨김 확인 필요
+
+[이전] 2026-10-27 (49차) — 부적 25종 전면 개편 (Unity Play 검증 대기):
+- 활성 25종(천기부 보류, 고집·삼재·윤회·도박·천운부 덱 제외
+  — 정의 보존). 신규 카드 t_mirage 환영부·t_stop 정지부.
+  덱 포함 25종 = 노란 16(준비 단계)·하얀 9(투척 후~확정 전)
+- 윷 기본배율 경로 분리: 추적부·결과별 5종은 유효 윷 배율에
+  곱(EffectTarget.YutMult) — 런 스탯 미변경·전체배율 이중
+  적용 금지. 피해 부적만 전체배율 곱연산
+- 승부부: 강제 포기 폐기 → 재투척 미사용 확정 시 ×1.5
+  (session.rerollAttempted — 일반·특별·윤회령 무료 모두 포함)
+- 수룡부: 물 착지 시 연계 +1(기존 유지 효과 폐기) / 포위부:
+  착지~보스 원형 거리 ≤1 잡기(공통 판정) / 초목부: 이번
+  등록·증가분 도트 ×2
+- 족쇄부 3턴·추적부 2턴 = turnEffects(PrepareTurn 차감).
+  도걸부 도·걸×1.5·모윷부 모·윷×1.2 = 다음 차례 최초 투척
+  1회 pendingProbBoosts → 가중치 곱 후 100% 정규화, 보스 전환
+  소멸·재투척/낙 미적용
+- 역행부 ReshuffleAttributes(START·위치·연계·도트·완주 유지)
+  족쇄·속박령 합산 후 최소 1칸 / 봉쇄 0칸 미부활·예고 즉시
+  갱신 / 정지부 이동 0 현재 칸 정산 / 환영부 도·개·걸+2·윷·모−3
+- 에셋: TalismanDatabase 25종 includeInDeck·시점·외형·설명
+  지시서 문구, 후퇴부 '移動'→'이동'
+- 검증: build 0·0 + 에셋 정적(25종·16/9). Unity Play 미검증 —
+  25종 전부 실사용·만료·정규화·상태 보존 확인 필요.
+  Inspector 작업 없음
+
+[이전] 2026-10-27 (48차-3단계) — 최초 투척 낙 1% (Unity Play 검증 대기):
+- GameBalanceConfig.initialNakPercent(%, 에셋 1) — 접수된
+  최초 투척에만 1회 별도 추첨. 일반 5종 분포·방울·점괘·
+  공령명·보스 낙 능력·레거시 Base Probabilities 비적용
+- YutThrowSession.isNak — 면 조합이 아닌 플래그로 결과 고정.
+  InitialRollNak은 준비 부적 효과 보존, CanReroll은 기본·
+  특별 재투척 모두 거부, CanUseAfterRoll도 차단(환위부 불가)
+- ScoreManager.SettleNakThrow 전용 정산 — 이동·착지·잡기·
+  부적 선택·도트 등록 없이 공격 0 + currentThrows++ 1회 +
+  사용 부적 안내만 재생. 마지막 낙은 게임오버 정상
+- 상태창 "낙 — 확정만 가능"·면 텍스트 "-", 보스 이동은
+  기존 최초 투척 1회 경로 유지, 도트 처치 시 추첨 생략
+- 미확정 보고: 낙의 물 연계 영향 — 부대 상태 미변경
+- 검증: build 0·0. Unity Play 미검증 — 테스트 시 에셋을
+  0/100으로 조정 후 1 복구. Inspector 작업 없음
+
+[이전] 2026-10-27 (48차-2단계) — START 착지 공격 ×1 + 부적 3택1 (Unity Play 검증 대기):
+- attackLanded에 TileAttribute.Start 추가 — 윷 기본점수 ×
+  성장 윷 배율 × 유효 전체배율, START 말판 곱연산 ×1
+- landedOnBellTile = Start || (Earth && !earthNoPick) —
+  정산 종료 후 기존 OpenLandPick(3택1) 공용 경로. 지맥·
+  금맥령 억제는 땅 전용 — START는 항상 발동
+- TileEffectManager case Start 신설 — 물 연계 끊김·청류령
+  방어 기존 경로 유지, 풀 도트 미등록, 땅 전용 방울 미적용
+- 상성 단계를 불·물·풀 긍정 판정으로 정리 — 땅·START·쇠 제외.
+  잡기·접전령 등 무조건 효과는 기존 조건대로 적용
+- START 배치·통과는 착지 아님 — 완주 집계 변경 없음
+- 검증: build 0·0. Unity Play 미검증. Inspector 작업 없음
+
+[이전] 2026-10-27 (48차-1단계) — 시작 부적 선택 5택3 → 7택5 (Unity Play 검증 대기):
+- OpenStartPick → OpenPick(7,5) 공용 경로, 땅 3택1 불변.
+  규격 상수화(StartCandidateCount 7·StartPickCount 5·
+  OptionSlotMax 7). 후보 = Min(7, 덱), 필요 선택 = Min(5,
+  후보, 연결 UI 슬롯 수)
+- Inspector 보호: AvailableOptionSlots = 이름·설명·레어도
+  배열 최소 길이 — 슬롯 부족 시 필요 선택 수 제한+경고
+  (갇힘 방지), 0이면 선택 생략·덱 미소모
+- 배열 3종 기본값 5→7 (기존 씬 직렬화 보존) — 사용자 작업:
+  배열 7칸 확장 + SelectTalismanOption(5)·(6) 버튼 추가.
+  미확장 시 5칸만 표시·선택(진행 가능)
+- 검증: build 0·0. Unity Play 미검증
+
+[이전] 2026-10-27 (47차) — 점괘 24종 확장 + 매 보스전 재배치 + 상점 할인 (Unity Play 검증 대기):
 - 점괘 16종→24종 전부 활성 — 신규 FortuneUpgradeKind 8종:
   YutBaseScore(기본점수 +5, 5종) / RerollFrontProb·
   RerollBackProb(재투척 면 +2%p) / ShopDiscount(+5%p) +

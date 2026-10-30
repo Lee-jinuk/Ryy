@@ -3,7 +3,9 @@ using UnityEngine;
 // 윷 4개 투척 세션 — 차례 준비(세션 생성·부적 사용 가능) → 최초 투척
 // → 윷별 재투척(기본: 서로 다른 윷 최대 1개, 같은 윷 1회) → 결과 확정
 // 면 조합(앞면 개수)으로만 결과를 만든다: 0=모 1=도 2=개 3=걸 4=윷
-// 백도·낙은 이 경로에서 생성되지 않는다 (신규 발생 조건 미확정 — 임의 추가 금지)
+// 백도는 이 경로에서 생성되지 않는다 (신규 발생 조건 미확정 — 임의 추가 금지)
+// 낙은 면 조합과 무관한 별도 결과 — 최초 투척 접수 시 1% 판정(InitialRollNak)으로만
+// 발생하고, 네 윷의 면 조합으로 억지 표현하지 않는다 (2026-10-27 확정)
 // 세션 데이터는 런타임 전용 — Inspector 직렬화 없음 (일반 C# 클래스)
 //
 // 세션은 차례 준비 시점에 생성된다(rolled=false = 최초 투척 전 준비 상태).
@@ -23,6 +25,13 @@ using UnityEngine;
 //   rerollsBanned — 결단령: 모든 재투척 금지 (세션 생성 시 설정)
 //   rerollFrontUpChance — 양면령 기본값 + 앞·뒷면 점괘 보정의 최종 앞면 확률
 //     (세션 생성 시 계산, 20~80% 제한 — 기본·특별 재투척 모두 적용)
+//   rerollAttempted — 이번 세션에서 재투척을 1회라도 실행했는지 (승부부 판정 —
+//     윤회령 무료 재투척·특별 재투척도 사용으로 친다)
+//   catchWidenRange — 포위부: 잡기 판정을 보스 기준 원형 최단 거리 ±N칸까지 확장
+//   waterComboBonusCount — 수룡부: 이번 물 착지의 연계 추가 횟수
+//   forestDotBoostMult — 초목부: 이번 풀 착지로 등록·증가되는 도트량 배율
+//   resultMoveDelta — 환영부: 최종 결과에 따라 이동 보정 (도·개·걸 +2 / 윷·모 −3)
+//   stopMove — 정지부: 최종 이동 거리 0, 현재 칸을 최종 착지로 처리
 public class YutThrowSession
 {
     public const int StickCount = 4;   // 윷 개수
@@ -35,11 +44,20 @@ public class YutThrowSession
     public readonly bool[] speciallyRerolled = new bool[StickCount];// 특별 기회로 재투척된 윷 — 같은 윷 반복 사용 차단
     public int rerollUsed;        // 기본 기회로 재투척한 윷 개수
     public int specialRerolls;    // 재기부로 추가된 '특별 재투척' 남은 횟수 — 어떤 윷도 대상 가능(윷당 1회)
-    public bool rerollsForfeited; // 승부부 — 남은 기본·특별 기회를 전부 포기한 상태 (세션 내 번복 불가)
-    public bool rerollsBanned;    // 결단령 — 모든 재투척 금지 (세션 생성 시 설정, 승부부 포기와는 별개 상태)
+    public bool rerollsForfeited; // 레거시 강제 포기 상태 (2026-10-28 승부부 규칙 변경으로 미설정 — 필드는 보존)
+    public bool rerollsBanned;    // 결단령 — 모든 재투척 금지 (세션 생성 시 설정, 포기와는 별개 상태)
+    public bool rerollAttempted;  // 이번 세션에서 재투척을 1회라도 실행했는지 — 승부부 '재투척 미사용' 판정
+                                  // (기본·특별·윤회령 무료 재투척 모두 사용으로 친다)
+    public bool isNak;            // 낙 — 최초 투척 접수 시 1% 판정으로만 설정 (InitialRollNak).
+                                  // 모든 재투척 불가·확정만 가능, 면 조합과 무관한 고정 결과
     public bool confirmed;        // 결과 확정 여부 — 확정 후 세션은 읽기 전용
 
-    public int moveDelta;         // 진격부(+1)·후퇴부(−1) 이동 보정 합산 — 정산에서 이동 거리에 적용
+    public int moveDelta;         // 진격부(+1)·후퇴부(−1)·환위부(±1) 이동 보정 합산 — 정산에서 이동 거리에 적용
+    public int catchWidenRange;   // 포위부 — 잡기 판정을 보스 기준 원형 최단 거리 ±N칸으로 확장 (0 = 같은 칸만)
+    public int waterComboBonusCount; // 수룡부 — 이번 물 착지에 추가되는 연계 횟수 (이번 공격부터 적용)
+    public float forestDotBoostMult = 1f; // 초목부 — 이번 풀 착지로 등록·증가되는 도트량 배율
+    public bool resultMoveDelta;  // 환영부 — 확정 결과별 이동 보정 (도·개·걸 +2 / 윷·모 −3, 윷 배율·결과 미변경)
+    public bool stopMove;         // 정지부 — 최종 이동 거리 0, 현재 칸을 최종 착지로 처리 (합산 보정 무시)
     public bool rolled;           // 최초 투척 완료 여부 — false = 준비 단계(부적 사용 가능, 재투척·확정 불가)
     public float freeRerollChance; // 윤회령 — 개별 재투척 시 이 확률로 기회 차감을 생략 (세션 생성 시 공령명 반영값으로 설정, 0 = 미보유·미적용)
     public float rerollFrontUpChance; // 재투척 앞면 확률 — 양면령 기본값 + 점괘 면 보정의 최종값 (세션 생성 시 20~80% 제한, 0 = 기본 0.5 사용)
@@ -58,8 +76,8 @@ public class YutThrowSession
     public bool Active => !confirmed;
     // 투척 진행 중 = 최초 투척 완료 후 확정 전 (재투척·확정 입력 허용 조건)
     public bool RollInProgress => rolled && !confirmed;
-    // 남은 재투척 수 = 기본 기회 잔여 + 특별 기회 — 표시는 합계 (승부부 포기·결단령 금지 시 0)
-    public int RemainingRerolls => rerollsForfeited || rerollsBanned ? 0 : (maxRerolls - rerollUsed) + specialRerolls;
+    // 남은 재투척 수 = 기본 기회 잔여 + 특별 기회 — 표시는 합계 (승부부 포기·결단령 금지·낙 시 0)
+    public int RemainingRerolls => rerollsForfeited || rerollsBanned || isNak ? 0 : (maxRerolls - rerollUsed) + specialRerolls;
 
     public int FrontCount
     {
@@ -77,8 +95,8 @@ public class YutThrowSession
         }
     }
 
-    // 앞면 개수 → 결과 (0=모 1=도 2=개 3=걸 4=윷)
-    public YutResult CurrentResult => FrontCount switch
+    // 앞면 개수 → 결과 (0=모 1=도 2=개 3=걸 4=윷). 낙은 면 조합과 무관한 고정 결과
+    public YutResult CurrentResult => isNak ? YutResult.Nak : FrontCount switch
     {
         0 => YutResult.Mo,
         1 => YutResult.Do,
@@ -114,6 +132,24 @@ public class YutThrowSession
         rolled = true;
         confirmed = false;
         Debug.Log($"--- 윷 투척: {FaceString()} → {YutGameManager.ToKorean(CurrentResult)} (재투척 가능 {RemainingRerolls}) ---");
+    }
+
+    // 최초 투척 낙 — 면을 던지지 않고 결과를 낙으로 고정한다.
+    // 준비 단계 부적 효과는 InitialRoll과 같이 보존하고, 면·재투척 기록만 초기화한다.
+    // 낙 발생 시 재투척은 CanReroll이 전부 거부해 확정만 가능 — 면 조합으로 표현하지 않는다
+    public void InitialRollNak()
+    {
+        for (int i = 0; i < StickCount; i++)
+        {
+            frontUp[i] = false;
+            rerolled[i] = false;
+            speciallyRerolled[i] = false;
+        }
+        rerollUsed = 0;
+        rolled = true;
+        confirmed = false;
+        isNak = true;
+        Debug.Log("--- 윷 투척: 낙 — 확정만 가능 (재투척 불가) ---");
     }
 
     // 확률 방울 보정 추첨 — 세션에 설정된 결과 가중치로 결과를 먼저 추첨하고,
@@ -174,7 +210,7 @@ public class YutThrowSession
     //   아직 쓰지 않았으면 가능 — 거부된 입력은 기회를 소모하지 않는다
     public bool CanReroll(int index)
     {
-        if (!rolled || confirmed || rerollsForfeited || rerollsBanned || index < 0 || index >= StickCount)
+        if (!rolled || confirmed || rerollsForfeited || rerollsBanned || isNak || index < 0 || index >= StickCount)
         {
             return false;
         }
@@ -216,6 +252,7 @@ public class YutThrowSession
             }
         }
         rerolled[index] = true;
+        rerollAttempted = true;   // 승부부 판정용 — 기본·특별·윤회령 무료 재투척 모두 사용으로 친다
         EvaluateArmedBonuses();
         Debug.Log($"윷 {index + 1}번 재투척{(usedSpecial ? "(특별)" : "")}{(freeReroll ? " — 윤회령으로 기회 미소모" : "")} → {FaceString()} = {YutGameManager.ToKorean(CurrentResult)} (남은 재투척 {RemainingRerolls})");
         return true;

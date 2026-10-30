@@ -50,4 +50,9 @@ public class GameBalanceConfig : ScriptableObject
     // 기본 전체배율 — 모든 공격의 전체배율 출발점(×1). 설정값과 런타임 값을 분리해 추후 강화 가능
     // (런타임 복사본은 ScoreManager.baseTotalMult — 보스 전환 유지, 새 런에서 이 값으로 초기화)
     public float baseTotalMult = 1f;
+
+    // 최초 투척 낙 확률 (퍼센트 단위 — 1 = 1%). 접수된 최초 투척에서만 1회 판정,
+    // 일반 결과 5종 분포와 별개 — 방울·점괘·공령명·보스 낙 능력은 적용하지 않는다 (2026-10-27 확정).
+    // 레거시 Base Probabilities의 낙 테스트값(5%)과는 무관한 별도 설정
+    public float initialNakPercent = 1f;
 }

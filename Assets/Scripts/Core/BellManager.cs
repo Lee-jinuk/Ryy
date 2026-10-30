@@ -2,7 +2,9 @@
 // BellManager.cs — 방울 장착·보유 상태 관리
 //
 // 담당:
-//   - 보유 방울 인스턴스(ownedBells) — 런 단위 장착 상태, 최대 shopConfig.maxBells(기본 4)개
+//   - 보유 방울 인스턴스(ownedBells) — 런 단위 장착 상태, 열린 슬롯(OpenSlots)까지 보유
+//   - 열린 슬롯 수(openBellSlots) — 기본 shopConfig.baseBellSlots(4)·최대 maxBellSlots(8).
+//     보유 수와 별도 관리. 확장 수단(아이템 종류·수치·지속)은 미확정 — ExpandBellSlots가 공용 경로
 //   - 지속형 방울 조회 — 실제 효과 적용은 각 담당 시스템이 수행한다:
 //       청류령(WaterComboGuard) → TileEffectManager 물 연계 끊김 방어
 //       잔향령(DotDoubleChance) → YutGameManager.ApplyTurnStartDot 추가 지급 판정
@@ -31,12 +33,32 @@ public class BellManager
     public readonly List<OwnedBell> ownedBells = new List<OwnedBell>();
     private int nextInstanceId = 1;
 
+    // 현재 열린 슬롯 — 런 단위 상태. 보유 수와 별도 관리한다 (빈 열린 칸 존재 가능).
+    // <=0이면 아직 초기화 전 → 기본 슬롯 수로 간주
+    private int openBellSlots;
+
     public BellManager(YutGameManager gm)
     {
         this.gm = gm;
     }
 
-    public int MaxBells => gm.shopConfig != null ? Mathf.Max(1, gm.shopConfig.maxBells) : 4;
+    public int BaseBellSlots => gm.shopConfig != null ? Mathf.Max(1, gm.shopConfig.baseBellSlots) : 4;
+    public int MaxBellSlots => gm.shopConfig != null ? Mathf.Max(BaseBellSlots, gm.shopConfig.maxBellSlots) : 8;
+
+    // 현재 열린 슬롯 수 — 획득·구매 가능 검사와 슬롯 표시 기준 (보유 수 아님)
+    public int OpenSlots =>
+        Mathf.Clamp(openBellSlots <= 0 ? BaseBellSlots : openBellSlots, BaseBellSlots, MaxBellSlots);
+
+    // 방울 슬롯 확장 공용 경로 — 확장 아이템의 종류·수치·지속 범위는 미확정.
+    // 확정 전까지 이 메서드만 연결 지점으로 둔다 (테스트: YutGameManager.ExpandBellSlots)
+    public void ExpandBellSlots(int amount)
+    {
+        int next = Mathf.Min(MaxBellSlots, OpenSlots + Mathf.Max(0, amount));
+        if (next == OpenSlots) return;
+        openBellSlots = next;
+        Debug.Log($"방울 슬롯 확장: {OpenSlots}칸");
+        gm.uiManager.UpdateUI();
+    }
 
     // 종류별 보유 여부 — 중복 장착 불가 규칙과 상점 표시에 사용
     public bool OwnsKind(string bellId) =>
@@ -69,7 +91,7 @@ public class BellManager
     // 방울 획득 — 상점 구매의 유일한 경로. 장착 한도·중복 종류는 여기서 차단 (호출 전 가격 검사 별도)
     public bool TryAddBell(BellData data)
     {
-        if (data == null || ownedBells.Count >= MaxBells || OwnsKind(data.bellId))
+        if (data == null || ownedBells.Count >= OpenSlots || OwnsKind(data.bellId))
         {
             return false;
         }
@@ -116,10 +138,11 @@ public class BellManager
         return true;
     }
 
-    // 런 초기화 — 보유 방울·인스턴스 카운터 전부 정리
+    // 런 초기화 — 보유 방울·인스턴스 카운터·열린 슬롯을 기본값으로 정리
     public void ResetForNewRun()
     {
         ownedBells.Clear();
         nextInstanceId = 1;
+        openBellSlots = BaseBellSlots;
     }
 }

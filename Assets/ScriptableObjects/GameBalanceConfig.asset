@@ -50,3 +50,4 @@ MonoBehaviour:
   bossMoveStageMax: 070000000600000005000000i
   catchMultiplier: 4
   baseTotalMult: 1
+  initialNakPercent: 1

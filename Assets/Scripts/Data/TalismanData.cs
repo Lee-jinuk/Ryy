@@ -31,21 +31,24 @@ public enum TalismanEffectKind
     DrawCard,        // 인연부 — 즉시 덱에서 value장 획득
     BossMoveSeal,    // 봉쇄부 — 다음 최초 던지기의 보스 이동 1회 금지
     WeaknessStrike,  // 천운부 — 약점 속성 칸 착지 시 최종 피해 ×value (약점 상성과 별도)
-    AllOrNothing,    // 승부부 — 남은 재투척 전부 포기 → 최종 피해 ×value
+    AllOrNothing,    // 승부부 — 이번 차례에 재투척을 한 번도 하지 않고 확정하면 최종 피해 ×value (2026-10-28 규칙 변경 — 사용 즉시 강제 포기 폐기)
     MoveDelta,       // 진격부·후퇴부 — 이번 투척 이동 거리 ±value (윷 배율·결과 미변경)
-    ResultBonus,     // 일도부~모령부 — 다음 재투척의 전체 결과 = targetResult이고 최종 결과도 같으면 그 윷 배율 ×value
-    WaterComboKeep,  // 수룡부 — 이번 턴 물 외 착지에도 물 연속 기록 유지 + 현재 물 연계 배율 적용 (사용자 확정)
+    ResultBonus,     // 일도부~모령부 — 다음 재투척의 전체 결과 = targetResult이고 최종 결과도 같으면 그 윷 기본배율 ×value (2026-10-28: 전체배율 → 윷 배율 경로 이동)
+    WaterComboKeep,  // 구 수룡부 정의 — 물 외 착지 연속 유지. 덱 미포함, 정의만 보존 (2026-10-28 수룡부 효과 변경)
     ForestDotBoost,  // 초목부 — 이번 풀 착지로 등록·증가되는 도트량 ×value (사용자 확정)
     CatchWiden,      // 포위부 — 이번 턴 보스와 같은 칸 또는 전후 range칸 착지도 잡기 성공
     MoveAdjust,      // 환위부 — 투척 후 확정 전 이동 거리 +1/−1 선택 보정 (백색 부적)
-    NextTurnProbBoost, // 도걸부·모윷부 — 다음 차례 최초 투척의 면 조합 추첨에서 targetResult·targetResult2 결과 조합에 가중치 ×value
+    NextTurnProbBoost, // 도걸부·모윷부 — 다음 차례 최초 투척의 결과 분포에서 targetResult·targetResult2 결과 조합에 가중치 ×value 후 정규화
     BoardReshuffle,  // 역행부 — 말판 속성 배치를 새로 섞기 (말 위치·상태 유지)
     BossMoveReduce,  // 족쇄부 — 사용 차례 포함 duration턴 보스 이동 거리 −value (속박령과 합산)
-    ProximityBaseBoost, // 추적부 — 사용 차례 포함 duration턴 보스와 전후 range칸 이내 착지 시 윷 기본점수 ×value
-    NoRerollBaseBoost,  // 고집부 — 사용 차례 포함 duration턴 재투척 미사용 차례 공격의 윷 기본점수 ×value
-    TriAttributeCombo,  // 삼재부 — 사용 차례 포함 duration턴 불·물·풀 수집 완성 시 세 번째 착지 최종 피해 ×value
-    PrevResultMatch,    // 윤회부 — 이번 투척 최종 결과 = 직전 차례 최종 결과이면 최종 피해 ×value
-    ResultGamble        // 도박부 — 선택한 윷 결과와 최종 확정 결과 일치 시 이번 보스전 윷 배율 ×value
+    ProximityBaseBoost, // 추적부 — 사용 차례 포함 duration턴 보스와 전후 range칸 이내 착지 시 윷 기본배율 ×value (2026-10-28: 기본점수 → 기본배율 변경)
+    NoRerollBaseBoost,  // 고집부 — 사용 차례 포함 duration턴 재투척 미사용 차례 공격의 윷 기본점수 ×value (덱 미포함, 정의 보존)
+    TriAttributeCombo,  // 삼재부 — 사용 차례 포함 duration턴 불·물·풀 수집 완성 시 세 번째 착지 최종 피해 ×value (덱 미포함, 정의 보존)
+    PrevResultMatch,    // 윤회부 — 이번 투척 최종 결과 = 직전 차례 최종 결과이면 최종 피해 ×value (덱 미포함, 정의 보존)
+    ResultGamble,       // 도박부 — 선택한 윷 결과와 최종 확정 결과 일치 시 이번 보스전 윷 배율 ×value (덱 미포함, 정의 보존)
+    WaterComboBonus,    // 수룡부 — 이번 투척 물 착지 시 물 연계가 추가로 +value회 (이번 공격부터 적용, 연수령과 독립 1회씩)
+    ResultMoveDelta,    // 환영부 — 이번 투척 최종 결과별 이동 보정 (도·개·걸 +2 / 윷·모 −3, 윷 배율·결과 미변경)
+    StopMove            // 정지부 — 이번 투척 최종 이동 거리 0, 현재 칸을 착지로 처리 (하얀 부적)
 }
 
 // 카드 사용 가능 시점 — 코드가 아닌 카드 데이터로 판정한다.

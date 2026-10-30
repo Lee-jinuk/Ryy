@@ -124,6 +124,19 @@ public class BoardManager
         UpdateBoardUI();
     }
 
+    // 역행부 — 말·보스 위치와 부대 상태(물 연계·저장 도트·런 누적 완주·런 강화)를 유지한 채
+    // START를 제외한 칸의 속성만 다시 추첨한다. 보스전 초기화(SetupBoard)와 달리
+    // 말 위치·이동 진행도·완주를 건드리지 않는다 (2026-10-28 확정)
+    public void ReshuffleAttributes()
+    {
+        for (int i = 1; i < gm.board.tiles.Count; i++)
+        {
+            gm.board.tiles[i].attribute = DrawAttribute();
+        }
+        UpdateBoardUI();
+        Debug.Log("역행부 — 말판 속성 재배치 (말·보스 위치·연계·도트·완주 유지)");
+    }
+
     // 30칸 배치 생성: 인덱스 0 = START 고정, 1~29 = 속성 독립 추첨
     private void GenerateLayout()
     {
@@ -144,86 +157,33 @@ public class BoardManager
         Debug.Log($"--- 말판 배치 완료 (30칸, 런 고정) | 불 {counts[1]} 물 {counts[2]} 풀 {counts[3]} 땅 {counts[4]} 쇠 {counts[5]} ---");
     }
 
+    // ── 말판 표시는 BoardUI 소유 — 아래는 호출 경로 유지용 위임 래퍼 ──
+    // (BoardUI가 없으면 표시만 생략 — EnsureUIComponents가 런타임에 자동 부착)
+
     // 말판 UI 갱신 — 칸의 자식 Text에 속성 이름 표시, 'BellIcon' 이름의 자식은 땅 칸(방울 뽑기) 표시
     public void UpdateBoardUI()
     {
-        for (int i = 0; i < gm.boardTiles.Length && i < gm.board.tiles.Count; i++)
-        {
-            GameObject tileObj = gm.boardTiles[i];
-            if (tileObj == null)
-            {
-                continue;
-            }
-            Text tileText = tileObj.GetComponentInChildren<Text>(true);
-            if (tileText != null)
-            {
-                tileText.text = AttributeName(gm.board.tiles[i].attribute);
-            }
-            Transform bellIcon = tileObj.transform.Find("BellIcon");
-            if (bellIcon != null)
-            {
-                bellIcon.gameObject.SetActive(gm.board.tiles[i].attribute == TileAttribute.Earth);
-            }
-        }
-        if (gm.lapCountText != null)
-        {
-            gm.lapCountText.text = gm.board.lapCount.ToString();
-        }
+        if (gm.boardUI != null) gm.boardUI.UpdateBoardDisplay(gm);
     }
 
     // 말 UI를 해당 칸 위치로 이동 (정산 데이터의 경유 칸을 순서대로 재생)
     public void MovePieceVisual(int tileIndex)
     {
-        if (gm.playerPiece == null || tileIndex < 0 || tileIndex >= gm.boardTiles.Length)
-        {
-            return;
-        }
-        GameObject tileObj = gm.boardTiles[tileIndex];
-        if (tileObj != null)
-        {
-            gm.playerPiece.position = tileObj.transform.position;
-        }
+        if (gm.boardUI != null) gm.boardUI.MovePiece(gm, tileIndex);
     }
 
     // 보스 말 UI를 해당 칸 위치로 즉시 이동 — 플레이어 말 상태와 완전히 분리 (이번 단계는 즉시 위치 변경, 이동 연출 없음)
     // 보스 말이 도착·통과한 칸의 공격·방울·상성 효과는 발동하지 않는다 (순수 표시)
-    private bool bossPieceWarned;
-
     public void MoveBossPieceVisual(int tileIndex)
     {
-        if (gm.bossPiece == null)
-        {
-            if (!bossPieceWarned)
-            {
-                bossPieceWarned = true;
-                Debug.LogWarning("[YutGameManager] bossPiece 미연결 — 보스 말 위치는 갱신되지만 화면에 표시되지 않습니다. 말판에 보스 말 오브젝트를 만들어 연결하세요.", gm);
-            }
-            return;
-        }
-        if (tileIndex < 0 || tileIndex >= gm.boardTiles.Length)
-        {
-            return;
-        }
-        GameObject tileObj = gm.boardTiles[tileIndex];
-        if (tileObj != null)
-        {
-            gm.bossPiece.position = tileObj.transform.position;
-        }
+        if (gm.boardUI != null) gm.boardUI.MoveBossPiece(gm, tileIndex);
     }
 
     // 보스 이동 예고 표식을 예정 도착 칸 위치에 배치 — 표식은 순수 표시이며
     // 잡기 판정·칸 효과와 무관. 본체(bossPiece)와 별개 오브젝트
     public void MoveBossPreviewVisual(int tileIndex)
     {
-        if (gm.bossMovePreview == null || tileIndex < 0 || tileIndex >= gm.boardTiles.Length)
-        {
-            return;
-        }
-        GameObject tileObj = gm.boardTiles[tileIndex];
-        if (tileObj != null)
-        {
-            gm.bossMovePreview.position = tileObj.transform.position;
-        }
+        if (gm.boardUI != null) gm.boardUI.MovePreview(gm, tileIndex);
     }
 
     // 런 종료 시 말판 배치·말·완주 초기화 — 다음 런의 첫 보스전에서 새 배치를 생성한다

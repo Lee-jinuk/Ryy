@@ -826,6 +826,7 @@ GameObject:
   - component: {fileID: 81956546}
   - component: {fileID: 81956548}
   - component: {fileID: 81956547}
+  - component: {fileID: 2000000001}
   m_Layer: 5
   m_Name: BossSelect
   m_TagString: Untagged
@@ -2028,6 +2029,11 @@ GameObject:
   m_Component:
   - component: {fileID: 467659386}
   - component: {fileID: 467659387}
+  - component: {fileID: 2000000004}
+  - component: {fileID: 2000000012}
+  - component: {fileID: 2000000013}
+  - component: {fileID: 2000000014}
+  - component: {fileID: 2000000015}
   m_Layer: 0
   m_Name: YutGameManager
   m_TagString: Untagged
@@ -2062,66 +2068,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6821dee594567434b8931c3cccd095b2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::YutGameManager
-  mainResultText: {fileID: 1554358849}
-  basicScoreText: {fileID: 800343288}
-  multScoreText: {fileID: 136593890}
-  totalScoreText: {fileID: 1487013132}
-  goalScoreText: {fileID: 1800517539}
-  remainText: {fileID: 1995058099}
-  throwDataText: {fileID: 1879427815}
-  throwScoreText: {fileID: 1486043978}
-  bossNameText: {fileID: 697796723}
-  bossAbilityText: {fileID: 1512265974}
-  bossCurrentHPText: {fileID: 1997011607}
-  startPanel: {fileID: 1710804835}
-  gamePanel: {fileID: 1237189150}
-  clearPanel: {fileID: 907616809}
-  gameOverPanel: {fileID: 856652917}
-  bossSelectPanel: {fileID: 81956545}
-  clearBossNameText: {fileID: 1759803542}
-  clearScoreText: {fileID: 875680736}
-  clearMessageText: {fileID: 1714763591}
-  gameOverBossNameText: {fileID: 161151412}
-  gameOverScoreText: {fileID: 1180334394}
-  gameOverGoalText: {fileID: 1111682907}
-  bossSelectNameText: {fileID: 710276414}
-  bossSelectGoalText: {fileID: 1257667963}
-  bossSelectAbilityText: {fileID: 1683417118}
-  skipBossButton: {fileID: 925359252}
-  boardPanel: {fileID: 498735625}
-  boardTiles:
-  - {fileID: 34560725}
-  - {fileID: 59257895}
-  - {fileID: 1964394957}
-  - {fileID: 70404767}
-  - {fileID: 1442585883}
-  - {fileID: 698093122}
-  - {fileID: 1160921174}
-  - {fileID: 512327305}
-  - {fileID: 1790121861}
-  - {fileID: 766104097}
-  - {fileID: 976554961}
-  - {fileID: 421374576}
-  - {fileID: 1756753180}
-  - {fileID: 828694003}
-  - {fileID: 805462331}
-  - {fileID: 1013590005}
-  - {fileID: 286462732}
-  - {fileID: 24448513}
-  - {fileID: 100853454}
-  - {fileID: 590557759}
-  - {fileID: 1108760914}
-  - {fileID: 807998409}
-  - {fileID: 1648131877}
-  - {fileID: 1404148004}
-  - {fileID: 1721037424}
-  - {fileID: 585769405}
-  - {fileID: 38557395}
-  - {fileID: 699949862}
-  - {fileID: 1497410038}
-  - {fileID: 386060524}
-  playerPiece: {fileID: 2033444801}
-  lapCountText: {fileID: 0}
+  startScreenUI: {fileID: 2000000000}
+  bossSelectScreenUI: {fileID: 2000000001}
+  gameScreenUI: {fileID: 2000000002}
+  clearScreenUI: {fileID: 2000000003}
+  shopScreenUI: {fileID: 2000000004}
+  gameOverScreenUI: {fileID: 2000000005}
+  yutThrowUI: {fileID: 2000000006}
+  scoreUI: {fileID: 2000000007}
+  bossCombatUI: {fileID: 2000000008}
+  boardUI: {fileID: 2000000009}
+  talismanHandUI: {fileID: 2000000010}
+  equippedBellUI: {fileID: 2000000011}
+  talismanChoiceUI: {fileID: 2000000012}
+  moveAdjustUI: {fileID: 2000000013}
+  fortuneChoiceUI: {fileID: 2000000014}
+  usedTalismanUI: {fileID: 2000000015}
   moveStepDelay: 0.15
   bellPool:
   - bellName: "\uD14C\uC2A4\uD2B8 \uBC29\uC6B8 1"
@@ -2146,7 +2108,6 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   ownedBells: []
-  nextBossButton: {fileID: 0}
   bellSlots:
   - {fileID: 0}
   - {fileID: 0}
@@ -2331,6 +2292,7 @@ GameObject:
   - component: {fileID: 498735626}
   - component: {fileID: 498735628}
   - component: {fileID: 498735627}
+  - component: {fileID: 2000000009}
   m_Layer: 5
   m_Name: Malpan
   m_TagString: Untagged
@@ -3940,6 +3902,7 @@ GameObject:
   - component: {fileID: 856652918}
   - component: {fileID: 856652920}
   - component: {fileID: 856652919}
+  - component: {fileID: 2000000005}
   m_Layer: 5
   m_Name: GameOverPanel
   m_TagString: Untagged
@@ -4256,6 +4219,7 @@ GameObject:
   - component: {fileID: 907616810}
   - component: {fileID: 907616812}
   - component: {fileID: 907616811}
+  - component: {fileID: 2000000003}
   m_Layer: 5
   m_Name: ClearPanel
   m_TagString: Untagged
@@ -5325,6 +5289,12 @@ GameObject:
   - component: {fileID: 1237189151}
   - component: {fileID: 1237189153}
   - component: {fileID: 1237189152}
+  - component: {fileID: 2000000002}
+  - component: {fileID: 2000000006}
+  - component: {fileID: 2000000007}
+  - component: {fileID: 2000000008}
+  - component: {fileID: 2000000010}
+  - component: {fileID: 2000000011}
   m_Layer: 5
   m_Name: GamePanel
   m_TagString: Untagged
@@ -6936,6 +6906,7 @@ GameObject:
   - component: {fileID: 1710804836}
   - component: {fileID: 1710804838}
   - component: {fileID: 1710804837}
+  - component: {fileID: 2000000000}
   m_Layer: 5
   m_Name: StartPanel
   m_TagString: Untagged
@@ -8758,3 +8729,295 @@ SceneRoots:
   m_Roots:
   - {fileID: 1417259503}
   - {fileID: 856731409}
+--- !u!114 &2000000000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1710804835}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 57e3ce853f6a4ce1bbcde92996a67998, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StartScreenUI
+  startPanel: {fileID: 1710804835}
+--- !u!114 &2000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 81956545}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56477f5e649d4ae696f8172c1dfda3fb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BossSelectScreenUI
+  bossSelectPanel: {fileID: 81956545}
+  bossSelectNameText: {fileID: 710276414}
+  bossSelectGoalText: {fileID: 1257667963}
+  bossSelectAbilityText: {fileID: 1683417118}
+  bossSelectAffinityText: {fileID: 0}
+  skipBossButton: {fileID: 925359252}
+--- !u!114 &2000000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1237189150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6e0a371f095d496db6fc9167dc6e8d2a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameScreenUI
+  gamePanel: {fileID: 1237189150}
+  moneyText: {fileID: 0}
+--- !u!114 &2000000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 907616809}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 16688039c7414024913814ca4581e649, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClearScreenUI
+  clearPanel: {fileID: 907616809}
+  clearBossNameText: {fileID: 1759803542}
+  clearScoreText: {fileID: 875680736}
+  clearMessageText: {fileID: 1714763591}
+  nextBossButton: {fileID: 0}
+--- !u!114 &2000000004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 467659385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0de9a61d4cbe42ab9d86612146b161d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ShopScreenUI
+  shopPanel: {fileID: 0}
+  shopMoneyText: {fileID: 0}
+  shopOfferSlots: []
+  shopBellSlots: []
+  refreshButton: {fileID: 0}
+  refreshCostText: {fileID: 0}
+--- !u!114 &2000000005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 856652917}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a8d026dbdd44751ae8ece2352a28767, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameOverScreenUI
+  gameOverPanel: {fileID: 856652917}
+  gameOverBossNameText: {fileID: 161151412}
+  gameOverScoreText: {fileID: 1180334394}
+  gameOverGoalText: {fileID: 1111682907}
+--- !u!114 &2000000006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1237189150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1508631fe4784bd78a5efecf167ffcbd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::YutThrowUI
+  mainResultText: {fileID: 1554358849}
+  stickFaceImages: []
+  stickFrontSprite: {fileID: 0}
+  stickBackSprite: {fileID: 0}
+  rerollButtons: []
+  throwStatusText: {fileID: 0}
+  rerollRemainText: {fileID: 0}
+  rollButton: {fileID: 0}
+  confirmThrowButton: {fileID: 0}
+--- !u!114 &2000000007
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1237189150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 249295c1d2004be7bda20067a1791e50, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ScoreUI
+  basicScoreText: {fileID: 800343288}
+  multScoreText: {fileID: 136593890}
+  totalMultText: {fileID: 0}
+  totalScoreText: {fileID: 1487013132}
+  remainText: {fileID: 1995058099}
+  throwDataText: {fileID: 1879427815}
+  throwScoreText: {fileID: 1486043978}
+  currentYutStatsText: {fileID: 0}
+  currentAttributeStatsText: {fileID: 0}
+  multiplierReasonText: {fileID: 0}
+--- !u!114 &2000000008
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1237189150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f36775d349d4f1a91a66448f5eb9de4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BossCombatUI
+  bossNameText: {fileID: 697796723}
+  bossAbilityText: {fileID: 1512265974}
+  bossCurrentHPText: {fileID: 1997011607}
+  bossAffinityText: {fileID: 0}
+  goalScoreText: {fileID: 1800517539}
+--- !u!114 &2000000009
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 498735625}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8feb8e5afbb64fcab611b179767776d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BoardUI
+  boardPanel: {fileID: 498735625}
+  boardTiles:
+  - {fileID: 34560725}
+  - {fileID: 59257895}
+  - {fileID: 1964394957}
+  - {fileID: 70404767}
+  - {fileID: 1442585883}
+  - {fileID: 698093122}
+  - {fileID: 1160921174}
+  - {fileID: 512327305}
+  - {fileID: 1790121861}
+  - {fileID: 766104097}
+  - {fileID: 976554961}
+  - {fileID: 421374576}
+  - {fileID: 1756753180}
+  - {fileID: 828694003}
+  - {fileID: 805462331}
+  - {fileID: 1013590005}
+  - {fileID: 286462732}
+  - {fileID: 24448513}
+  - {fileID: 100853454}
+  - {fileID: 590557759}
+  - {fileID: 1108760914}
+  - {fileID: 807998409}
+  - {fileID: 1648131877}
+  - {fileID: 1404148004}
+  - {fileID: 1721037424}
+  - {fileID: 585769405}
+  - {fileID: 38557395}
+  - {fileID: 699949862}
+  - {fileID: 1497410038}
+  - {fileID: 386060524}
+  playerPiece: {fileID: 2033444801}
+  bossPiece: {fileID: 0}
+  bossMovePreview: {fileID: 0}
+  lapCountText: {fileID: 0}
+  landingTileText: {fileID: 0}
+--- !u!114 &2000000010
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1237189150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d9e7651b30e4435d8731dd4f8cc8cdc3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TalismanHandUI
+  talismanNoticeText: {fileID: 0}
+--- !u!114 &2000000011
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1237189150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a362fcda738e46d9949c50992447cb5b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EquippedBellUI
+  equipBellSlots: []
+--- !u!114 &2000000012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 467659385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 75f3587ea1bb480bbfd0329a57eacb07, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TalismanChoiceUI
+  talismanChoicePanel: {fileID: 0}
+  talismanOptionNameTexts: []
+  talismanOptionDescTexts: []
+  talismanOptionRarityTexts: []
+  talismanChoiceInfoText: {fileID: 0}
+  talismanConfirmButton: {fileID: 0}
+--- !u!114 &2000000013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 467659385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 52156e13d2d14de6955ea1198a7cf359, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MoveAdjustUI
+  moveAdjustPanel: {fileID: 0}
+--- !u!114 &2000000014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 467659385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 702acd53b102489cb842c069be6b36d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FortuneChoiceUI
+  fortuneChoicePanel: {fileID: 0}
+  fortuneOptionSlots: []
+  fortuneChoiceText: {fileID: 0}
+--- !u!114 &2000000015
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 467659385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1edea9808d3415ca6327d650a8d7037, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UsedTalismanUI
+  usedTalismanPanel: {fileID: 0}
+  usedTalismanContent: {fileID: 0}
+  usedTalismanItemPrefab: {fileID: 0}

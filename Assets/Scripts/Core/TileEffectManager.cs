@@ -52,8 +52,8 @@ public class TileEffectManager
     }
 
     // 착지 효과 해석 — 확정된 최종 착지 칸에 대해 효과 적용 전 피해 D를 받아 최종 피해를 반환한다.
-    // 공격 칸(불·물·풀): 배율 적용 + 연속·도트 갱신 + 정산 단계 기록.
-    // 비공격 칸(START·땅·쇠): 피해 0 + 물 연속 초기화 (단계 기록 없음).
+    // 공격 칸(불·물·풀·땅·START): 배율 적용 + 연속·도트 갱신 + 정산 단계 기록.
+    // 비공격 칸(쇠): 피해 0 + 물 연속 초기화 (단계 기록 없음).
     // runningForSteps는 ScoreManager가 계산한 곱연산 방울까지의 전체배율 누적값 —
     // 단계 기록은 별도 공식으로 재조립하지 않고 이 공통값만 사용한다 (탐욕부 취소 시 0)
     public int ResolveLandingEffect(BoardTile tile, float preEffectDamage, ThrowSettlement settlement,
@@ -107,12 +107,24 @@ public class TileEffectManager
                 {
                     waterComboCount++;
                 }
+                // 수룡부 — 이번 물 착지의 연계 추가 +N. 정상 증가·연수령과 독립적으로 각 1회씩
+                // 반영하고 이번 공격의 연계 배율에도 적용한다 (2026-10-28 확정)
+                var waterSession = gm.rollManager.session;
+                int suryongBonus = waterSession != null ? waterSession.waterComboBonusCount : 0;
+                if (suryongBonus > 0)
+                {
+                    waterComboCount += suryongBonus;
+                }
                 float mult = WaterComboMult(waterComboCount);
                 settlement.tileEffectMult = mult;
                 settlement.tileEffectNote = $"{waterComboCount}연속 ×{mult}";
                 if (comboBoosted)
                 {
                     AddInfoTileStep(settlement, $"연수령 — 물 연계 +1 ({waterComboCount}연속)", runningForSteps);
+                }
+                if (suryongBonus > 0)
+                {
+                    AddInfoTileStep(settlement, $"수룡부 — 물 연계 +{suryongBonus} ({waterComboCount}연속)", runningForSteps);
                 }
                 AddTileStep(settlement, $"물 착지 효과 ×{mult} ({waterComboCount}연속)", mult, runningForSteps);
                 // 청류령 — 연계가 새로 시작될 때(0→) 끊김 방어 1회를 준비한다.
@@ -129,23 +141,27 @@ public class TileEffectManager
                 bool comboGuarded = BreakOrGuardWaterCombo();
                 int damage = Mathf.RoundToInt(preEffectDamage);
                 // 도트 등록·추가 — 풀 착지 공격에서만 발생, 피해 0이면 등록으로 취급하지 않는다.
-                // 등록한 차례에는 추가 틱을 발생시키지 않고 다음 차례 시작부터 적용된다
+                // 등록한 차례에는 추가 틱을 발생시키지 않고 다음 차례 시작부터 적용된다.
+                // 초목부는 이번 착지로 새로 등록·증가되는 도트량만 배율하고 저장 도트 전체를
+                // 두 배로 만들지 않는다 — 등록량 계산 후 기존 정책으로 정수화 (2026-10-28 확정)
+                float dotBoost = gm.rollManager.session != null ? gm.rollManager.session.forestDotBoostMult : 1f;
+                string boostNote = dotBoost != 1f ? $" (초목부 ×{dotBoost})" : "";
                 if (preEffectDamage > 0f)
                 {
                     if (!forestDotActive)
                     {
-                        int added = Mathf.RoundToInt(preEffectDamage * (DotInitialPercent / 100f));
+                        int added = Mathf.RoundToInt(preEffectDamage * (DotInitialPercent / 100f) * dotBoost);
                         forestDot = added;
                         forestDotActive = true;
                         settlement.tileEffectNote = $"도트 등록 +{added}";
-                        AddInfoTileStep(settlement, $"풀 착지 — 도트 등록 +{added} (차례당 {forestDot})", runningForSteps);
+                        AddInfoTileStep(settlement, $"풀 착지 — 도트 등록 +{added}{boostNote} (차례당 {forestDot})", runningForSteps);
                     }
                     else
                     {
-                        int added = Mathf.RoundToInt(preEffectDamage * (DotAddPercent / 100f));
+                        int added = Mathf.RoundToInt(preEffectDamage * (DotAddPercent / 100f) * dotBoost);
                         forestDot += added;
                         settlement.tileEffectNote = $"도트 +{added} (총 {forestDot})";
-                        AddInfoTileStep(settlement, $"풀 착지 — 도트 +{added} (총 {forestDot})", runningForSteps);
+                        AddInfoTileStep(settlement, $"풀 착지 — 도트 +{added}{boostNote} (총 {forestDot})", runningForSteps);
                     }
                 }
                 else
@@ -188,9 +204,21 @@ public class TileEffectManager
                 AddWaterComboGuardStep(settlement, comboGuarded, runningForSteps);
                 return Mathf.RoundToInt(preEffectDamage * mult);
             }
+            case TileAttribute.Start:
+            {
+                bool comboGuarded = BreakOrGuardWaterCombo();   // START 착지도 물 외 착지 — 기존 끊김·청류령 방어 동일
+                // START 공격 허용 (2026-10-27 확정) — 말판 배율 ×1, 착지 후 부적 3택1은
+                // ScoreManager의 landedOnBellTile → 정산 종료 뒤 공통 선택창으로 처리.
+                // 땅 전용 방울(지맥령·금맥령)은 적용하지 않고, 풀 도트 등록·증가도 없다
+                settlement.tileEffectMult = 1f;
+                settlement.tileEffectNote = "공격 ×1 — 부적 선택";
+                AddInfoTileStep(settlement, "START 착지 — 공격 ×1 (부적 선택)", runningForSteps);
+                AddWaterComboGuardStep(settlement, comboGuarded, runningForSteps);
+                return Mathf.RoundToInt(preEffectDamage);
+            }
             default:
             {
-                bool comboGuarded = BreakOrGuardWaterCombo();   // 다른 속성·START도 물 외 착지
+                bool comboGuarded = BreakOrGuardWaterCombo();   // 쇠 등 다른 속성도 물 외 착지
                 settlement.tileEffectMult = 1f;
                 settlement.tileEffectNote = "공격 없음";
                 AddWaterComboGuardStep(settlement, comboGuarded, runningForSteps);

@@ -3,23 +3,22 @@
 //
 // 담당:
 //   - 보스전 동안 유지되는 뽑기 덱(drawPile)과 손패(hand) — 매 보스전 시작 시 재구성
-//   - 후보 선택 창 상태 (시작 5택3 / 땅 3택1 공용)
+//   - 후보 선택 창 상태 (시작 7택5 / 땅 3택1 공용)
 //   - 사용 가능 구간 검증, 효과 발동, 카드 소모
 //   - '이번 투척' 효과의 세션별 보관·해제
 //
 // 덱 규칙 (사용자 확정):
 //   - 덱 = includeInDeck 활성 카드 각 1장, **매 보스전 시작 시** 섞어서 새로 구성 (2026-10-22 변경)
 //   - 사용한 카드는 그 보스전에서 소멸 — 다음 보스전의 새 덱에는 다시 포함
-//   - 시작 선택은 매 보스전 시작 시 후보 5장 중 3장
+//   - 시작 선택은 매 보스전 시작 시 후보 7장 중 5장
 //   - 땅 착지 = 부적 후보 3장 중 1장 (기존 방울 대체)
 //
 // 미확정 임시값 (사용자 확정 대기 — 변경 쉽게 한 곳에 모음):
 //   - 미선택 후보는 덱으로 복귀
 //   - 한 투척에 여러 장 사용 가능 (피해 배율 곱셈 중첩)
-//   - 탐욕부의 '충돌' = 기존 잡기 조건(같은 칸 착지)
 //   - 봉쇄부 중복 사용 시 중첩 없음, 보스 전환 시 미소비 봉쇄 해제
-//   - 승부부는 남은 재투척이 0이면 사용 불가
 //   - 인연부: 덱이 획득 장수보다 적으면 카드 미소모·미발동 (덱 1장 경계 미확정)
+//   - 포위부 중복 사용 시 더 넓은 범위만 유지 (범위 합산 없음)
 // ──────────────────────────────────────────────
 using System.Collections.Generic;
 using UnityEngine;
@@ -40,7 +39,7 @@ public class TalismanManager
     public readonly List<TalismanData> hand = new List<TalismanData>();
     private bool deckInitialized = false;
 
-    // 선택 창 상태 — 시작 5택3·땅 3택1이 같은 구조를 공유
+    // 선택 창 상태 — 시작 7택5·땅 3택1이 같은 구조를 공유
     public bool isChoosing = false;
 
     // 환위부 ±1 선택창 상태 — 후보 선택과 별도 창. 열려 있는 동안 투척·재투척·확정 입력 차단.
@@ -71,6 +70,88 @@ public class TalismanManager
     public readonly List<UsedTalismanRecord> usedThisThrow = new List<UsedTalismanRecord>();
     private int nextUseId = 1;
 
+    // 다음 차례 최초 투척 확률 보정 예약 — 도걸부·모윷부.
+    // 사용 차례가 아닌 다음 PrepareSession에서 1회 소비되고 보스전을 넘기지 않는다
+    public struct PendingProbBoost
+    {
+        public YutResult result1;    // 첫 번째 대상 결과
+        public YutResult result2;    // 두 번째 대상 결과
+        public float mult;           // 대상 가중치 곱 (도걸부 ×1.5 / 모윷부 ×1.2 — 적용 후 100% 정규화)
+        public string displayName;
+    }
+    public readonly List<PendingProbBoost> pendingProbBoosts = new List<PendingProbBoost>();
+
+    // 차례 지속 효과 — 족쇄부(보스 이동 감소)·추적부(근접 착지 윷 기본배율).
+    // 사용 차례를 1턴으로 세고 PrepareTurn(OnTurnStart)마다 1턴씩 차감한다
+    public struct TurnEffect
+    {
+        public int turnsLeft;
+        public float value;          // 족쇄부 = 이동 감소 칸 / 추적부 = 윷 배율 곱
+        public int range;            // 추적부의 보스 기준 거리 범위 (족쇄부 미사용)
+        public int useId;            // 사용 부적 기록 연결 — 같은 차례 정산 단계에 연결
+        public string displayName;
+    }
+    public readonly List<TurnEffect> shackleEffects = new List<TurnEffect>();   // 족쇄부 — 보스 이동 감소 (속박령과 합산)
+    public readonly List<TurnEffect> chaseEffects = new List<TurnEffect>();     // 추적부 — 근접 착지 윷 배율
+
+    // 족쇄부 보스 이동 감소 합계 — BossManager.ApplyMoveReduction이 속박령과 합산해 조회한다
+    public int BossMoveReduction
+    {
+        get
+        {
+            int sum = 0;
+            foreach (TurnEffect e in shackleEffects)
+            {
+                sum += Mathf.RoundToInt(e.value);
+            }
+            return sum;
+        }
+    }
+
+    // 다음 차례 확률 보정 예약을 꺼내면서 목록을 비운다 — YutRollManager.PrepareSession에서
+    // 새 세션의 최초 투척 가중치에 반영할 때 1회만 소비한다 (없으면 null)
+    public List<PendingProbBoost> ConsumeProbBoosts()
+    {
+        if (pendingProbBoosts.Count == 0)
+        {
+            return null;
+        }
+        var boosts = new List<PendingProbBoost>(pendingProbBoosts);
+        pendingProbBoosts.Clear();
+        return boosts;
+    }
+
+    // 새 차례 준비 — 차례 지속 효과의 남은 턴을 1 차감하고 만료분을 제거한다.
+    // 사용 차례를 1턴으로 세므로 PrepareTurn에서만 감소한다 (정산·UI 갱신 미호출)
+    public void OnTurnStart()
+    {
+        TickTurnEffects(shackleEffects);
+        TickTurnEffects(chaseEffects);
+    }
+
+    private static void TickTurnEffects(List<TurnEffect> effects)
+    {
+        for (int i = effects.Count - 1; i >= 0; i--)
+        {
+            TurnEffect e = effects[i];
+            e.turnsLeft--;
+            if (e.turnsLeft <= 0)
+            {
+                effects.RemoveAt(i);
+            }
+            else
+            {
+                effects[i] = e;
+            }
+        }
+    }
+
+    // 이동 연출과 함께 사유를 표시하는 카드 효과 — 정산 안내 단계에서는 제외하고
+    // 이동 경로 재생 시 사용 부적 표시를 제거한다 (진격부·후퇴부·환영부·정지부)
+    public static bool IsMoveDisplayEffect(TalismanEffectKind kind) =>
+        kind == TalismanEffectKind.MoveDelta || kind == TalismanEffectKind.ResultMoveDelta
+        || kind == TalismanEffectKind.StopMove;
+
     public TalismanManager(YutGameManager gameManager) { gm = gameManager; }
 
     // ── 덱 초기화 ──
@@ -94,6 +175,9 @@ public class TalismanManager
         pendingMoveAdjustHandIndex = -1;
         requiredPicks = 0;
         pendingOverflowNotice = 0;
+        pendingProbBoosts.Clear();   // 확률 부적 예약은 보스전을 넘기지 않는다 (사용자 확정)
+        shackleEffects.Clear();
+        chaseEffects.Clear();
         deckInitialized = false;
     }
 
@@ -121,22 +205,52 @@ public class TalismanManager
         Debug.Log($"부적 덱 구성 — {drawPile.Count}장");
     }
 
-    // ── 후보 선택 (시작 5택3 / 땅 3택1 공용) ──
+    // 선택 창 규격 — 시작 7택5·땅 3택1 (2026-10-27 확정 — 기존 시작 5택3에서 변경)
+    public const int StartCandidateCount = 7;
+    public const int StartPickCount = 5;
+    public const int LandCandidateCount = 3;
+    public const int LandPickCount = 1;
+    public const int OptionSlotMax = StartCandidateCount;   // 공용 선택창이 수용하는 최대 후보 수
+
+    // 화면에 실제 연결된 후보 슬롯 수 — 이름·설명·레어도 배열 중 가장 작은 길이.
+    // 슬롯이 후보 수보다 적으면 보이지 않는 카드를 선택할 수 없어 창에 갇힐 수 있으므로
+    // 필요 선택 수를 슬롯 수 이내로 제한한다 (후보 자체는 규격대로 뽑는다)
+    private int AvailableOptionSlots()
+    {
+        int nameLen = gm.talismanOptionNameTexts != null ? gm.talismanOptionNameTexts.Length : 0;
+        int descLen = gm.talismanOptionDescTexts != null ? gm.talismanOptionDescTexts.Length : 0;
+        int rareLen = gm.talismanOptionRarityTexts != null ? gm.talismanOptionRarityTexts.Length : 0;
+        return Mathf.Min(nameLen, descLen, rareLen);
+    }
+
+    // ── 후보 선택 (시작 7택5 / 땅 3택1 공용) ──
     private void OpenPick(int candidateCount, int picks, string tag)
     {
         EnsureDeck();
+        int slots = AvailableOptionSlots();
+        if (slots <= 0)
+        {
+            Debug.LogError($"{tag} — 부적 후보 UI 슬롯이 연결되지 않아 선택을 생략한다 (덱 소모 없음). " +
+                "talismanOptionNameTexts/DescTexts/RarityTexts 배열 연결 확인 필요");
+            return;
+        }
         int n = Mathf.Min(candidateCount, drawPile.Count);
         if (n <= 0)
         {
             Debug.Log($"{tag} — 덱에 남은 부적이 없어 선택을 생략한다.");
             return;
         }
+        if (slots < n)
+        {
+            Debug.LogWarning($"{tag} — 후보 {n}장 중 {n - slots}장은 표시 슬롯({slots}칸)이 없어 선택할 수 없다. " +
+                $"옵션 배열을 {OptionSlotMax}칸으로 확장하고 SelectTalismanOption 버튼을 추가하면 전체 선택 가능");
+        }
         // 후보를 덱에서 꺼낸다 — 미선택분은 확정 시 덱 복귀
         candidates.Clear();
         candidates.AddRange(drawPile.GetRange(0, n));
         drawPile.RemoveRange(0, n);
         selectedIndices.Clear();
-        requiredPicks = Mathf.Min(picks, n);
+        requiredPicks = Mathf.Min(picks, n, slots);   // 슬롯 부족 시에도 확정 가능한 수로 제한
         pendingOverflowNotice = 0;   // 새 선택창이 열리면 이전 소멸 안내는 지운다
         isChoosing = true;
         gm.uiManager.UpdateUI();
@@ -156,11 +270,11 @@ public class TalismanManager
         return false;
     }
 
-    // 매 보스전 시작 — 후보 5장 중 3장
-    public void OpenStartPick() => OpenPick(5, 3, "보스전 시작 부적 선택");
+    // 매 보스전 시작 — 후보 7장 중 5장
+    public void OpenStartPick() => OpenPick(StartCandidateCount, StartPickCount, "보스전 시작 부적 선택");
 
     // 땅 칸 착지 — 후보 3장 중 1장 (기존 방울 선택 대체)
-    public void OpenLandPick() => OpenPick(3, 1, "땅 칸 부적 선택");
+    public void OpenLandPick() => OpenPick(LandCandidateCount, LandPickCount, "땅 칸 부적 선택");
 
     // 후보 토글 — 이미 선택된 것은 해제, 정원 초과 선택은 무시
     public void SelectCandidate(int index)
@@ -207,13 +321,14 @@ public class TalismanManager
     }
 
     // 최초 투척 후~확정 전 사용 구간 — 환위부(백색 부적) 전용.
-    // 재투척 전·사이·소진 후에도 확정 전이면 사용 가능 (사용자 확정)
+    // 재투척 전·사이·소진 후에도 확정 전이면 사용 가능 (사용자 확정).
+    // 낙 세션에서는 불가 — 이동 보정으로 낙을 우회할 수 없다
     public bool CanUseAfterRoll()
     {
         if (gm.currentState != GameState.Playing) return false;
         if (isChoosing || isChoosingMoveAdjust || gm.isPresenting) return false;
         var session = gm.rollManager.session;
-        return session != null && session.rolled && !session.confirmed;
+        return session != null && session.rolled && !session.confirmed && !session.isNak;
     }
 
     // 카드별 사용 판정 — 카드 데이터의 사용 시점에 따라 구간 검사를 나눈다.
@@ -346,12 +461,9 @@ public class TalismanManager
             case TalismanEffectKind.GreedStrike:
             case TalismanEffectKind.WeaknessStrike:
             case TalismanEffectKind.AllOrNothing:
-                // 승부부 — 남은 재투척 전부 포기가 비용. 0이면 발동 불가(미소모)
-                if (card.effect == TalismanEffectKind.AllOrNothing)
-                {
-                    if (session.RemainingRerolls <= 0) return false;
-                    session.rerollsForfeited = true;
-                }
+                // 승부부 — 이번 차례에 재투척을 한 번도 하지 않고 확정하면 ×value.
+                // 사용 즉시 재투척 강제 포기는 폐기됐다 (2026-10-28) — 카드 사용 전후의
+                // 재투척 실행 여부(rerollAttempted)를 정산이 검사한다
                 sessionEffects.Add(new ActiveTalismanEffect
                 {
                     kind = card.effect,
@@ -366,9 +478,13 @@ public class TalismanManager
 
             case TalismanEffectKind.ExtraReroll:
                 // 재기부 특별 재투척 — 이미 재투척한 윷도 다시 던질 수 있는 별도 기회.
-                // 기본 기회의 같은 윷 제한·사용 기록은 그대로 유지된다.
-                // 결단령 보유 시 모든 재투척 금지 — 재기부는 발동 불가로 카드 미소모
-                if (gm.bellManager.HasBell(BellEffectKind.RerollBan)) return false;
+                // 기본 기회가 0이어도 사용 가능하지만 결단령 금지·낙·강제 포기 상태는 우회하지 않는다.
+                // 기본 기회의 같은 윷 제한·사용 기록은 그대로 유지된다
+                if (gm.bellManager.HasBell(BellEffectKind.RerollBan)
+                    || session == null || session.rerollsBanned || session.rerollsForfeited || session.isNak)
+                {
+                    return false;
+                }
                 session.specialRerolls += Mathf.RoundToInt(card.value);
                 resultNote = $"{card.talismanName} — 특별 재투척 +{Mathf.RoundToInt(card.value)}, 이미 처리됨";
                 return true;
@@ -392,6 +508,83 @@ public class TalismanManager
                 // 표시 기록이 사라져도 봉쇄 상태(pendingMoveSeal)는 유지된다
                 gm.bossManager.pendingMoveSeal = true;
                 resultNote = $"{card.talismanName} — 다음 보스 이동 봉쇄 예약";
+                return true;
+
+            case TalismanEffectKind.CatchWiden:
+                // 포위부 — 이번 투척 잡기 판정을 보스 기준 전후 range칸까지 확장.
+                // 같은 카드 중복 사용 시 더 넓은 범위만 유지 (범위는 합산하지 않는다)
+                session.catchWidenRange = Mathf.Max(session.catchWidenRange, Mathf.RoundToInt(card.range));
+                resultNote = $"{card.talismanName} — 보스 전후 {Mathf.RoundToInt(card.range)}칸 잡기 범위 확장";
+                return true;
+
+            case TalismanEffectKind.WaterComboBonus:
+                // 수룡부 — 이번 물 착지의 연계 횟수 추가. 연수령과 독립적으로 각 1회씩 반영
+                session.waterComboBonusCount += Mathf.Max(1, Mathf.RoundToInt(card.value));
+                resultNote = $"{card.talismanName} — 물 착지 시 연계 +{Mathf.Max(1, Mathf.RoundToInt(card.value))} 예약";
+                return true;
+
+            case TalismanEffectKind.ForestDotBoost:
+                // 초목부 — 이번 풀 착지로 등록·증가되는 도트량만 배율 (저장 도트 전체·즉시 피해는 미변경)
+                session.forestDotBoostMult *= card.value;
+                resultNote = $"{card.talismanName} — 이번 풀 도트 등록량 ×{card.value}";
+                return true;
+
+            case TalismanEffectKind.ResultMoveDelta:
+                // 환영부 — 최종 확정 결과에 따라 이동 보정 (도·개·걸 +2 / 윷·모 −3).
+                // 실제 보정은 정산에서 확정 결과를 보고 계산한다
+                session.resultMoveDelta = true;
+                resultNote = $"{card.talismanName} — 도·개·걸 +2 / 윷·모 −3 이동 보정";
+                return true;
+
+            case TalismanEffectKind.StopMove:
+                // 정지부 — 합산 보정과 무관하게 최종 이동 0, 현재 칸을 착지로 처리
+                session.stopMove = true;
+                resultNote = $"{card.talismanName} — 이번 투척 이동 0칸";
+                return true;
+
+            case TalismanEffectKind.NextTurnProbBoost:
+                // 도걸부·모윷부 — 다음 차례 최초 투척 1회의 결과 분포에 대상 가중치 배율.
+                // 이번 차례 세션에는 적용하지 않는다 — 다음 PrepareSession에서 1회 소비
+                pendingProbBoosts.Add(new PendingProbBoost
+                {
+                    result1 = card.targetResult,
+                    result2 = card.targetResult2,
+                    mult = card.value,
+                    displayName = card.talismanName,
+                });
+                resultNote = $"{card.talismanName} — 다음 차례 최초 투척 확률 보정 예약";
+                return true;
+
+            case TalismanEffectKind.BoardReshuffle:
+                // 역행부 — 말·보스 위치와 물 연계·도트·완주·런 강화를 유지한 채 속성만 재추첨
+                gm.boardManager.ReshuffleAttributes();
+                resultNote = $"{card.talismanName} — 말판 속성 재배치";
+                return true;
+
+            case TalismanEffectKind.BossMoveReduce:
+                // 족쇄부 — 사용 차례 포함 duration턴 보스 이동 −value (속박령과 합산).
+                // 이동 예고는 PlannedEffectiveSteps 조회에 즉시 반영된다
+                shackleEffects.Add(new TurnEffect
+                {
+                    turnsLeft = Mathf.Max(1, card.duration),
+                    value = Mathf.Max(1, Mathf.RoundToInt(card.value)),
+                    useId = useId,
+                    displayName = card.talismanName,
+                });
+                resultNote = $"{card.talismanName} — 보스 이동 −{Mathf.Max(1, Mathf.RoundToInt(card.value))} ({Mathf.Max(1, card.duration)}턴)";
+                return true;
+
+            case TalismanEffectKind.ProximityBaseBoost:
+                // 추적부 — 사용 차례 포함 duration턴, 보스 전후 range칸 이내 착지 공격의 윷 기본배율 ×value
+                chaseEffects.Add(new TurnEffect
+                {
+                    turnsLeft = Mathf.Max(1, card.duration),
+                    value = card.value,
+                    range = card.range,
+                    useId = useId,
+                    displayName = card.talismanName,
+                });
+                resultNote = $"{card.talismanName} — 보스 전후 {card.range}칸 착지 윷 배율 ×{card.value} ({Mathf.Max(1, card.duration)}턴)";
                 return true;
         }
         return false;

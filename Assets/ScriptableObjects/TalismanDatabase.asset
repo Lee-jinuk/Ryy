@@ -26,21 +26,21 @@ MonoBehaviour:
     range: 0
     includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_water
     talismanName: "수룡부"
-    description: "이번 턴 물 외 칸에 착지해도 물 연속 기록이 유지되고 그 공격에 현재 물 연계 배율이 적용된다"
+    description: "이번 투척에서 물 칸에 착지하면 물 연계가 1회 추가된다."
     rarity: 4
-    effect: 12
-    value: 0
+    effect: 24
+    value: 1
     attribute: 2
     targetResult: 0
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_forest
     talismanName: "초목부"
     description: "이번 투척에서 풀 칸 착지 시 이번에 등록·증가되는 도트 피해 ×2"
@@ -52,12 +52,12 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_pursuit
     talismanName: "추혼부"
-    description: "이번 투척에서 보스말 잡기에 성공하면 최종 피해가 추가로 ×4 증가한다. 기본 잡기 배율은 유지한다"
+    description: "이번 투척에서 보스말 잡기에 성공하면 공격력이 4배 증가된다."
     rarity: 4
     effect: 3
     value: 4
@@ -68,10 +68,10 @@ MonoBehaviour:
     range: 0
     includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_greed
     talismanName: "탐욕부"
-    description: "이번 투척 최종 피해 ×1.5. 단, 보스말 잡기 성공 시 최종 피해 0"
+    description: "이번 투척에 1.5배 공격을 가한다. 단, 보스말 잡기 성공 시 최종 피해 0"
     rarity: 4
     effect: 4
     value: 1.5
@@ -82,10 +82,10 @@ MonoBehaviour:
     range: 0
     includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_retry
     talismanName: "재기부"
-    description: "이번 투척 재투척 기회 +1 — 추가 기회로는 이미 재투척한 윷도 다시 던질 수 있다 (윷당 특별 기회 1회)"
+    description: "이번 투척 재투척 기회 +1 — 추가 기회로는 이미 재투척한 윷도 다시 던질 수 있다. 윷당 특별 기회 1회"
     rarity: 4
     effect: 5
     value: 1
@@ -95,8 +95,8 @@ MonoBehaviour:
     duration: 0
     range: 0
     includeInDeck: 1
-    useTiming: 0
-    appearance: 0
+    useTiming: 1
+    appearance: 2
   - cardId: t_bond
     talismanName: "인연부"
     description: "사용 즉시 부적 덱에서 카드 2장 획득"
@@ -110,7 +110,7 @@ MonoBehaviour:
     range: 0
     includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_seal
     talismanName: "봉쇄부"
     description: "다음 최초 던지기 시 보스 이동을 1회 막는다"
@@ -124,10 +124,10 @@ MonoBehaviour:
     range: 0
     includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_siege
     talismanName: "포위부"
-    description: "이번 턴 보스 말과 같은 칸 또는 앞뒤 1칸에 착지해도 잡기 성공으로 처리한다"
+    description: "이번 턴 보스 말과 같은 칸 또는 앞뒤 1칸에 착지해도 잡기 성공으로 처리한다."
     rarity: 4
     effect: 14
     value: 0
@@ -136,12 +136,12 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 1
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_allinnothing
     talismanName: "승부부"
-    description: "사용 후 남은 재투척을 전부 포기하면 이번 투척 최종 피해 ×1.5"
+    description: "재투척을 사용하지 않고 확정지으면 1.5배의 공격을 가한다."
     rarity: 4
     effect: 9
     value: 1.5
@@ -151,8 +151,8 @@ MonoBehaviour:
     duration: 0
     range: 0
     includeInDeck: 1
-    useTiming: 0
-    appearance: 0
+    useTiming: 1
+    appearance: 2
   - cardId: t_hwanwi
     talismanName: "환위부"
     description: "최초 투척 후 결과 확정 전 사용 — 이동 거리를 +1 또는 −1 선택 보정한다. 윷 결과·배율은 유지한다"
@@ -169,7 +169,7 @@ MonoBehaviour:
     appearance: 2
   - cardId: t_dogeol
     talismanName: "도걸부"
-    description: "다음 차례 최초 투척에서 도·걸 결과가 나올 확률이 ×1.5가 된다"
+    description: "다음 차례 최초 투척에서 도·걸 결과가 나올 확률이 1.5배가 된다."
     rarity: 4
     effect: 16
     value: 1.5
@@ -178,12 +178,12 @@ MonoBehaviour:
     targetResult2: 3
     duration: 0
     range: 0
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_moyut
     talismanName: "모윷부"
-    description: "다음 차례 최초 투척에서 모·윷 결과가 나올 확률이 ×1.2가 된다"
+    description: "다음 차례 최초 투척에서 모·윷 결과가 나올 확률이 1.2배가 된다."
     rarity: 4
     effect: 16
     value: 1.2
@@ -192,12 +192,12 @@ MonoBehaviour:
     targetResult2: 4
     duration: 0
     range: 0
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_reverse
     talismanName: "역행부"
-    description: "사용 시 말판의 속성 배치를 새로 섞는다. 말·보스 위치와 물 연속·도트 등 상태는 유지된다"
+    description: "사용 시 말판의 속성 배치를 새로 섞는다. 말·보스 위치와 물 연속·도트 등 상태는 유지된다."
     rarity: 4
     effect: 17
     value: 0
@@ -206,12 +206,12 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_shackle
     talismanName: "족쇄부"
-    description: "사용 차례 포함 3턴 동안 보스 말 이동 거리 −1. 족쇄방울과 합산된다"
+    description: "사용 차례 포함 3턴 동안 보스 말 이동 거리 −1. 속박령과 합산된다."
     rarity: 4
     effect: 18
     value: 1
@@ -220,12 +220,12 @@ MonoBehaviour:
     targetResult2: 0
     duration: 3
     range: 0
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_chase
     talismanName: "추적부"
-    description: "사용 차례 포함 2턴 동안 보스와 전후 2칸 이내에 착지한 공격의 윷 기본점수 ×1.5"
+    description: "사용 차례 포함 2턴 동안 보스와 전후 2칸 이내에 착지한 공격의 윷 기본배율 ×1.5"
     rarity: 4
     effect: 19
     value: 1.5
@@ -234,9 +234,9 @@ MonoBehaviour:
     targetResult2: 0
     duration: 2
     range: 2
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_stubborn
     talismanName: "고집부"
     description: "사용 차례 포함 3턴 동안 개별 재투척을 한 번도 하지 않고 확정한 차례의 공격에 윷 기본점수 ×1.5"
@@ -318,9 +318,9 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_retreat
     talismanName: "후퇴부"
     description: "이번 투척의 확정된 윷 이동 거리 −1칸. 최종 착지 칸 효과를 적용하며 윷 자체 배율은 유지한다. 도는 이동하지 않고 현재 칸 효과를 적용한다"
@@ -332,9 +332,9 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
   - cardId: t_do
     talismanName: "일도부"
     description: "사용 후 바로 다음 개별 재투척의 전체 결과가 도이고, 최종 확정 결과도 도이면 이번 도 배율 ×2"
@@ -346,9 +346,9 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
-    useTiming: 0
-    appearance: 0
+    includeInDeck: 1
+    useTiming: 1
+    appearance: 2
   - cardId: t_gae
     talismanName: "이개부"
     description: "사용 후 바로 다음 개별 재투척의 전체 결과가 개이고, 최종 확정 결과도 개이면 이번 개 배율 ×2"
@@ -360,9 +360,9 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
-    useTiming: 0
-    appearance: 0
+    includeInDeck: 1
+    useTiming: 1
+    appearance: 2
   - cardId: t_geol
     talismanName: "삼걸부"
     description: "사용 후 바로 다음 개별 재투척의 전체 결과가 걸이고, 최종 확정 결과도 걸이면 이번 걸 배율 ×2"
@@ -374,9 +374,9 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
-    useTiming: 0
-    appearance: 0
+    includeInDeck: 1
+    useTiming: 1
+    appearance: 2
   - cardId: t_yut
     talismanName: "윷령부"
     description: "사용 후 바로 다음 개별 재투척의 전체 결과가 윷이고, 최종 확정 결과도 윷이면 이번 윷 배율 ×2"
@@ -388,9 +388,9 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
-    useTiming: 0
-    appearance: 0
+    includeInDeck: 1
+    useTiming: 1
+    appearance: 2
   - cardId: t_mo
     talismanName: "모령부"
     description: "사용 후 바로 다음 개별 재투척의 전체 결과가 모이고, 최종 확정 결과도 모이면 이번 모 배율 ×2"
@@ -402,6 +402,34 @@ MonoBehaviour:
     targetResult2: 0
     duration: 0
     range: 0
-    includeInDeck: 0
+    includeInDeck: 1
+    useTiming: 1
+    appearance: 2
+  - cardId: t_mirage
+    talismanName: "환영부"
+    description: "이번 투척에서 도·개·걸은 이동거리 +2, 윷·모는 이동거리 −3"
+    rarity: 4
+    effect: 25
+    value: 0
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 1
     useTiming: 0
-    appearance: 0
+    appearance: 1
+  - cardId: t_stop
+    talismanName: "정지부"
+    description: "이번 투척의 이동거리를 0으로 하고 현재 칸 효과를 발동한다. 윷 배율은 유지한다"
+    rarity: 4
+    effect: 26
+    value: 0
+    attribute: 0
+    targetResult: 0
+    targetResult2: 0
+    duration: 0
+    range: 0
+    includeInDeck: 1
+    useTiming: 1
+    appearance: 2

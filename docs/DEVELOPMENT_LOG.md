@@ -5,11 +5,151 @@
 ## 파일 구조 (2026-10-18 검사)
 
 - `Assets/Scripts/Core/` — `YutGameManager.cs`(게임 총괄) + 책임별 매니저 `YutRollManager.cs`, `BoardManager.cs`, `ScoreManager.cs`, `BossManager.cs`, `BellManager.cs` + 데이터 `YutBoard.cs`, `YutThrowSession.cs`(윷 4개 투척 세션)
-- `Assets/Scripts/UI/` — `GameUIManager.cs` (UI 표시·연출)
+- `Assets/Scripts/UI/` — `GameUIManager.cs` (UI 갱신 조정·정산 연출) + `BellSlotUI.cs`(슬롯) + 화면별 UI 컴포넌트 16종 (`StartScreenUI`·`BossSelectScreenUI`·`GameScreenUI`·`ClearScreenUI`·`ShopScreenUI`·`GameOverScreenUI`·`YutThrowUI`·`ScoreUI`·`BossCombatUI`·`BoardUI`·`TalismanHandUI`·`EquippedBellUI`·`TalismanChoiceUI`·`MoveAdjustUI`·`FortuneChoiceUI`·`UsedTalismanUI`)
+- `Assets/Scripts/Editor/` — `UITransferTool.cs` (레거시 UI 참조 → 컴포넌트 이전 도구, 에디터 메뉴)
 - `Assets/Scripts/Data/` — `TalismanData.cs` (부적 카드 정의 자료형 — `TalismanRarity`/`TalismanEffectKind`/`TalismanData`)
 - `Assets/Prefabs/`, `Assets/ScriptableObjects/` — `.gitkeep`만 존재
 - `Assets/Scenes/SampleScene.unity` — Canvas, StartPanel, GamePanel 계열, TargetSelectOverlay/Panel, Clearpanel, Gameoverpanel, 보드 칸 18개 + PlayerPiece, EventSystem 확인
 - 매니저 역할·데이터 소유권 상세: `docs/ARCHITECTURE.md`
+
+### [2026-10-29 (59차) - 사용자 지시 / Devin 구현 — 방울 슬롯 기본 4·최대 8 + 전투 화면 자동 배치]
+
+- **`ShopConfig`**: `maxBells`(4) → `baseBellSlots`(4, `FormerlySerializedAs` 이전) + `maxBellSlots`(8) — 기존 에셋 값 자동 승계
+- **`BellManager`**: `openBellSlots` 런타임 상태 추가 — 보유 수(`ownedBells.Count`)와 별도 관리. `BaseBellSlots`/`MaxBellSlots`/`OpenSlots` 조회, `TryAddBell` 한도 검사가 `OpenSlots` 기준. `ResetForNewRun`에서 기본 4칸으로 리셋. 확장 공용 경로 `ExpandBellSlots(amount)` — **확장 아이템 종류·수치·지속은 미확정으로 임의 추가 없음**, `YutGameManager.ExpandBellSlots()`(+1)는 테스트·OnClick용 래퍼
+- **`EquippedBellUI` 자동 배치**: 슬롯 배열 8칸 + `slotContainer`(미연결 시 첫 슬롯 부모) + `bigSlotSize`/`smallSlotSize`/`slotGap`/`rowGap` Inspector 조절. 열린 수 기준: ≤4 = 큰 크기 한 줄, 5~8 = 작은 크기 두 줄(5→3+2·6→3+3·7→4+3·8→4+4, 각 줄 가운데). 슬롯 앵커를 컨테이너 중앙으로 정규화 후 배치. `i >= open` 슬롯은 `SetActive(false)` 잠김 숨김 — 열린 빈 칸은 표시. 배치 기준이 열린 수라 **판매 시 재배치 없음**
+- **`ShopScreenUI`**: `shopBellSlots` 4→8칸(보유 수만큼 채움, 최대 8 처리), 구매 가능 검사 `MaxBells`→`OpenSlots`. 구매 후보 `shopOfferSlots` 4칸은 별개 — 유지
+- **`ShopManager`**: 실패 로그 `MaxBells`→`OpenSlots`
+- 씬 변경 없음 — `equipBellSlots` 배열 길이는 Inspector에서 8로 늘려 슬롯 오브젝트 연결 필요 (현 씬 4칸 직렬화 유지, null-safe). test3 배치·이미지 보존 — 배치는 코드가 덮어씀
+- 검증: `dotnet build` 오류 0·경고 0. **Unity Play 미검증** — 열린 4/5/6/7/8 배치·빈 슬롯 표시·장착 한도·구매/판매 후 갱신·`ExpandBellSlots` 테스트 확인 필요
+
+### [2026-10-29 (58차) - 사용자 지시 / Devin 구현 — 손패 구 배열 제거 + test2 카드 슬롯 이전]
+
+- **제거**: `TalismanHandUI`의 `talismanHandNameTexts`/`talismanHandDescTexts`/`talismanUseButtons` 필드 + `RefreshSlots`(구 텍스트 슬롯 경로) + `talismanUseButtons` 기반 런타임 자동 부착 폴백. `YutGameManager`의 동명 접근자 3개 + `legacyTalismanHandNameTexts`/`legacyTalismanHandDescTexts`/`legacyTalismanUseButtons` 필드. `talismanNoticeText` 계열은 유지
+- **test2.unity 씬 이전** (구 배열에 실참조가 있던 유일한 씬): 10개 `HandCard` GO에 `TalismanCardUI` 컴포넌트 신규 부착(`&900000001`~`&900000010`) — background=카드 Image·nameText=기존 이름 Text·button=기존 Button·slotIndex·handUI 연결. `TalismanHandUI.cardSlots`에 10개 연결 후 구 배열·YGM legacy 배열 삭제. 카드 안 설명 Text 오브젝트 10개는 `m_IsActive: 0` (공용 설명창 방식 — 코드가 더 이상 비우지 않으므로 숨김 처리). 카드 Button의 `OnClick→UseTalismanN`은 유지 — test2엔 사용 영역이 없어 제거 시 사용 불가가 됨
+- **test3/Test/SampleScene**: 전부 빈 참조 배열만 있어 행 삭제만. `_Recovery` 백업 씬은 미수정
+- **UITransferTool**: `legacy`+필드명 리플렉션 매핑이라 양쪽 필드 제거 시 자동 스킵 — 무수정
+- `PrepareCards`는 이제 연결된 `cardSlots`만 준비(부모·원래 Y·형제 순서 기록) — 미연결 슬롯은 건너뜀
+- 검증: `dotnet build` 오류 0·경고 0 + 씬 YAML 대조(cardSlots 10칸 연결·구 필드명 0건·desc GO 비활성). **Unity Play 미검증** — 카드 표시·설명·정상 사용·불가 카드·드래그 취소·사용 후 재정렬 확인 필요
+
+### [2026-10-29 (57차) - 사용자 지시 / Devin 구현 — 부적 손패 이미지 카드화 + 위로 드래그 사용]
+
+- **신규 `TalismanCardUI.cs`** (`Assets/Scripts/UI/`) — 카드 1장 컴포넌트(Image+Button 오브젝트에 부착). `IPointerClickHandler`=클릭 설명, `IBeginDrag/IDrag/IEndDrag`=드래그. 드래그 발생 시 EventSystem이 PointerClick을 보내지 않아 클릭·드래그가 자동 분리됨. 실제 사용 판정·소모·효과는 손대지 않고 `gm.UseTalisman(인덱스)` 경유
+- **`TalismanHandUI` 카드 모드 추가** — 신규 필드: `cardSlots[10]`·`yellowSprite`/`whiteSprite`·`cardContainer`·`descriptionPanel`+`descriptionNameText`+`descriptionText`·`useDropArea`·`handCountText`·`cardGap`·`descriptionOffset`·`dragUseMinPixels`(80px)
+  - **표시**: 보유 카드만 활성, 빈 슬롯 `SetActive(false)`. 카드엔 제목 Text만 (설명은 카드 안에 두지 않음 — 카드 자식의 구 설명 Text는 빈칸으로 비움). 배경은 `TalismanData.appearance`(노란부적→yellowSprite/하얀부적→whiteSprite/미정→배치 스프라이트 유지). 이름·색상으로 사용 가능 여부를 판단하지 않음 — `useTiming`/`CanUseCard()` 경로 유지
+  - **배치**: 모든 카드 같은 Y(처음 배치 Y)·회전·크기 — X 간격만 조절. `spacing = min(카드너비+gap, (컨테이너너비−카드너비)/(장수−1))` — 넘치면 음수로 균등 겹침. 획득·사용·보스전 리셋 시 `Refresh` 경유 자동 재정렬
+  - **클릭**: 공용 설명창을 해당 카드 상단 위에 배치 — 이름+설명 표시, 캔버스 경계 클램프. 같은 카드 재클릭=닫기. 사용 불가 카드도 설명 표시 (선택≠사용 가능). `descriptionPanel` 미연결 시 무시
+  - **드래그 사용(이번 대화에서 제안한 신규 입력 방식)**: 카드가 포인터를 따라가고 `SetAsLastSibling`으로 맨 앞 표시. 드롭 시 `위로 dragUseMinPixels 이상 + useDropArea 안`이면 사용 시도 — 손패 변동에 대비해 인덱스가 아닌 **카드 인스턴스(`boundCard`)를 `hand.IndexOf`로 재검사** 후 `gm.UseTalisman` 호출. 영역 밖·거리 부족·조건 불충족이면 재정렬로 원위치 복귀(미소모). `useDropArea` 미연결 시 드래그 사용 없음
+  - **마이그레이션**: `cardSlots` 빈 칸은 `talismanUseButtons[i]`에 `TalismanCardUI`를 런타임 자동 부착(배경=버튼 Image·이름=구 nameTexts) — `test2.unity`는 씬 수정 없이 카드 모드로 전환. 카드가 하나도 없는 씬만 구 `RefreshSlots`(텍스트 슬롯) 경로
+- **test2.unity 동작 변화**: 카드 숨김·겹침 배치·설명 비움이 적용되나, `descriptionPanel`/`useDropArea`가 없어 클릭=구 OnClick(UseTalismanN)으로 사용되는 기존 동작 유지, 드래그는 원위치 복귀만. **주의** — test2에 설명창·사용 영역을 추가할 때는 HandCard의 `OnClick→UseTalismanN` 연결을 제거해야 클릭 시 사용+설명 이중 동작이 생기지 않음
+- **test3.unity**: 손패 오브젝트 미존재 — 사용자가 명세 계층(TalismanHandPanel>CardContainer>Card1~10 + TalismanUseArea + TalismanDescriptionPanel) 구성 후 새 필드 연결 예정. 카드 Button에는 OnClick 연결 금지, NameText Raycast Target 해제
+- 검증: `dotnet build` 오류 0·경고 0. **Unity Play 미검증** — 손패 0·1·10장, 노란/하얀 배경, 설명창 표시·화면 클램프, 정상 사용, 드래그 취소/영역 밖 복귀, 사용 불가 카드 설명, 카드 제거 후 재정렬 확인 필요
+
+### [2026-10-29 (56차) - 사용자 지시 / Devin 구현 — 불꽃 횟수 표시 + 버튼 눌림 스프라이트]
+
+- `YutThrowUI`: `flameImages[7]` 필드 추가 — `Refresh`에서 `maxThrows - currentThrows`만큼 왼쪽부터 `enabled` 토글 표시 (0이면 전부 숨김). 7칸은 표시 용량 — 투척 횟수 규칙 변경 없음. `UpdateUI` 경유라 확정 차감·새 보스전·재시작 시 자동 갱신
+- `YutGameManager`: `flameImages` 접근자 추가 (컴포넌트 전용 — 신규 필드라 레거시 없음)
+- `test2.unity` 던지기·확정 버튼(`&1361701825`·`&1820903027`): `m_Transition` 1→2(Sprite Swap) + `m_PressedSprite` = `버튼3 눌림_0` — OnClick·활성화 조건 원본 유지, 눌림용 별도 코드 없음. 두 버튼 배경은 현재 기본 UISprite — 눌림 스프라이트만 지정됨 (배경 이미지 적용 시 눌림 매칭 재확인 필요)
+- `test3.unity`: `flameImages`는 배치 후 Inspector에서 Image 7개를 순서대로 연결
+- 검증: `dotnet build` 오류 0·경고 0 + 씬 YAML 확인(Transition=2·PressedSprite 연결). **Unity Play 미검증** — 불꽃 차감/초기화·버튼 눌림/해제 확인 필요
+
+### [2026-10-29 (55차) - 사용자 지시 / Devin 구현 — 윷 이미지 클릭 방식 정리]
+
+- 씬 구조 감사 결과: `test2.unity`의 `Button (Legacy)~(3)`는 별도 재투척 버튼이 아니라 **윷 오브젝트 자체**(자식 `Image` = `stickFaceImages[i]` 면 표시) — 제거 대상인 "윷과 따로 배치된 재투척 버튼"은 존재하지 않았음
+- `OnClick → RerollStick1~4`·Button 컴포넌트는 원본 유지 — stickFaceImages 순서와 버튼 순서 일치 확인 (`images[0]`부모=RerollStick1 … `[3]`=RerollStick4)
+- `test2.unity` `YutThrowUI.rerollButtons` 빈 참조 → 윷 자체의 Button 4개 연결 (`1768085321`/`1158747532`/`1185707446`/`825652101`) — 재투척 불가 시 `interactable=false` 비활성화 경로 완성
+- `stickFaceTexts` 제거는 54차에서 완료 — 이번 변경은 씬 참조 연결만
+- `test3.unity`: `rerollButtons`·면 이미지·OnClick 모두 미연결 상태 — 사용자가 배치 중인 씬이라 수동 연결 안내 (윷 오브젝트에 Button+OnClick `RerollStick1~4` 부착 후 `rerollButtons` 배열에 연결)
+- 검증: `dotnet build` 오류 0·경고 0 + YAML 대조(OnClick 타겟=YGM `&467659387`·순서 일치). **Unity Play 미검증** — 윷 클릭 재투척·횟수 소진 시 비활성화 확인 필요
+
+### [2026-10-29 (54차) - 사용자 지시 / Devin 구현 — stickFaceTexts 제거 (면 표시 이미지 전용)]
+
+- `YutThrowUI`: `stickFaceTexts` 필드 + Refresh의 앞·뒤 Text 갱신 블록 제거 — 면 표시는 `stickFaceImages` + 앞·뒤 스프라이트로 통일 (낙·미투척 숨김 판정은 이미지 경로에 유지)
+- `YutGameManager`: `stickFaceTexts` 접근자 + `legacyStickFaceTexts` 필드 제거
+- `UITransferTool`: 수정 불필요 — 리플렉션으로 `legacy`+필드명을 매핑하므로 양쪽 필드 제거 시 자동 스킵
+- 씬 정리: `test2`·`test3`의 `stickFaceTexts` 4칸 빈 참조 행, `Test`·`SampleScene`의 `[]` 행 제거 — 전 씬에서 실 연결 없었음(모두 `{fileID: 0}`/`[]`). `stickFaceImages`·스프라이트·`rerollButtons` 연결 보존
+- 검증: `dotnet build` 오류 0·경고 0 + 전 코드/씬 `stickFaceTexts` 잔여 0건. **Unity Play 미검증** — 면 PNG 표시·재투척 버튼 동작 확인 필요
+
+### [2026-10-29 (53차) - 사용자 지시 / Devin 구현 — 결과·재투척 표시 형식]
+
+- `YutThrowUI.Refresh`: `mainResultText`를 `gm.lastResult`(확정값) → **`session.CurrentResult`(세션 실시간 판정값)**로 변경 — 최초 투척·개별 재투척 직후 현재 조합 결과 즉시 표시(도/개/걸/윷/모/낙), 확정 후 세션 생존으로 확정 결과 유지, `rolled=false` 준비 세션에서 비움. 재추첨 없이 `frontUp` 판정값만 사용. 표시 상태(Playing/Cleared/GameOver에서만 활성)는 유지
+- `rerollRemainText`: 숫자만 → `N회` 형식 (`RemainingRerolls + "회"`, `0회` 포함). 세션 없으면 빈 문자열 유지
+- `hasRolled`·`lastResult`는 표시 소비처가 없어져 쓰기 전용 내부 상태가 됨 — 로직상 제거하지 않고 유지
+- 검증: `dotnet build` 오류 0·경고 0. **Unity Play 미검증**
+
+### [2026-10-28 (52차) - 사용자 지시 / Devin 구현 — UI 참조 이전 검증 + Legacy 정리]
+
+**실제 Scene 직렬화 감사 → 누락 이전 → 검증 → Legacy 연결 정리 (규칙·OnClick 변경 없음)**
+
+- **감사 결과 (test2.unity)**: 사용자가 Unity에서 이전 도구를 실행해 16개 컴포넌트 부착·참조 복사가 완료돼 있었음. 스크립트로 `legacy*` 74필드 전체와 대응 컴포넌트 필드를 1:1 대조 — 불일치 0건 (빈 배열 vs 0참조 차이만 형식상 존재, 실질 동일)
+- **미이전 씬 발견**: `Assets/Scenes/SampleScene.unity`·`Assets/Test.unity`는 구 필드명 직렬화 그대로 → YAML 스크립트로 이전 실행: 16개 컴포넌트 MonoBehaviour 문서 추가(fileID 2000000000~) + 호스트 GameObject `m_Component` 등록 + 구 필드 참조 복사(배열 포함 그대로) + 매니저에 `xxxUI` 참조 16종 추가 + 구 필드명 행 삭제. 호스트 규칙은 이전 도구와 동일(해당 패널 GO, 없으면 매니저 GO — Test.unity는 팝업·상점 패널 부재로 매니저 GO에 부착)
+- **`Assets/_Recovery/0.unity`·`0 (1).unity`**: Unity 자동 복구 백업 — 의도적으로 미수정. `legacy*` 필드가 코드에 남아 있어 `[FormerlySerializedAs]` 경유 폴백으로 계속 동작
+- **Legacy 정리**: `test2.unity`의 `legacy*` 직렬화 행 182줄 삭제 — 읽기 기준이 컴포넌트로 단일화. `SampleScene`/`Test.unity`는 구 필드명 행 제거로 동일 효과
+- **코드 측 레거시 실사용 경로 검사**: `legacy*`를 접근하는 코드는 `YutGameManager`의 폴백 접근자뿐 — 다른 매니저·UI에서 직접 접근 없음. `UITransferTool`은 미이전 씬 대비로 유지
+- **Missing Script 검사**: 3개 씬 전체 스크립트 GUID 대조 — 미해석 GUID는 전부 UGUI·URP 패키지 스크립트(Text/Image/Button/LayoutGroup/Light 2D), 프로젝트 스크립트 누락 0건. 프리팹에 YGM 참조 없음
+- **OnClick**: 직렬화 도구가 `m_PersistentCalls`를 건드리지 않음 — `RollYut` 등 YGM 대상 바인딩 원본 유지 확인
+- 검증: `dotnet build` 오류 0·경고 0 + 3개 씬 YAML 정적 검증(필드 일치·fileID 충돌 없음·배열 보존). **Unity Play 미검증** — SampleScene·Test.unity는 구 데이터(18칸 보드·사라진 필드 잔재)가 남은 스냅숏으로 실사용 여부 확인 필요
+- 임시 호환 경로: `legacy*` 필드는 코드에 유지(미이전 씬·백업 폴백). 제거 조건 — 모든 실사용 씬이 새 구조로 저장 확인 후 필드·접근자·이전 도구 일괄 삭제
+
+### [2026-10-28 (50차) - 사용자 지시 / Devin 구현 — 윷 면 PNG 표시]
+
+- `YutGameManager`: `stickFaceImages[4]`·`stickFrontSprite`·`stickBackSprite` Inspector 필드 추가 (기존 `stickFaceTexts` 보존)
+- `GameUIManager.UpdateUI`: 면 루프에서 `session.frontUp[i]`에 따라 스프라이트 교체 — 표시용 재추첨 없음. `session == null || !rolled || isNak`이면 `enabled=false`로 숨김(레이아웃 유지)
+- 갱신 경로는 기존 `UpdateUI()` 호출 그대로 — 최초 투척(`RollYut`)·개별 재투척(`RerollStick`) 후 즉시 반영, 별도 호출 추가 없음
+- 검증: `dotnet build` 오류 0·경고 0. **Unity Play 미검증** — Inspector 연결 필요: `stickFaceImages` 4칸(Image)+`stickFrontSprite`/`stickBackSprite` 2종
+
+### [2026-10-28 (51차) - 사용자 지시 / Devin 구현 — YutGameManager UI 구조 분리]
+
+**규칙·실행 순서 변경 없음 — UI 참조 소유와 표시 작성자만 화면별 컴포넌트로 이전**
+
+- 신규 UI 컴포넌트 16종 (`Assets/Scripts/UI`, MonoBehaviour — 표시 전용, 규칙 계산 없음):
+  - 화면 6: `StartScreenUI`·`BossSelectScreenUI`·`GameScreenUI`·`ClearScreenUI`·`ShopScreenUI`·`GameOverScreenUI`
+  - 게임 화면 하위 6: `YutThrowUI`·`ScoreUI`·`BossCombatUI`·`BoardUI`·`TalismanHandUI`·`EquippedBellUI`
+  - 팝업 4: `TalismanChoiceUI`(7택5/3택1 공용)·`MoveAdjustUI`·`FortuneChoiceUI`·`UsedTalismanUI`(동적 항목)
+- `YutGameManager`: 기존 UI 필드 전부 `legacy*`로 개명 + `[FormerlySerializedAs]`로 기존 Scene 연결 보존. `public` 접근자(이름 동일)가 **컴포넌트 연결 우선 → 레거시 폴백**을 단일 경로로 제공 — `gm.xxx` 호출부(코어 매니저·UI) 전부 무수정. `EnsureUIComponents()`가 Awake에서 미부착 컴포넌트를 해당 패널(없으면 매니저 오브젝트)에 자동 부착 — 이전 도구 미실행 씬도 동작, 컴포넌트 필드 비어 있으면 레거시 폴백
+- `GameUIManager` → 얇은 조정자: `UpdateUI`는 각 컴포넌트 `Refresh(gm)` 호출만. 개별 Text 작성은 컴포넌트 소유 — `ScoreUI`(점수·능력치·배율 이유), `YutThrowUI`(면/버튼/상태), `BossCombatUI`(보스 정보+목표·현재 HP), `BoardUI`(칸 표시·말 위치·예고·완주·착지), `TalismanChoiceUI`(후보+확정), `TalismanHandUI`(손패), `EquippedBellUI`(장착), `ShopScreenUI`(상점 슬롯), `FortuneChoiceUI`(점괘), `BossSelectScreenUI`(소개+건너뛰기), `GameScreenUI`(보유 냥), `ClearScreenUI`/`GameOverScreenUI`(결과), `UsedTalismanUI`(`usedItems` 맵 이관 — 항목 생성·단계별 제거·정산 정리)
+- `BoardManager`: `UpdateBoardUI`·`MovePieceVisual`·`MoveBossPieceVisual`·`MoveBossPreviewVisual`은 이름 유지 래퍼 → `BoardUI` 위임 (호출부 전부 무수정)
+- `GameUIManager.PresentSettlement`·`ShowLandingInfo`는 정산 연출 경로로 유지 — `ThrowSettlement`/`ScoreEffectStep` 재생만, useId별 카드 제거는 `UsedTalismanUI` 경유
+- `BellSlotUI.UsesText` — 남은 발동 표시 공용 헬퍼 (장착·상점 슬롯 공용)
+- 이전 도구 `Assets/Scripts/Editor/UITransferTool.cs` — 메뉴 `YUTROLL/UI 참조 이전 (열린 씬) — 미리보기/실행`: 컴포넌트 자동 부착 + `legacy*` 참조를 **비어 있는 새 필드에만 복사**(덮어쓰기 금지·멱등·Undo 지원·씬 오브젝트 미삭제). 실행 후 Ctrl+S로 씬 저장
+- Scene·Prefab·OnClick 변경 없음 — 버튼 공개 함수 시그니처 전부 유지
+- 검증: `dotnet build` 오류 0·경고 0. **Unity Play 미검증** — 시작 7택5·땅/START 3택1·환위부·점괘·상점·정산 연출·보스 HP·완주 표시·새 런/재진입 등 기존 흐름 전체 확인 필요
+- 임시 호환 경로: `legacy*` 필드 — 모든 참조가 컴포넌트로 이전 확인 후 비우기·정리 가능(제거 조건: 씬·프리팹 전부 이전 도구 실행 + 새 참조 정상 확인)
+
+### [2026-10-27 오후 (49차) - 사용자 지시 / Devin 구현 — 부적 25종 전면 개편]
+
+- `TalismanEffectKind` 신규 추가(끝에만): `WaterComboBonus`(24)·`MirageMove`(25)·`StopMove`(26) — 기존 번호 유지. `TalismanAppearance` 노란/하얀 활용
+- `YutThrowSession`: `rerollAttempted`(승부부 판정 — 일반·특별·윤회령 무료 모두 기록)·`catchWidenRange`(포위부)·`stopMove`(정지부)·`resultBasedMoveDelta`(환영부 — 최종 결과 기준 도·개·걸 +2/윷·모 −3)
+- `TalismanManager`: 차례 지속 효과 `turnEffects`(족쇄부·추적부 — `PrepareTurn`에서 `OnTurnStart` 1회 차감, UI 조회로 차감 없음) + 다음 차례 확률 예약 `pendingProbBoosts`(도걸부·모윷부 — `PrepareSession`에서 1회 소비, 보스 전환 소멸) + `IsMoveDisplayEffect`(환영부·정지부 이동 표시 포함)
+- `ScoreManager`: **윷 기본배율 경로 분리** — `EffectTarget.YutMult`로 결과별 부적·추적부를 기초 피해 쪽 유효 윷 배율에 곱연산, 전체배율 곱연산 부적은 피해 부적만. `resultBonusMult`는 기록용으로만 유지. 잡기 판정에 포위부 범위(원형 최단 거리) 통합 — 일반·포위 잡기 동일 판정, 추혼부·탐욕부 동일 적용. 승부부는 `rerollAttempted==false`일 때 곱연산
+- `TileEffectManager`: 물 착지 시 `WaterComboBonus` 추가 연계 +1(연수령과 독립) / 풀 착지 시 `ForestDotBoost`로 이번 등록·증가분만 ×value
+- `YutRollManager`: `ApplyPendingProbBoosts` — 예약 확률 부적을 이번 세션 결과 가중치에 곱한 뒤 100% 정규화(방울·점괘 보정분에 후적용, 재투척·낙 미적용)
+- `BossManager.ApplyMoveReduction`: 속박령 + `talismanManager.BossMoveReduction` 합산 후 최소 1칸 — 봉쇄부 0칸 미부활 유지. `BoardManager.ReshuffleAttributes` — START·위치·연계·도트·완주 유지 속성 재추첨
+- `GameUIManager`: 이동 표시 제거 대상을 `IsMoveDisplayEffect`로 확장 — 환영부·정지부 카드도 이동 연출과 함께 표시·제거
+- `TalismanDatabase.asset`: 25종 `includeInDeck: 1`·외형(노란 16/하얀 9)·`useTiming` 정리 — 재기부·승부부·결과별 5종·정지부 하얀. 수룡부 효과 `WaterComboKeep`→`WaterComboBonus`·설명 전면 지시서 문구로. 신규 `t_mirage`·`t_stop` 추가 (총 정의 30종 — 제외 5종 `includeInDeck: 0` 유지)
+- 검증: `dotnet build` 오류 0·경고 0 + 에셋 정적 검증(덱 25종·타이밍 16/9). **Unity Play 미검증** — 25종 각각 실사용·지속 만료·확률 100% 정규화·역행부 상태 보존·족쇄/봉쇄 예고 일치 확인 필요
+
+### [2026-10-27 (48차-3단계) - 사용자 지시 / Devin 구현 — 최초 투척 낙 1%]
+
+- `GameBalanceConfig.initialNakPercent`(%, 기본 1) + 에셋 명시 — 접수된 최초 투척에만 1회, 도트 처치 시 추첨 생략
+- `YutThrowSession.isNak` + `InitialRollNak`(면 추첨 없이 결과 고정·준비 부적 보존) + `CurrentResult` 낙 반환 + `CanReroll`/`RemainingRerolls` 낙 차단
+- `YutGameManager.RollYut` — 도트 처리 후 `initialNakPercent` 판정으로 `InitialRollNak`/`InitialRoll` 분기, `MoveBossPiece`는 기존 1회 경로 유지. `SettleThrow` → `SettleNakThrow` 전용 분기
+- `ScoreManager.SettleNakThrow` — 이동·착지·잡기·선택·도트·피해 단계 없이 공격 0 + `currentThrows++` 1회 + 사용 부적 안내 단계만 재생
+- `TalismanManager.CanUseAfterRoll` — 낙 세션 차단(환위부 우회 불가). `GameUIManager` — 상태창 "낙 — 확정만 가능"·면 텍스트 "-"
+- 검증: `dotnet build` 오류 0·경고 0. **Unity Play 미검증**
+
+### [2026-10-27 (48차-2단계) - 사용자 지시 / Devin 구현 — START 착지 공격·부적 3택1]
+
+- `ScoreManager`: `attackLanded`에 `TileAttribute.Start` 추가, `landedOnBellTile` = `Start || (Earth && !earthNoPick)` — START는 땅 전용 방울 억제 대상이 아니므로 항상 부적 선택 발동
+- `TileEffectManager`: `case TileAttribute.Start` 신설 — 말판 ×1·단계 기록·물 연계 끊김/청류령 방어 공통 경로·도트 미등록. `default`(쇠)는 피해 0 유지
+- 상성 단계 조건을 불·물·풀 긍정 판정으로 정리 — 땅·START·쇠 제외 (`AffinityMultiplier` 비공격 속성 ×1 기존 유지)
+- 검증: `dotnet build` 오류 0·경고 0. **Unity Play 미검증** — START 착지 공격·부적 창·잡기(보스 START 위치)·물 연계 끊김 확인 필요
+
+### [2026-10-27 (48차-1단계) - 사용자 지시 / Devin 구현 — 시작 부적 7택5]
+
+- `TalismanManager`: `OpenStartPick` → `OpenPick(7,5)` — 규격 상수화(`StartCandidateCount`/`StartPickCount`/`LandCandidateCount`/`LandPickCount`/`OptionSlotMax`), 땅 3택1 불변
+- UI 슬롯 안전 장치: `AvailableOptionSlots`(3종 배열 최소 길이)로 필요 선택 수 상한 — 슬롯 부족 시 갇힘 방지, 0이면 선택 생략·덱 미소모. `GameUIManager` 후보 루프 상한 5→`OptionSlotMax`
+- `YutGameManager`: `talismanOptionNameTexts` 등 3종 배열 기본값 5→7 (기존 씬 직렬화 보존 — 사용자가 7칸 확장 + `SelectTalismanOption(5)`·`(6)` 버튼 추가 필요)
+- 검증: `dotnet build` 오류 0·경고 0. **Unity Play 미검증** — 배선 확장 후 6·7번째 후보 선택·5슬롯 장면의 5택5 축소 동작 확인 필요
 
 ### [2026-10-27 (47차) - 사용자 지시 / Devin 구현 — 점괘 24종 확장·매 보스전 재배치·상점 할인]
 

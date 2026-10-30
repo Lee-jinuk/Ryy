@@ -1,18 +1,16 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
-// UI 표시와 연출 담당 — 텍스트 갱신, 패널 표시 토글, 정산 연출(단계별 딜레이 재생)
+// UI 갱신 조정자 — 개별 Text·Image·버튼 갱신은 화면별 UI 컴포넌트에 위임한다.
+// (YutThrowUI·ScoreUI·BossCombatUI·BoardUI·TalismanHandUI·EquippedBellUI·
+//  StartScreenUI·BossSelectScreenUI·GameScreenUI·ClearScreenUI·ShopScreenUI·GameOverScreenUI·
+//  TalismanChoiceUI·MoveAdjustUI·FortuneChoiceUI·UsedTalismanUI)
+// 이 클래스는 패널 공용 헬퍼와 정산 연출(ThrowSettlement 단계 재생)만 담당한다.
 // 게임 규칙 계산은 하지 않는다. 연출이 쓰는 표시용 임시값은 YutGameManager 필드를 통해 접근한다.
 // 일반 C# 클래스 (MonoBehaviour 아님) — 코루틴은 YutGameManager가 대신 실행한다
 public class GameUIManager
 {
     private readonly YutGameManager gm;
-
-    // 사용 부적 패널 항목 — useId → 생성된 항목 오브젝트 (손패 슬롯과 무관한 표시 전용)
-    private readonly Dictionary<int, GameObject> usedItems = new Dictionary<int, GameObject>();
-    private bool usedPanelWarned;
 
     public GameUIManager(YutGameManager gm)
     {
@@ -43,577 +41,67 @@ public class GameUIManager
         }
     }
 
-    // 보스 소개 화면 텍스트 채우기 (표시용 — 패널 토글은 호출자가 처리)
+    // 보스 소개 화면 텍스트 채우기 — 실제 작성은 BossSelectScreenUI 소유
     public void FillBossSelectInfo(BossData boss)
     {
-        if (gm.bossSelectNameText != null)
+        if (gm.bossSelectScreenUI != null)
         {
-            gm.bossSelectNameText.text = boss.bossName;
-        }
-        if (gm.bossSelectGoalText != null)
-        {
-            gm.bossSelectGoalText.text = boss.maxHP.ToString();
-        }
-        if (gm.bossSelectAbilityText != null)
-        {
-            gm.bossSelectAbilityText.text = boss.abilityDescription;
-        }
-        // 소개 중인 보스(pendingBossIndex) 상성 — 상성 능력이 있는 보스만 표시, 없으면 비움(숨김)
-        if (gm.bossSelectAffinityText != null)
-        {
-            string affinityText = gm.bossManager.BuildAffinityText(gm.bossManager.pendingBossIndex);
-            gm.bossSelectAffinityText.text = affinityText;
-            gm.bossSelectAffinityText.gameObject.SetActive(!string.IsNullOrEmpty(affinityText));
+            gm.bossSelectScreenUI.FillInfo(gm, boss);
         }
     }
 
+    // 전체 표시 갱신 — 각 화면·팝업 UI 컴포넌트가 자기 소유 필드를 갱신한다.
+    // 컴포넌트가 씬에 없으면 해당 화면 표시만 생략된다 (EnsureUIComponents가 런타임에 자동 부착)
     public void UpdateUI()
     {
-        if (gm.mainResultText != null)
-        {
-            // 윷 결과 이름만 표시 — Start에서는 오브젝트 자체를 숨긴다
-            bool showResult = gm.currentState == GameState.Playing
-                || gm.currentState == GameState.Cleared
-                || gm.currentState == GameState.GameOver;
-            gm.mainResultText.gameObject.SetActive(showResult);
-            gm.mainResultText.text = showResult && gm.hasRolled ? YutGameManager.ToKorean(gm.lastResult) : "";
-        }
-        if (gm.basicScoreText != null)
-        {
-            gm.basicScoreText.text = gm.basicScore.ToString();
-        }
-        if (gm.multScoreText != null)
-        {
-            gm.multScoreText.text = gm.multiplier.ToString();
-        }
-        // 전체배율 — 기본 전체배율(×1)에서 발동 효과별로 갱신. 미연결 시 표시 생략 (계산에는 영향 없음)
-        if (gm.totalMultText != null)
-        {
-            gm.totalMultText.text = gm.totalMult.ToString();
-        }
-        // 총점 표시는 연출 단계에 맞춰 displayTotal 사용 — '토탈 합산' 단계에서만 증가
-        if (gm.totalScoreText != null)
-        {
-            gm.totalScoreText.text = gm.displayTotal.ToString();
-        }
-        if (gm.goalScoreText != null)
-        {
-            gm.goalScoreText.text = gm.goalScore.ToString();
-        }
-        // 보스 현재 체력 = Max(0, 최대 체력 - 누적 피해). 연출 중에는 표시값 displayTotal을 사용해
-        // '토탈 합산' 단계에서 totalScoreText와 동시에 갱신되고, 종료·스킵 후 실제 체력과 일치한다
-        if (gm.bossCurrentHPText != null)
-        {
-            gm.bossCurrentHPText.text = Mathf.Max(0, gm.goalScore - gm.displayTotal).ToString();
-        }
-        if (gm.remainText != null)
-        {
-            gm.remainText.text = (gm.maxThrows - gm.currentThrows).ToString();
-        }
-        if (gm.throwDataText != null)
-        {
-            gm.throwDataText.text = gm.maxThrows.ToString();
-        }
-        if (gm.throwScoreText != null)
-        {
-            gm.throwScoreText.text = gm.throwScore.ToString();
-        }
-
-        // 윷 4개 투척 세션 UI — 면 표시, 재투척 버튼 활성, 상태창, 남은 재투척, 확정 버튼
-        // 준비 단계(rolled=false)에는 면·재투척·확정을 표시/허용하지 않는다 — 부적 사용만 가능
-        YutThrowSession session = gm.rollManager.session;
-        bool sessionActive = session != null && session.RollInProgress;
-        bool throwInputOpen = sessionActive && !gm.isPresenting
-            && !gm.talismanManager.isChoosing && !gm.talismanManager.isChoosingMoveAdjust;
-        for (int i = 0; i < YutThrowSession.StickCount; i++)
-        {
-            if (i < gm.stickFaceTexts.Length && gm.stickFaceTexts[i] != null)
-            {
-                gm.stickFaceTexts[i].text = session != null && session.rolled
-                    ? (session.frontUp[i] ? "앞" : "뒤")
-                    : "";
-            }
-            if (i < gm.rerollButtons.Length && gm.rerollButtons[i] != null)
-            {
-                gm.rerollButtons[i].interactable = throwInputOpen && session.CanReroll(i);
-            }
-        }
-        if (gm.throwStatusText != null)
-        {
-            if (session == null)
-            {
-                gm.throwStatusText.text = "";
-            }
-            else if (!session.rolled)
-            {
-                gm.throwStatusText.text = "준비 — 윷을 던지세요 (부적 사용 가능)";
-            }
-            else if (session.Active)
-            {
-                gm.throwStatusText.text = $"현재 결과: {YutGameManager.ToKorean(session.CurrentResult)} / 재투척 가능: {session.RemainingRerolls}";
-            }
-            else
-            {
-                gm.throwStatusText.text = $"확정 결과: {YutGameManager.ToKorean(session.CurrentResult)}";
-            }
-        }
-        if (gm.rerollRemainText != null)
-        {
-            gm.rerollRemainText.text = session != null ? session.RemainingRerolls.ToString() : "";
-        }
-
-        // 보스 이동 예고 표식 — 준비 단계(미투척 세션)에 예정 도착 칸을 표시하고
-        // 최초 투척 접수·정산·비전투 상태에서는 숨긴다. 표식은 표시 전용 — 잡기 판정은 실제 보스 위치 사용
-        if (gm.bossMovePreview != null)
-        {
-            bool previewVisible = gm.currentState == GameState.Playing
-                && session != null && !session.rolled
-                && gm.bossManager.movePlanReady;
-            gm.bossMovePreview.gameObject.SetActive(previewVisible);
-            if (previewVisible)
-            {
-                gm.boardManager.MoveBossPreviewVisual(gm.bossManager.PlannedDestination);
-            }
-        }
-        if (gm.confirmThrowButton != null)
-        {
-            gm.confirmThrowButton.interactable = throwInputOpen;
-        }
-        // '윷 던지기' 버튼 — 미투척 세션 + 입력 개방 상태에서만 활성.
-        // RollYut의 실제 차단 조건과 같은 판정 — 표시상 활성과 입력 차단의 어긋남 방지
-        if (gm.rollButton != null)
-        {
-            gm.rollButton.interactable = gm.currentState == GameState.Playing
-                && session != null && !session.rolled
-                && !gm.isPresenting && !gm.talismanManager.isChoosing
-                && !gm.talismanManager.isChoosingMoveAdjust
-                && gm.currentThrows < gm.maxThrows;
-        }
-        // 판 진행도 표시는 라운드 구조 폐지와 함께 제거됨
-
-        // 말판 UI — 칸 점수·방울 아이콘·완주 횟수 (Start에서는 갱신 생략)
         bool boardActive = gm.currentState == GameState.Playing
             || gm.currentState == GameState.Cleared
             || gm.currentState == GameState.GameOver;
-        if (boardActive)
-        {
-            gm.boardManager.UpdateBoardUI();
-        }
 
-        // 부적 선택창 — 후보 이름·설명·레어도 표시 + 선택 진행 안내 (선택 중이 아니면 빈칸)
-        // 시작 5택3·땅 3택1이 같은 슬롯을 공유 — 후보 수만큼만 채우고 나머지는 빈칸
-        bool talChoosing = gm.talismanManager.isChoosing;
-        for (int i = 0; i < 5; i++)
-        {
-            bool hasOption = talChoosing && i < gm.talismanManager.candidates.Count;
-            TalismanData option = hasOption ? gm.talismanManager.candidates[i] : null;
-            if (i < gm.talismanOptionNameTexts.Length && gm.talismanOptionNameTexts[i] != null)
-            {
-                gm.talismanOptionNameTexts[i].text = hasOption ? option.talismanName : "";
-            }
-            if (i < gm.talismanOptionDescTexts.Length && gm.talismanOptionDescTexts[i] != null)
-            {
-                gm.talismanOptionDescTexts[i].text = hasOption ? option.description : "";
-            }
-            if (i < gm.talismanOptionRarityTexts.Length && gm.talismanOptionRarityTexts[i] != null)
-            {
-                gm.talismanOptionRarityTexts[i].text = hasOption ? gm.talismanManager.RarityName(option.rarity) : "";
-            }
-        }
-        if (gm.talismanChoiceInfoText != null)
-        {
-            gm.talismanChoiceInfoText.text = talChoosing
-                ? $"{gm.talismanManager.selectedIndices.Count} / {gm.talismanManager.requiredPicks} 장 선택"
-                : "";
-        }
-        if (gm.talismanConfirmButton != null)
-        {
-            gm.talismanConfirmButton.interactable =
-                talChoosing && gm.talismanManager.selectedIndices.Count == gm.talismanManager.requiredPicks;
-        }
-        // 부적 선택창 패널 표시 — 선택 상태와 패널 활성을 동기화
-        SetPanel(gm.talismanChoicePanel, talChoosing);
-        // 환위부 ±1 선택창 — 선택 대기 중에만 표시 (확정·취소로 닫힘)
-        SetPanel(gm.moveAdjustPanel, gm.talismanManager.isChoosingMoveAdjust);
+        if (gm.yutThrowUI != null) gm.yutThrowUI.Refresh(gm);
+        if (gm.scoreUI != null) gm.scoreUI.Refresh(gm);
+        if (gm.bossCombatUI != null) gm.bossCombatUI.Refresh(gm, boardActive);
+        if (gm.boardUI != null) gm.boardUI.Refresh(gm, boardActive);
+        if (gm.talismanChoiceUI != null) gm.talismanChoiceUI.Refresh(gm);
+        if (gm.moveAdjustUI != null) gm.moveAdjustUI.Refresh(gm);
+        if (gm.talismanHandUI != null) gm.talismanHandUI.Refresh(gm);
+        if (gm.usedTalismanUI != null) gm.usedTalismanUI.Sync(gm);
+        if (gm.gameScreenUI != null) gm.gameScreenUI.Refresh(gm);
+        if (gm.equippedBellUI != null) gm.equippedBellUI.Refresh(gm);
+        if (gm.shopScreenUI != null) gm.shopScreenUI.Refresh(gm);
+        if (gm.fortuneChoiceUI != null) gm.fortuneChoiceUI.Refresh(gm);
 
-        // 손패 — 이름 표시 + 사용 버튼 활성. 카드별 사용 시점(useTiming)으로 개별 판정 —
-        // 준비 카드는 최초 던지기 전에만, 환위부는 투척 후~확정 전에만 활성
-        for (int i = 0; i < TalismanManager.HandLimit; i++)
-        {
-            bool hasCard = i < gm.talismanManager.hand.Count;
-            if (i < gm.talismanHandNameTexts.Length && gm.talismanHandNameTexts[i] != null)
-            {
-                gm.talismanHandNameTexts[i].text = hasCard ? gm.talismanManager.hand[i].talismanName : "";
-            }
-            if (i < gm.talismanHandDescTexts.Length && gm.talismanHandDescTexts[i] != null)
-            {
-                gm.talismanHandDescTexts[i].text = hasCard ? gm.talismanManager.hand[i].description : "";
-            }
-            if (i < gm.talismanUseButtons.Length && gm.talismanUseButtons[i] != null)
-            {
-                gm.talismanUseButtons[i].interactable =
-                    hasCard && gm.talismanManager.CanUseCard(gm.talismanManager.hand[i]);
-            }
-        }
-        // 초과 획득 소멸 안내 — 다음 선택창이 열리면 지워진다
-        if (gm.talismanNoticeText != null)
-        {
-            gm.talismanNoticeText.text = gm.talismanManager.pendingOverflowNotice > 0
-                ? $"손패가 가득 차 부적 {gm.talismanManager.pendingOverflowNotice}장이 소멸했습니다."
-                : "";
-        }
-        SyncUsedTalismanPanel();
-
-        // 보유 냥 — 전투 화면 표시 (상점은 shopMoneyText가 따로 표시)
-        if (gm.moneyText != null)
-        {
-            gm.moneyText.text = $"{gm.economyManager.money}냥";
-        }
-
-        // 능력치 정보판 — 현재 런타임 윷 기본점수·배율 + 속성 착지 효과 상태 표시 (조회 전용)
-        if (gm.currentYutStatsText != null)
-        {
-            gm.currentYutStatsText.text =
-                $"도 {StatText(YutResult.Do)}\n" +
-                $"개 {StatText(YutResult.Gae)}\n" +
-                $"걸 {StatText(YutResult.Geol)}\n" +
-                $"윷 {StatText(YutResult.Yut)}\n" +
-                $"모 {StatText(YutResult.Mo)}";
-        }
-        if (gm.currentAttributeStatsText != null)
-        {
-            // 속성 효과 정보판 — 불 배율(기본+화령 성장+복주머니) / 물 연속 횟수·배율 / 현재 풀 도트 (보스전 단위 상태)
-            float fireMult = gm.tileEffects.CurrentAttrMult(TileAttribute.Fire);
-            int combo = gm.tileEffects.waterComboCount;
-            float waterMult = WaterComboDisplay(combo + 1);
-            gm.currentAttributeStatsText.text =
-                $"불 ×{FormatStat(fireMult)}\n" +
-                $"물 {combo}연속 → ×{FormatStat(waterMult)}\n" +
-                $"풀 도트 {gm.tileEffects.forestDot}";
-        }
-
-        // 장착 방울 목록 — 전투 화면 표시 (BellItem Prefab 동적 항목)
-        SyncBellPanel();
-        SyncShopPanel();   // 상점 열림 시 상품·보유 목록·잔액 표시
-        SyncFortuneChoicePanel();   // 점괘 선택 대기 중 후보 3칸 표시 (선택 중 상점 패널 위에 겹침)
-
-        // 착지 칸 정보 — "불 - 50점" (상성·윷 배율 적용 전 칸 기본점수). 새 보스전·새 런에서 비워진다
-        if (gm.landingTileText != null)
-        {
-            gm.landingTileText.text = gm.landingTileInfo;
-        }
-
-        // 보스 정보 — 이름·특수능력만 표시 (HP 바 없음: 보스는 목표 점수 관문)
+        // 클리어·게임오버 결과 텍스트 (패널이 꺼져 있어도 값은 항상 최신)
         BossData boss = gm.bossManager.CurrentBoss;
         if (boss != null)
         {
-            if (gm.bossNameText != null)
-            {
-                gm.bossNameText.text = boss.bossName;
-            }
-            if (gm.bossAbilityText != null)
-            {
-                gm.bossAbilityText.text = boss.abilityDescription;
-            }
-
-            // 클리어·게임오버 결과 텍스트 (패널이 꺼져 있어도 값은 항상 최신)
-            if (gm.clearBossNameText != null)
-            {
-                gm.clearBossNameText.text = boss.bossName;
-            }
-            if (gm.clearScoreText != null)
-            {
-                gm.clearScoreText.text = gm.totalScore.ToString();
-            }
-            if (gm.gameOverBossNameText != null)
-            {
-                gm.gameOverBossNameText.text = boss.bossName;
-            }
-            if (gm.gameOverScoreText != null)
-            {
-                gm.gameOverScoreText.text = gm.totalScore.ToString();
-            }
-            if (gm.gameOverGoalText != null)
-            {
-                gm.gameOverGoalText.text = gm.goalScore.ToString();
-            }
+            if (gm.clearScreenUI != null) gm.clearScreenUI.Refresh(gm, boss);
+            if (gm.gameOverScreenUI != null) gm.gameOverScreenUI.Refresh(gm, boss);
         }
-
-        // 보스 상성 정보창 — 전투 중인 보스 기준. 상성 능력이 없는 보스는 비워서 숨긴다
-        if (gm.bossAffinityText != null)
-        {
-            string affinityText = boardActive && boss != null
-                ? gm.bossManager.BuildAffinityText(gm.selectedBossIndex)
-                : "";
-            gm.bossAffinityText.text = affinityText;
-            gm.bossAffinityText.gameObject.SetActive(!string.IsNullOrEmpty(affinityText));
-        }
-
-        // 건너뛰기 버튼은 소개 화면이 열려 있고 다음 보스가 남아 있을 때만 표시 (마지막 보스 소개 시 숨김)
-        SetPanel(gm.skipBossButton,
-            gm.bossSelectPanel != null && gm.bossSelectPanel.activeSelf && gm.bossManager.CanSkipPending);
+        if (gm.bossSelectScreenUI != null) gm.bossSelectScreenUI.Refresh(gm);
     }
 
-    // ── 사용 부적 패널 + 배율 이유 표시 ──
+    // ── 사용 부적 패널 + 배율 이유 표시 (실제 작성은 UsedTalismanUI·ScoreUI 소유) ──
 
-    // 사용 부적 패널 동기화 — 사용 성공 기록을 동적 항목으로 표시한다.
-    // 표시 전용: 항목 생성·제거가 실제 효과·덱·손패에 영향을 주지 않는다.
-    // 미연결 시 표시만 생략하고 게임 계산은 계속 진행한다
-    private void SyncUsedTalismanPanel()
-    {
-        var records = gm.talismanManager.usedThisThrow;
-        if (gm.usedTalismanContent == null || gm.usedTalismanItemPrefab == null)
-        {
-            if (!usedPanelWarned && records.Count > 0)
-            {
-                usedPanelWarned = true;
-                Debug.LogWarning("[YutGameManager] usedTalismanContent/usedTalismanItemPrefab 미연결 — 사용 부적 패널 표시가 생략됩니다.", gm);
-            }
-            return;
-        }
-        // 기록에서 지워졌거나 정산 재생으로 소비된 항목 정리
-        var stale = new List<int>();
-        foreach (KeyValuePair<int, GameObject> kv in usedItems)
-        {
-            UsedTalismanRecord rec = records.Find(r => r.useId == kv.Key);
-            if (rec == null || rec.displayConsumed)
-            {
-                stale.Add(kv.Key);
-            }
-        }
-        foreach (int id in stale)
-        {
-            if (usedItems[id] != null) Object.Destroy(usedItems[id]);
-            usedItems.Remove(id);
-        }
-        // 새 사용 기록의 항목 생성 — 첫 번째 자식 Text = 이름, 두 번째 = 설명(선택)
-        foreach (UsedTalismanRecord rec in records)
-        {
-            if (rec.displayConsumed || usedItems.ContainsKey(rec.useId)) continue;
-            GameObject item = Object.Instantiate(gm.usedTalismanItemPrefab, gm.usedTalismanContent);
-            Text[] texts = item.GetComponentsInChildren<Text>(true);
-            if (texts.Length > 0 && texts[0] != null) texts[0].text = rec.talismanName;
-            if (texts.Length > 1 && texts[1] != null) texts[1].text = rec.description;
-            usedItems[rec.useId] = item;
-        }
-        SetPanel(gm.usedTalismanPanel, records.Exists(r => !r.displayConsumed));
-    }
-
-    // 정산 단계와 연결된 사용 카드 표시 1개 제거 — 기록만 소비 처리, 게임 상태는 건드리지 않는다
+    // 정산 단계와 연결된 사용 카드 표시 1개 제거
     public void RemoveUsedItem(int useId)
     {
-        UsedTalismanRecord rec = gm.talismanManager.usedThisThrow.Find(r => r.useId == useId);
-        if (rec != null) rec.displayConsumed = true;
-        if (usedItems.TryGetValue(useId, out GameObject item))
-        {
-            usedItems.Remove(useId);
-            if (item != null) Object.Destroy(item);
-        }
-        SyncUsedTalismanPanel();
+        if (gm.usedTalismanUI != null) gm.usedTalismanUI.RemoveUsedItem(gm, useId);
     }
 
-    // 배율 변화 이유 표시 — Mult 위에 사용자가 배치한 별도 Text ("추혼부 ×4" 등)
+    // 배율 변화 이유 표시 — ScoreUI 소유 필드
     public void SetMultiplierReason(string reason)
     {
-        if (gm.multiplierReasonText != null)
-        {
-            gm.multiplierReasonText.text = reason;
-        }
+        if (gm.scoreUI != null) gm.scoreUI.SetMultiplierReason(gm, reason);
     }
 
-    // 정산 종료·스킵 시 표시 정리 — 이유 텍스트를 비우고 남은 사용 카드 항목을 전부 제거한다.
-    // 다음 투척에 이전 효과 표시가 남지 않게 하는 정리 경로
+    // 정산 종료·스킵 시 표시 정리 — 이유 텍스트 비우고 남은 사용 카드 표시 제거
     public void ClearUsedTalismanFeedback()
     {
-        SetMultiplierReason("");
-        foreach (UsedTalismanRecord rec in gm.talismanManager.usedThisThrow)
-        {
-            rec.displayConsumed = true;
-        }
-        foreach (KeyValuePair<int, GameObject> kv in usedItems)
-        {
-            if (kv.Value != null) Object.Destroy(kv.Value);
-        }
-        usedItems.Clear();
-        SyncUsedTalismanPanel();
+        if (gm.usedTalismanUI != null) gm.usedTalismanUI.ClearFeedback(gm);
     }
 
-    // ── 방울 장착 패널 + 상점 표시 ──
-
-    private bool bellPanelWarned;
-
-    // 장착 방울 표시 동기화 — 전투 화면의 고정 슬롯(equipBellSlots)을 채운다.
-    // 보유 수만큼 앞에서부터 채우고 나머지는 빈 칸. 표시 전용 — 장착 상태에 영향 없음
-    private void SyncBellPanel()
-    {
-        bool anySlot = false;
-        foreach (BellSlotUI slot in gm.equipBellSlots)
-        {
-            if (slot != null) anySlot = true;
-        }
-        if (!anySlot)
-        {
-            if (!bellPanelWarned && gm.bellManager.ownedBells.Count > 0)
-            {
-                bellPanelWarned = true;
-                Debug.LogWarning("[YutGameManager] equipBellSlots 미연결 — 장착 방울 표시가 생략됩니다. Scene에 슬롯(BellSlotUI)을 만들어 연결하세요.", gm);
-            }
-            return;
-        }
-        for (int i = 0; i < gm.equipBellSlots.Length; i++)
-        {
-            BellSlotUI slot = gm.equipBellSlots[i];
-            if (slot == null) continue;
-            if (i < gm.bellManager.ownedBells.Count)
-            {
-                OwnedBell bell = gm.bellManager.ownedBells[i];
-                slot.Bind(bell.bellName, bell.description, BellUsesText(bell), "", false, null);
-            }
-            else
-            {
-                slot.Clear();
-            }
-        }
-    }
-
-    private static string BellUsesText(OwnedBell bell) =>
-        bell.remainingUses >= 0 ? $"남은 발동 {bell.remainingUses}회" : "지속";
-
-    // 능력치 정보판 헬퍼 — 정수 배율은 소수점 없이 표시 (×4 / ×4.5)
-    private static string FormatStat(float v) =>
-        v % 1f == 0f ? ((int)v).ToString() : v.ToString("0.##");
-
-    // 윷 정보판 표시 — "기본점수 ×배율" (예: 도 20 ×6 / 윷 50 ×6.5)
-    private string StatText(YutResult result)
-    {
-        YutStatEntry stat = gm.rollManager.GetStat(result);
-        return $"{stat.baseScore} ×{FormatStat(stat.mult)}";
-    }
-
-    // 물 연속 정보판 표시용 배율 — 설정 목록 클램프 + 복주머니 강화, TileEffectManager와 동일 기준
-    private float WaterComboDisplay(int count)
-    {
-        var mults = gm.balanceConfig != null ? gm.balanceConfig.waterComboMults : null;
-        float baseMult = mults != null && mults.Count > 0
-            ? mults[Mathf.Clamp(count - 1, 0, mults.Count - 1)]
-            : 1f;
-        return baseMult + gm.fortuneManager.GetWaterComboBonus();
-    }
-
-    // 상점 표시 동기화 — 고정 슬롯(shopOfferSlots·shopBellSlots) + 잔액 + 리프레시 비용.
-    // 슬롯의 버튼 리스너는 Bind가 매번 교체해 누적되지 않는다
-    private void SyncShopPanel()
-    {
-        bool open = gm.shopManager.isOpen;
-        bool choosing = gm.fortuneManager.isChoosingFortune;   // 점괘 선택 대기 중 — 구매·판매·리프레시 버튼 비활성
-        if (gm.shopMoneyText != null)
-        {
-            gm.shopMoneyText.text = open ? $"{gm.economyManager.money}냥" : "";
-        }
-        if (gm.refreshCostText != null)
-        {
-            gm.refreshCostText.text = open ? $"새로고침 {gm.shopManager.CurrentRefreshCost}냥" : "";
-        }
-        if (gm.refreshButton != null)
-        {
-            gm.refreshButton.interactable = open && gm.shopManager.CanRefresh;
-        }
-        // 구매 상품 슬롯 — 상품 수만큼 채우고 나머지는 빈 칸. 구매 완료는 리프레시 전까지 표시 유지
-        for (int i = 0; i < gm.shopOfferSlots.Length; i++)
-        {
-            BellSlotUI slot = gm.shopOfferSlots[i];
-            if (slot == null) continue;
-            if (open && i < gm.shopManager.offers.Count)
-            {
-                ShopOffer offer = gm.shopManager.offers[i];
-                int index = i;   // 클로저용 — 람다가 인덱스 변수를 공유하지 않게 고정
-                bool sold = gm.shopManager.soldOfferIndices.Contains(index);
-                string name = offer.kind == ShopOfferKind.FortunePouch
-                    ? (gm.shopConfig != null ? gm.shopConfig.fortunePouchName : "복주머니")
-                    : offer.bell.bellName;
-                string desc = offer.kind == ShopOfferKind.FortunePouch
-                    ? (gm.shopConfig != null ? gm.shopConfig.fortunePouchDescription : "")
-                    : offer.bell.description;
-                int price = gm.shopManager.PriceFor(offer);   // 할인 적용 구매가 — 표시·판정·차감 공용 조회
-                if (sold)
-                {
-                    slot.Bind(name, desc, $"{price}냥", "구매 완료", false, null);
-                }
-                else if (offer.kind == ShopOfferKind.FortunePouch)
-                {
-                    // 복주머니 — 장착 슬롯 미점유: 방울 한도와 무관하게 잔액 + 실제 구매 가능 여부 검사
-                    // (유효 점괘 후보 부족이면 '구매 가능'으로 표시하지 않는다)
-                    slot.Bind(name, desc, $"{price}냥", "구매",
-                        !choosing && gm.economyManager.money >= price && gm.shopManager.FortunePouchAvailable,
-                        () => gm.shopManager.BuyOffer(index));
-                }
-                else
-                {
-                    slot.Bind(name, desc, $"{price}냥", "구매",
-                        !choosing && gm.economyManager.money >= price && gm.bellManager.ownedBells.Count < gm.bellManager.MaxBells,
-                        () => gm.shopManager.BuyOffer(index));
-                }
-            }
-            else
-            {
-                slot.Clear();
-            }
-        }
-        // 장착/판매 슬롯 — 보유 수만큼 채움. 인스턴스 ID로 바인딩해 목록 순서 변경으로 다른 방울이 팔리지 않게 한다
-        for (int i = 0; i < gm.shopBellSlots.Length; i++)
-        {
-            BellSlotUI slot = gm.shopBellSlots[i];
-            if (slot == null) continue;
-            if (open && i < gm.bellManager.ownedBells.Count)
-            {
-                OwnedBell bell = gm.bellManager.ownedBells[i];
-                int instanceId = bell.instanceId;
-                slot.Bind(bell.bellName, bell.description,
-                    $"{bell.sellPrice}냥 · {BellUsesText(bell)}", "판매", !choosing,
-                    () => gm.shopManager.SellBellInstance(instanceId));
-            }
-            else
-            {
-                slot.Clear();
-            }
-        }
-    }
-
-    // 점괘 선택 표시 동기화 — pendingCandidates는 FortuneUpgradeManager가 보관, UI는 표시만.
-    // 재표시로 후보를 재추첨하지 않고, 선택 버튼 리스너는 Bind가 매번 교체해 누적되지 않는다
-    private void SyncFortuneChoicePanel()
-    {
-        bool choosing = gm.fortuneManager.isChoosingFortune;
-        SetPanel(gm.fortuneChoicePanel, choosing);
-        if (!choosing)
-        {
-            return;
-        }
-        if (gm.fortuneChoiceText != null)
-        {
-            gm.fortuneChoiceText.text = "복주머니 — 점괘 1개를 선택하세요";
-        }
-        if (gm.fortuneOptionSlots == null)
-        {
-            return;
-        }
-        for (int i = 0; i < gm.fortuneOptionSlots.Length; i++)
-        {
-            BellSlotUI slot = gm.fortuneOptionSlots[i];
-            if (slot == null) continue;
-            if (i < gm.fortuneManager.pendingCandidates.Count)
-            {
-                FortuneUpgradeData candidate = gm.fortuneManager.pendingCandidates[i];
-                int index = i;   // 클로저용 — 람다가 인덱스 변수를 공유하지 않게 고정
-                slot.Bind(candidate.upgradeName, candidate.description, "", "선택", true,
-                    () => gm.fortuneManager.ChooseUpgrade(index));
-            }
-            else
-            {
-                slot.Clear();
-            }
-        }
-    }
+    // ── 정산 연출 ──
 
     // 정산 데이터를 화면에 순서대로 재생 — 점수 계산과 분리되어 스킵해도 같은 결과
     // YutGameManager가 StartCoroutine으로 실행한다
@@ -626,9 +114,9 @@ public class GameUIManager
         yield return new WaitForSeconds(gm.effectStepDelay);
 
         // 2) 말 이동 연출 — 경유 칸을 한 칸씩 따라 이동 (저주 결과는 이동 없음).
-        //    진격부·후퇴부는 이동 보정 이유를 이동 연출과 함께 표시하고 항목을 제거한다
+        //    진격부·후퇴부·환영부·정지부는 이동 보정 이유를 이동 연출과 함께 표시하고 항목을 제거한다
         var moveRecords = gm.talismanManager.usedThisThrow.FindAll(
-            r => r.effect == TalismanEffectKind.MoveDelta && !r.displayConsumed);
+            r => TalismanManager.IsMoveDisplayEffect(r.effect) && !r.displayConsumed);
         if (moveRecords.Count > 0)
         {
             SetMultiplierReason(string.Join(" / ", moveRecords.ConvertAll(
